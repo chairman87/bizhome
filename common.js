@@ -132,6 +132,7 @@ async function reload(){
   const warns = [];
   if (store === SupabaseStore && members.length && !('password' in members[0])) warns.push('비밀번호 칸이 없어 비밀번호가 저장되지 않습니다 → alter table members add column if not exists password text;');
   if (store === SupabaseStore && members.length && !('hire_date' in members[0])) warns.push('입사일 칸이 없어 연차 자동 계산이 저장되지 않습니다 → sql-hire.sql 을 Supabase SQL Editor 에서 실행하세요.');
+  if (store === SupabaseStore && members.length && !('title' in members[0])) warns.push('직급 칸이 없어 직급이 저장되지 않습니다 → alter table members add column if not exists title text;');
   if (missing.length) warns.push(`저장소에 "${missing.join(', ')}" 표가 없어 이 기능이 동작하지 않습니다 → supabase-setup.sql 의 해당 부분을 Supabase SQL Editor 에서 실행하세요.`);
   schemaWarn = warns.join(' / ');
   renderApp();
@@ -248,7 +249,10 @@ async function ensureAdmin(){
 }
 function memberColor(name){ const m = members.find(x => x.name === name); return m ? m.color : '#adb5bd'; }
 const avatar = name => `<span class="av" style="background:${memberColor(name)}">${esc(String(name || '?').charAt(0))}</span>`;
-const who = name => name ? `<span class="chip">${avatar(name)}${esc(name)}</span>` : '<span class="chip none">-</span>';
+/* 직급: 팀원 관리에서 관리자가 넣음. 이름 뒤에 "김상우 주임"처럼 붙여 표시 */
+const titleOf = name => { const m = members.find(x => x.name === name); return m && m.title ? m.title : ''; };
+const fullName = name => name ? name + (titleOf(name) ? ' ' + titleOf(name) : '') : '';
+const who = name => name ? `<span class="chip">${avatar(name)}${esc(fullName(name))}</span>` : '<span class="chip none">-</span>';
 const memberOptions = sel => members.map(m => `<option ${sel === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
 
 let loginPick = '';   // 로그인 화면에서 고른 이름
@@ -263,7 +267,7 @@ function renderLogin(){
     ${pageName ? `<div class="page-tag">${esc(APP.icon || '')} ${esc(pageName)}</div>` : ''}
     <p class="guide">${members.length ? (picked ? `<b>${esc(picked.name)}</b>님, 비밀번호를 입력하세요` : '본인 이름을 선택하세요') : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
     ${connError ? `<p class="err">저장소 연결 오류: ${esc(connError)}</p>` : ''}
-    <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}</button>`).join('')}</div>
+    <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}${m.title ? `<span class="hint" style="font-weight:400">${esc(m.title)}</span>` : ''}</button>`).join('')}</div>
     ${picked ? `<div class="pwrow"><input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
     <p class="hint">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 새 비밀번호를 정하게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
     ${members.length ? (picked ? '' : '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>') : `<div class="pwrow"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
@@ -318,7 +322,8 @@ function commentsHtml(list){
 let showPw = false;   // 관리자 화면에서 비밀번호 보이기 상태
 function openMembers(counter){
   const admin = isAdmin();
-  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
+  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${!admin && m.title ? ' <span class="cnt">' + esc(m.title) + '</span>' : ''}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
+      ${admin ? `<input value="${esc(m.title || '')}" data-title="${m.id}" placeholder="직급" maxlength="20" style="width:80px;border:1px solid var(--line2);border-radius:4px;padding:3px 6px;font-size:13px" title="직급 (예: 주임, 대리, 과장)">` : ''}
       ${admin ? `<span class="cnt" style="min-width:110px;font-family:monospace" title="비밀번호">${mustChangePw(m) ? '<span style="color:var(--orange)">1234 (초기)</span>' : (showPw ? esc(pwOf(m)) : '••••••')}</span>` : ''}
       <span class="cnt">${counter ? esc(counter(m)) : ''}</span>
       ${m.name === me ? `<button class="btn sm" data-pw="${m.id}">내 비밀번호 바꾸기</button>` : ''}
@@ -342,6 +347,7 @@ function openMembers(counter){
   document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { const m = members.find(x => x.id === b.dataset.pw); closeModal(); openSetPassword(m, { after: () => openMembers(counter) }); });
   document.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { const m = members.find(x => x.id === b.dataset.reset); if (m && confirm(`${m.name}님 비밀번호를 1234로 초기화할까요?\n다음 로그인 때 새 비밀번호를 정하게 됩니다.`)) { await setPassword(m.id, DEFAULT_PW); openMembers(counter); } });
   document.querySelectorAll('[data-role]').forEach(b => b.onclick = async () => { await setRole(b.dataset.role, b.dataset.to); openMembers(counter); });
+  document.querySelectorAll('[data-title]').forEach(inp => inp.onchange = async () => { const m = members.find(x => x.id === inp.dataset.title); if (!m) return; await saveRow('members', { ...m, title: inp.value.trim() || null }); toast(`${m.name}님 직급: ${inp.value.trim() || '없음'}`); });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const m = members.find(x => x.id === b.dataset.del);
     if (!m) return;
