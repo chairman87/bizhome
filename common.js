@@ -171,11 +171,13 @@ async function addMember(name){
   await saveRow('members', m);
   return m;
 }
-async function setPassword(id, password, quiet){
-  const m = members.find(x => x.id === id); if (!m) return;
-  if (!isAdmin() && m.name !== me) { toast('본인 비밀번호만 바꿀 수 있습니다', true); return; }
+/* verified=true: 방금 현재 비밀번호를 맞힌 사람(처음 로그인 화면)이라 아직 로그인 전이어도 허용 */
+async function setPassword(id, password, { quiet = false, verified = false } = {}){
+  const m = members.find(x => x.id === id); if (!m) return false;
+  if (!verified && !isAdmin() && m.name !== me) { toast('본인 비밀번호만 바꿀 수 있습니다', true); return false; }
   await saveRow('members', { ...m, password });
   if (!quiet) toast(password === DEFAULT_PW ? `${m.name}님 비밀번호를 1234로 초기화했습니다` : `${m.name}님 비밀번호를 저장했습니다`);
+  return true;
 }
 /* 비밀번호를 묻는 작은 창. 맞으면 onOk() (초기 비밀번호면 먼저 바꾸게 함) */
 function askPassword(m, onOk){
@@ -213,7 +215,9 @@ function openSetPassword(m, opts = {}){
     const a = p1.value, b = p2.value;
     const pr = pwProblem(a); if (pr) { toast(pr, true); p1.focus(); return; }
     if (a !== b) { toast('두 칸이 서로 다릅니다', true); p2.focus(); return; }
-    closeModal(); await setPassword(m.id, a, force); if (opts.after) opts.after();
+    closeModal();
+    const ok = await setPassword(m.id, a, { quiet: force, verified: force });
+    if (ok) { if (force) toast('비밀번호를 저장했습니다. 다음부터 이 비밀번호로 들어오세요'); if (opts.after) opts.after(); }
   };
   $('#pwSave').onclick = save;
   p2.onkeydown = e => { if (e.key === 'Enter') save(); };
