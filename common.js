@@ -11,6 +11,9 @@ const CONFIG = {
 
 /* ========== 이름·부제 (로그인 화면과 홈 제목에 쓰임) ========== */
 const BRAND = { name: '인트라넷', sub: '식이해법연구소 · (주)피에이치뷰티', icon: '🏢' };
+/* ========== 파비콘·홈 화면 아이콘 (favicon.svg / favicon-64.png / apple-touch-icon.png) ========== */
+[['icon', 'favicon.svg', 'image/svg+xml'], ['icon', 'favicon-64.png', 'image/png'], ['apple-touch-icon', 'apple-touch-icon.png', '']]
+  .forEach(([rel, href, type]) => { const l = document.createElement('link'); l.rel = rel; l.href = href; if (type) l.type = type; document.head.appendChild(l); });
 
 /* ---------- 작은 도우미 ---------- */
 const LS = {
@@ -261,7 +264,7 @@ function renderLogin(){
   document.body.classList.add('login-bg');
   const pageName = APP.title && APP.title !== BRAND.name ? APP.title : '';
   $('#app').innerHTML = `${warnHtml()}<div class="login-wrap"><div class="login">
-    <div class="logo">${esc(BRAND.icon)}</div>
+    <div class="logo"><img src="favicon.svg" alt="PH"></div>
     <h1>${esc(BRAND.name)}</h1>
     <div class="sub">${esc(BRAND.sub)}</div>
     ${pageName ? `<div class="page-tag">${esc(APP.icon || '')} ${esc(pageName)}</div>` : ''}
