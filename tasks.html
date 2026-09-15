@@ -233,7 +233,7 @@ function tableHtml(list){
   const cols = [['title', '업무']];
   if (view !== 'received') cols.push(['assignee', '담당자']);
   if (view !== 'sent') cols.push(['created_by', '요청자']);
-  cols.push(['due_date', '마감일'], ['status', '상태'], ['progress', '진행률'], ['priority', '우선순위']);
+  cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률'], ['priority', '우선순위']);
   const th = cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
   const rows = sortTasks(list).map(t => {
     const cells = {
@@ -241,6 +241,7 @@ function tableHtml(list){
       assignee: `<td>${who(t.assignee)}</td>`,
       created_by: `<td>${who(t.created_by)}</td>`,
       due_date: `<td>${dueHtml(t.due_date, isDone(t))}</td>`,
+      created_at: `<td><span class="date" title="${fmtDateTime(t.created_at)}">${fmtDate((t.created_at || '').slice(0, 10)) || '-'}</span></td>`,
       status: `<td>${stTask(t)}</td>`,
       progress: `<td>${progHtml(t)}</td>`,
       priority: `<td>${prHtml(t.priority) || '<span class="pr">보통</span>'}</td>`,
