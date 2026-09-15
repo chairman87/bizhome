@@ -118,7 +118,7 @@ function openReport(id){
         <div class="range"><input type="range" id="rProg" min="0" max="100" step="5" value="${prog(t)}"><span class="pct" id="rPct">${prog(t)}%</span></div>
         <div class="quick">${[25, 50, 75, 100].map(p => `<button type="button" data-q="${p}">${p}%</button>`).join('')}</div></div>
       <div class="f"><label>보고 내용</label><textarea id="rText" placeholder="어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요"></textarea></div>
-      <div class="hint">100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.</div>
+      <div class="hint">${isSelf(t) ? '내가 등록한 업무라 100%로 보고하면 바로 <b>완료</b>됩니다.' : `100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.`}</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">보고하기</button></div>`);
   const rp = $('#rProg'), pct = $('#rPct');
