@@ -55,10 +55,11 @@ let sort = { key: 'start_date', dir: 'desc' };
 const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 
 const pendingCount = () => L().filter(l => l.status === '신청').length;
-const VIEWS = () => [
-  { key: 'mine', label: '내 신청' }, { key: 'all', label: '전체', badge: isAdmin() ? pendingCount() : 0 },
+/* 팀원은 내 신청·내 달력만, 관리자는 전체·팀원별 현황까지 */
+const VIEWS = () => isAdmin() ? [
+  { key: 'mine', label: '내 신청' }, { key: 'all', label: '전체', badge: pendingCount() },
   null, { key: 'calendar', label: '달력' }, { key: 'members', label: '팀원별 현황' },
-];
+] : [{ key: 'mine', label: '내 신청' }, { key: 'calendar', label: '내 달력' }];
 
 /* 평일 수 세기 (토·일 제외) */
 function weekdays(a, b){
@@ -133,6 +134,7 @@ async function cancelLeave(id){
 
 /* ---------- 화면 ---------- */
 function render(){
+  if (!VIEWS().some(v => v && v.key === view)) view = 'mine';   // 권한에 없는 탭이 기억돼 있으면 내 신청으로
   $('#app').innerHTML = headerHtml({ icon: '📅', title: '연차/휴가 등록', tabs: VIEWS(), active: view, newLabel: '휴가 신청' })
     + `<main class="wrap">${view === 'mine' ? myStatsHtml() : ''}${['mine', 'all'].includes(view) ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
   bindHeader(k => { view = k; LS.set('leave_view', k); render(); }, () => openLeave(null), m => `남은 연차 ${totalDays(m.name) - usedDays(m.name)}일`);
@@ -205,7 +207,7 @@ function actionButtons(l){
 /* 달력 (승인된 것은 진하게, 신청 중은 점선) */
 function calHtml(list){
   const items = [];
-  L().filter(l => l.status === '승인' || l.status === '신청').forEach(l => {
+  L().filter(l => (l.status === '승인' || l.status === '신청') && (isAdmin() || l.name === me)).forEach(l => {   // 팀원은 본인 것만
     const s = parseYmd(l.start_date), e = parseYmd(l.end_date || l.start_date); if (!s) return;
     for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) if (d.getDay() !== 0 && d.getDay() !== 6) items.push({ ...l, id: l.id, _day: ymd(d) });
   });
@@ -213,7 +215,7 @@ function calHtml(list){
     date: l => l._day,
     label: l => `${esc(l.name)} · ${esc(l.type)}`,
     cls: l => `type-${typeKey(l.type)} ${l.status === '신청' ? 'pending' : ''}`,
-    hint: '점선은 승인 대기 · 날짜를 누르면 그 날짜로 휴가를 신청합니다',
+    hint: (isAdmin() ? '' : '내 휴가만 표시 · ') + '점선은 승인 대기 · 날짜를 누르면 그 날짜로 휴가를 신청합니다',
   });
 }
 
