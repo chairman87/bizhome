@@ -118,9 +118,14 @@ async function reload(){
     }
     members = DATA.members;
     connError = '';
+    // 저장소에 비밀번호 칸이 없으면(설정 SQL 미실행) 비밀번호가 저장되지 않으므로 경고
+    schemaWarn = (store === SupabaseStore && members.length && !('password' in members[0]))
+      ? '저장소에 비밀번호 칸이 없어 비밀번호가 저장되지 않습니다. Supabase SQL Editor 에서 다음 한 줄을 실행하세요: alter table members add column if not exists password text;' : '';
   } catch (e) { connError = e.message || String(e); }
   renderApp();
 }
+let schemaWarn = '';
+const warnHtml = () => schemaWarn ? `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;font-size:13px;text-align:center">⚠ ${esc(schemaWarn)}</div>` : '';
 function renderApp(){
   if (!me || !members.some(m => m.name === me)) { me = ''; renderLogin(); return; }
   APP.render();
@@ -232,7 +237,7 @@ const memberOptions = sel => members.map(m => `<option ${sel === m.name ? 'selec
 let loginPick = '';   // 로그인 화면에서 고른 이름
 function renderLogin(){
   const picked = members.find(m => m.name === loginPick);
-  $('#app').innerHTML = `<div class="login">
+  $('#app').innerHTML = `${warnHtml()}<div class="login">
     <h1>${esc(APP.icon || '🏠')} ${esc(APP.title || '비즈홈')}</h1>
     <p>${members.length ? '본인 이름을 선택하세요' : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
     ${connError ? `<p style="color:var(--red)">저장소 연결 오류: ${esc(connError)}</p>` : ''}
@@ -323,7 +328,7 @@ function openMembers(counter){
 
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
-  return `<header class="top">
+  return `${isAdmin() ? warnHtml() : ''}<header class="top">
     ${home ? `<a class="home" href="index.html">🏠 비즈홈</a>` : ''}
     <div class="brand">${esc(icon || '')} ${esc(title)}</div>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
