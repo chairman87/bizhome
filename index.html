@@ -37,6 +37,39 @@
   .emojis button{border:1px solid var(--line);background:var(--bg);border-radius:4px;font-size:16px;padding:2px 4px;line-height:1}
   .emojis button:hover{background:var(--bg3)}
   .foot{margin-top:24px;font-size:12px;color:var(--fg3);text-align:center}
+  /* 업무 R&R 판 */
+  .rnr{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin-bottom:18px;overflow:hidden}
+  .rnr .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .rnr .hd h2{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
+  .rnr .hd .meta{font-size:12px;color:var(--fg2)}
+  .rnr .hd .sp{flex:1}
+  .rnr .body{padding:12px 14px}
+  .rnr .teams{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .rnr .team{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .rnr .team h3{margin:0;padding:8px 10px;background:var(--bg3);font-size:14px;text-align:center}
+  .rnr table{min-width:0;width:100%}
+  .rnr th{width:90px;text-align:center}
+  .rnr td.n{width:90px;text-align:center;font-weight:600;vertical-align:middle;white-space:nowrap}
+  .rnr td.d{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:13px}
+  .rnr .footer{margin-top:12px;color:var(--red);white-space:pre-wrap;line-height:1.6;font-size:13px}
+  .rnr .note{font-size:12px;color:var(--fg2);margin-bottom:10px}
+  .rnr .fold{border:0;background:transparent;color:var(--fg2);font-size:12px;padding:2px 6px;border-radius:4px}
+  .rnr .fold:hover{background:var(--bg3)}
+  /* R&R 편집 창 */
+  .tbox{border:1px solid var(--line2);border-radius:var(--radius);padding:10px;margin-bottom:10px;background:var(--bg2)}
+  .tbox .th{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+  .tbox .th input{flex:1;border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font-weight:600}
+  .rrow{display:grid;grid-template-columns:110px 1fr 28px;gap:6px;align-items:start;margin-bottom:6px}
+  .rrow input,.rrow textarea{border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;width:100%;font:inherit;background:var(--bg)}
+  .rrow textarea{min-height:64px;resize:vertical;font-size:13px}
+  .rrow .x{padding:4px}
+  .addrow2{border:1px dashed var(--line2);background:transparent;border-radius:var(--radius);padding:4px 10px;font-size:12px;color:var(--fg2);width:100%}
+  .addrow2:hover{background:var(--bg3);color:var(--fg)}
+  .vlist .v{padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;gap:8px;align-items:center}
+  .vlist .v:hover{background:var(--bg2)}
+  .vlist .v.on{background:#eef4fd}
+  .vlist .v .t{flex:1}
+  .vlist .v .m{font-size:12px;color:var(--fg3)}
 </style>
 </head>
 <body>
@@ -110,6 +143,7 @@ function render(){
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: '🏠', title: '비즈홈', home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
     ${editing ? `<div class="editbar">✎ 편집 중: 부서·페이지를 눌러 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제, ↑↓ 로 순서를 바꿉니다. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${rnrHtml()}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
@@ -134,6 +168,7 @@ function render(){
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
   const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; render(); };
+  bindRnr();
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-soon]').forEach(b => b.onclick = () => toast(`"${b.dataset.soon}" 화면은 아직 준비 중입니다`));
   document.querySelectorAll('[data-padd]').forEach(b => b.onclick = () => openPage(null, b.dataset.padd));
@@ -248,7 +283,136 @@ function openDept(id){
   if (d) $('#dDel').onclick = () => { closeModal(); delDept(d.id); };
 }
 
-boot({ icon: '🏠', title: '비즈홈', tables: ['menu', 'tasks', 'leaves'], render });
+/* ================================================================
+   업무 분장 (R&R) — 버전으로 쌓임. 첫 화면에는 최신 버전, 이전 버전은 언제든 열람
+   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, rows:[{name, duties}]}], footer(하단 안내문) }
+================================================================ */
+const R = () => (DATA.rnr || []).slice().sort((a, b) => (b.version || 0) - (a.version || 0));
+const latestRnr = () => R()[0];
+let rnrFold = LS.get('rnr_fold') === '1';
+let rnrSeeding = false;
+
+/* 처음 한 번 넣는 내용 (2026년 9월 업무 분장 캡처) */
+const DEFAULT_RNR = {
+  title: '9월 업무 분장', effective_date: '2026-09-01', note: '첫 등록',
+  teams: [
+    { name: '마케팅팀', rows: [
+      { name: '안상형', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
+      { name: '류수연', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n리뷰 블로그 캠페인' },
+      { name: '김채은', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n매월 마지막 수요일 타사광고 레퍼런스/인사이트 공유' },
+      { name: '전예솔', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n디자인 업무\n틱톡 심포니 테스트' },
+      { name: '김홍재', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
+    ]},
+    { name: '경영지원팀', rows: [
+      { name: '홍주', duties: '1) 매출관리: 식이해법연구소\n2) 퍼포먼스(예산 업데이트), 광고 성과 관리 및 인사이트 공유\n3) 광고 : 광고영상 검수(파트너스 포함)\n4) 네이버광고 (검색광고, 브랜드검색)' },
+      { name: '김상우', duties: '1) 보건소대응, 가품 및 리셀 상품 관리\n2) SCM : 제품 bom 관리, 발주 생산, 물류 입출고, 포장박스 발주\n3) 매출관리 : 식이해법연구소/피에이치뷰티\n4) 쇼핑몰 관리\n - 자사몰 : 레모너리/서리맥스/흑생마\n - 쿠팡 : 매칭, 가격관리, 최저가 모니터링\n - 네이버 : 브랜드 검색시 첫페이지 제품노출, 블로그노출, 최저가 모니터링\n5) 고객 CS 및 주문 출고 : 피에이치뷰티' },
+      { name: '김홍석', duties: '1) 고객 CS 및 주문 출고 : 식이해법연구소\n2) 오프라인 약국 사업부 : 영업 및 컨텐츠 기획\n3) 리뷰관리 : 자사몰, 네이버, 쿠팡 리뷰 관리' },
+      { name: '이유나', duties: '1) 뷰티 BM\n2) 광고 업로드 : 메타, 틱톡, 구글애즈\n3) 기타 지원업무' },
+      { name: '황려은', duties: '오프라인 약국 사업부' },
+    ]},
+  ],
+  footer: '* 상기 개별 제작 영상 개수는 월별 기준으로 작성되었으며, 해당 개수는 월말까지 미달되지 않아야 합니다',
+};
+async function seedRnr(){
+  if (rnrSeeding) return; rnrSeeding = true;
+  try { await store.upsert('rnr', { id: uid(), version: 1, ...DEFAULT_RNR, created_by: me, created_at: nowIso(), updated_at: nowIso() }); }
+  catch (e) { toast('업무 분장 기본 내용 넣기 실패: ' + (e.message || e), true); }
+  rnrSeeding = false; await reload();
+}
+const rnrMeta = v => `v${v.version} · ${fmtDate(v.effective_date) || '적용일 없음'} 적용 · ${esc(v.created_by || '')} · ${fmtDateTime(v.created_at)}`;
+function rnrBodyHtml(v){
+  const teams = Array.isArray(v.teams) ? v.teams : [];
+  return `<div class="teams">${teams.map(t => `<div class="team"><h3>${esc(t.name)}</h3>
+    <table><thead><tr><th>인원</th><th>업무</th></tr></thead><tbody>
+    ${(t.rows || []).map(r => `<tr><td class="n">${esc(r.name)}</td><td class="d">${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
+    </tbody></table></div>`).join('')}</div>
+    ${v.footer ? `<div class="footer">${esc(v.footer)}</div>` : ''}`;
+}
+function rnrHtml(){
+  const cur = latestRnr(), admin = isAdmin();
+  if (!cur) {
+    if (admin && !DATA.rnr) return '';   // 표가 아직 없음(SQL 미실행) → 아래 경고에서 안내
+    return admin ? `<div class="rnr"><div class="hd"><h2>📋 업무 분장 (R&R)</h2><span class="sp"></span>${rnrSeeding ? '<span class="hint">기본 내용을 넣는 중...</span>' : `<button class="btn sm" id="rnrSeed">9월 업무 분장 불러오기</button><button class="btn sm primary" id="rnrNew">직접 만들기</button>`}</div></div>` : '';
+  }
+  return `<div class="rnr">
+    <div class="hd"><h2>📋 ${esc(cur.title)}</h2><span class="meta">${rnrMeta(cur)}</span><span class="sp"></span>
+      <button class="btn sm" id="rnrHist">이전 버전${R().length > 1 ? ` (${R().length - 1})` : ''}</button>
+      ${admin ? `<button class="btn sm primary" id="rnrNew">새 버전 만들기</button>` : ''}
+      <button class="fold" id="rnrFold">${rnrFold ? '펼치기 ▾' : '접기 ▴'}</button></div>
+    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${rnrBodyHtml(cur)}</div>`}
+  </div>`;
+}
+function bindRnr(){
+  const s = $('#rnrSeed'); if (s) s.onclick = seedRnr;
+  const n = $('#rnrNew'); if (n) n.onclick = () => openRnrEditor(latestRnr());
+  const h = $('#rnrHist'); if (h) h.onclick = openRnrHistory;
+  const f = $('#rnrFold'); if (f) f.onclick = () => { rnrFold = !rnrFold; LS.set('rnr_fold', rnrFold ? '1' : '0'); render(); };
+}
+/* 이전 버전 보기 */
+function openRnrHistory(sel){
+  const list = R(); if (!list.length) return;
+  const v = list.find(x => x.id === sel) || list[0];
+  openModal(`${modalHead('업무 분장 버전 기록')}
+    <div class="mb">
+      <div class="vlist" style="border:1px solid var(--line);border-radius:var(--radius);max-height:180px;overflow:auto">${list.map(x => `<div class="v ${x.id === v.id ? 'on' : ''}" data-v="${x.id}"><span class="t"><b>v${x.version}</b> ${esc(x.title)}${x === list[0] ? ' ' + tag('현재', '#dcfce7', '#15803d') : ''}</span><span class="m">${fmtDate(x.effective_date)} 적용 · ${esc(x.created_by || '')}${x.note ? ' · ' + esc(x.note) : ''}</span></div>`).join('')}</div>
+      <div class="rnr" style="margin:0"><div class="hd"><h2>${esc(v.title)}</h2><span class="meta">${rnrMeta(v)}</span></div><div class="body">${rnrBodyHtml(v)}</div></div>
+    </div>
+    <div class="mf">${isAdmin() ? `<button class="btn left" id="rnrFrom">이 버전을 바탕으로 새 버전 만들기</button>` : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  document.querySelectorAll('[data-v]').forEach(el => el.onclick = () => openRnrHistory(el.dataset.v));
+  const f = $('#rnrFrom'); if (f) f.onclick = () => { closeModal(); openRnrEditor(v); };
+}
+/* 새 버전 편집 창 (base 내용이 채워진 채 열림, 저장하면 새 버전으로 쌓임) */
+function openRnrEditor(base){
+  if (!isAdmin()) { toast('관리자만 할 수 있습니다', true); return; }
+  const d = base ? JSON.parse(JSON.stringify(base)) : { title: '업무 분장', effective_date: todayStr(), teams: [{ name: '팀', rows: members.map(m => ({ name: m.name, duties: '' })) }], footer: '' };
+  if (!Array.isArray(d.teams) || !d.teams.length) d.teams = [{ name: '팀', rows: [] }];
+  const nextVer = (latestRnr() ? latestRnr().version : 0) + 1;
+  const draft = { title: d.title || '', effective_date: todayStr(), note: '', teams: d.teams, footer: d.footer || '' };
+  const teamsHtml = () => draft.teams.map((t, ti) => `<div class="tbox" data-ti="${ti}">
+      <div class="th"><input value="${esc(t.name)}" data-tname="${ti}" placeholder="팀 이름"><button class="btn sm danger" data-tdel="${ti}">팀 삭제</button></div>
+      ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
+      <button class="addrow2" data-radd="${ti}">＋ 인원 추가</button>
+    </div>`).join('') + `<button class="addrow2" id="rTeamAdd">＋ 팀 추가</button>`;
+  /* 화면의 입력값을 draft 에 반영 */
+  const collect = () => {
+    draft.title = $('#rTitle').value.trim(); draft.effective_date = $('#rDate').value; draft.note = $('#rNote').value.trim(); draft.footer = $('#rFooter').value.trim();
+    document.querySelectorAll('[data-tname]').forEach(i => draft.teams[+i.dataset.tname].name = i.value.trim());
+    document.querySelectorAll('[data-rname]').forEach(i => { const [a, b] = i.dataset.rname.split('-').map(Number); draft.teams[a].rows[b].name = i.value.trim(); });
+    document.querySelectorAll('[data-rd]').forEach(i => { const [a, b] = i.dataset.rd.split('-').map(Number); draft.teams[a].rows[b].duties = i.value.trim(); });
+  };
+  const paint = () => {
+    $('#rTeams').innerHTML = teamsHtml();
+    document.querySelectorAll('[data-radd]').forEach(b => b.onclick = () => { collect(); draft.teams[+b.dataset.radd].rows.push({ name: '', duties: '' }); paint(); });
+    document.querySelectorAll('[data-rdel]').forEach(b => b.onclick = () => { collect(); const [a, c] = b.dataset.rdel.split('-').map(Number); draft.teams[a].rows.splice(c, 1); paint(); });
+    document.querySelectorAll('[data-tdel]').forEach(b => b.onclick = () => { collect(); const t = draft.teams[+b.dataset.tdel]; if ((t.rows || []).length && !confirm(`"${t.name}" 팀과 인원 ${t.rows.length}명 내용을 지울까요?`)) return; draft.teams.splice(+b.dataset.tdel, 1); paint(); });
+    $('#rTeamAdd').onclick = () => { collect(); draft.teams.push({ name: '새 팀', rows: [{ name: '', duties: '' }] }); paint(); };
+  };
+  openModal(`${modalHead(`새 버전 만들기 (v${nextVer})`)}
+    <div class="mb">
+      <div class="hint">${base ? `v${base.version} "${esc(base.title)}" 내용이 채워져 있습니다. 고쳐서 저장하면 <b>v${nextVer}</b> 로 새로 쌓이고, 이전 버전은 그대로 남습니다.` : '첫 버전을 만듭니다.'}</div>
+      <div class="f2">
+        <div class="f"><label>제목 *</label><input id="rTitle" value="${esc(draft.title)}" placeholder="예: 10월 업무 분장" maxlength="60"></div>
+        <div class="f"><label>적용일</label><input type="date" id="rDate" value="${esc(draft.effective_date)}"></div>
+      </div>
+      <div class="f"><label>변경 요약 (무엇이 바뀌었는지 한 줄)</label><input id="rNote" placeholder="예: 안상형 영상 개수 12→15, 황려은 CS 추가" maxlength="200"></div>
+      <div id="rTeams"></div>
+      <div class="f"><label>하단 안내문 (빨간 글씨로 표시)</label><textarea id="rFooter" style="min-height:50px">${esc(draft.footer)}</textarea></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSave">v${nextVer} 으로 저장</button></div>`, { wide: true });
+  paint();
+  $('#rTitle').focus();
+  $('#rSave').onclick = async () => {
+    collect();
+    if (!draft.title) { $('#rTitle').focus(); toast('제목을 입력하세요', true); return; }
+    draft.teams = draft.teams.map(t => ({ name: t.name || '팀', rows: (t.rows || []).filter(r => r.name || r.duties) })).filter(t => t.rows.length || t.name);
+    if (!draft.teams.length) { toast('팀과 인원을 하나 이상 넣어 주세요', true); return; }
+    closeModal();
+    await saveRow('rnr', { id: uid(), version: nextVer, ...draft, created_by: me, created_at: nowIso() });
+    toast(`v${nextVer} 으로 저장했습니다`);
+  };
+}
+
+boot({ icon: '🏠', title: '비즈홈', tables: ['menu', 'tasks', 'leaves', 'rnr'], render });
 </script>
 </body>
 </html>
