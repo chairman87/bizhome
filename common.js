@@ -384,8 +384,8 @@ function calendarHtml(cal, items, opts){
     const wd = d.getDay();
     cells += `<div class="day ${d.getMonth() !== cal.m ? 'out' : ''} ${key === today ? 'today' : ''}" data-day="${key}">
       <div class="dn ${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}"><b>${d.getDate()}</b></div>
-      ${evs.slice(0, 4).map(t => `<div class="ev ${opts.cls ? opts.cls(t) : ''}" data-id="${t.id}" title="${esc(opts.label(t))}">${opts.label(t)}</div>`).join('')}
-      ${evs.length > 4 ? `<div class="ev plus">+${evs.length - 4}</div>` : ''}
+      ${evs.slice(0, 8).map(t => `<div class="ev ${opts.cls ? opts.cls(t) : ''}" data-id="${t.id}" title="${esc(opts.label(t))}">${opts.label(t)}</div>`).join('')}
+      ${evs.length > 8 ? `<div class="ev plus">+${evs.length - 8}</div>` : ''}
     </div>`;
   }
   return `<div class="calhead">
