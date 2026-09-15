@@ -23,6 +23,10 @@
   .rnr td.n{width:90px;text-align:center;font-weight:600;vertical-align:middle;white-space:nowrap}
   .rnr td.d{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:13px}
   .rnr .footer{margin-top:12px;color:var(--red);white-space:pre-wrap;line-height:1.6;font-size:13px}
+  .rnr [data-edit]{cursor:text;border-radius:4px}
+  .rnr [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
+  .rnr .inline{width:100%;font:inherit;border:2px solid var(--blue);border-radius:4px;padding:4px 6px;background:var(--bg);resize:vertical;line-height:1.5}
+  .rnr td.d .inline{min-height:70px}
   .rnr .note{font-size:12px;color:var(--fg2);margin-bottom:10px}
   .rnr .fold{border:0;background:transparent;color:var(--fg2);font-size:12px;padding:2px 6px;border-radius:4px}
   .rnr .fold:hover{background:var(--bg3)}
@@ -88,13 +92,45 @@ async function seedRnr(){
   rnrSeeding = false; await reload();
 }
 const rnrMeta = v => `v${v.version} · ${fmtDate(v.effective_date) || '적용일 없음'} 적용 · ${esc(v.created_by || '')} · ${fmtDateTime(v.created_at)}`;
-function rnrBodyHtml(v){
+/* editable=true 면 관리자가 더블클릭으로 바로 고칠 수 있는 표시(data-edit)를 붙임 */
+function rnrBodyHtml(v, editable){
   const teams = Array.isArray(v.teams) ? v.teams : [];
-  return `<div class="teams">${teams.map(t => `<div class="team"><h3>${esc(t.name)}</h3>
+  const ed = (kind, ti, ri) => editable ? ` data-edit="${kind}" data-ti="${ti}" data-ri="${ri ?? ''}" title="더블클릭하면 바로 고칠 수 있습니다"` : '';
+  return `<div class="teams">${teams.map((t, ti) => `<div class="team"><h3${ed('team', ti)}>${esc(t.name)}</h3>
     <table><thead><tr><th>인원</th><th>업무</th></tr></thead><tbody>
-    ${(t.rows || []).map(r => `<tr><td class="n">${esc(r.name)}</td><td class="d">${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
+    ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
     </tbody></table></div>`).join('')}</div>
-    ${v.footer ? `<div class="footer">${esc(v.footer)}</div>` : ''}`;
+    ${v.footer || editable ? `<div class="footer"${ed('footer')}>${esc(v.footer || (editable ? '(하단 안내문 없음 · 더블클릭해서 입력)' : ''))}</div>` : ''}`;
+}
+/* 더블클릭 편집: 그 칸이 입력창으로 바뀌고, 다른 곳을 클릭하면 현재 버전에 바로 저장. Esc 는 취소 */
+function bindInlineEdit(){
+  if (!isAdmin()) return;
+  document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = () => {
+    const cur = latestRnr(); if (!cur || el.querySelector('textarea,input')) return;
+    const kind = el.dataset.edit, ti = +el.dataset.ti, ri = el.dataset.ri === '' ? null : +el.dataset.ri;
+    const get = () => kind === 'title' ? cur.title : kind === 'footer' ? (cur.footer || '') : kind === 'team' ? cur.teams[ti].name : cur.teams[ti].rows[ri][kind];
+    const multi = kind === 'duties' || kind === 'footer';
+    const old = get();
+    const box = document.createElement(multi ? 'textarea' : 'input');
+    box.value = old; box.className = 'inline';
+    if (multi) box.rows = Math.max(3, old.split('\n').length + 1);
+    el.innerHTML = ''; el.appendChild(box); box.focus(); if (!multi) box.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const val = box.value.trim();
+      if (!save || val === old.trim()) { render(); return; }
+      const n = JSON.parse(JSON.stringify(cur));
+      if (kind === 'title') n.title = val || old; else if (kind === 'footer') n.footer = val; else if (kind === 'team') n.teams[ti].name = val || old; else n.teams[ti].rows[ri][kind] = val;
+      await saveRow('rnr', n);
+      toast('저장했습니다 (v' + n.version + ' 에 반영)');
+    };
+    box.onblur = () => finish(true);
+    box.onkeydown = e => {
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      else if (e.key === 'Enter' && (!multi || e.ctrlKey)) { e.preventDefault(); finish(true); }
+    };
+  });
 }
 function rnrHtml(){
   const cur = latestRnr(), admin = isAdmin();
@@ -103,14 +139,15 @@ function rnrHtml(){
     return admin ? `<div class="rnr"><div class="hd"><h2>📋 업무 분장 (R&R)</h2><span class="sp"></span>${rnrSeeding ? '<span class="hint">기본 내용을 넣는 중...</span>' : `<button class="btn sm" id="rnrSeed">9월 업무 분장 불러오기</button><button class="btn sm primary" id="rnrNew">직접 만들기</button>`}</div></div>` : '';
   }
   return `<div class="rnr">
-    <div class="hd"><h2>📋 ${esc(cur.title)}</h2><span class="meta">${rnrMeta(cur)}</span><span class="sp"></span>
+    <div class="hd"><h2>📋 <span${admin ? ' data-edit="title" data-ti="" data-ri="" title="더블클릭하면 바로 고칠 수 있습니다"' : ''}>${esc(cur.title)}</span></h2><span class="meta">${rnrMeta(cur)}</span><span class="sp"></span>
       <button class="btn sm" id="rnrHist">이전 버전${R().length > 1 ? ` (${R().length - 1})` : ''}</button>
       ${admin ? `<button class="btn sm primary" id="rnrNew">새 버전 만들기</button>` : ''}
       <button class="fold" id="rnrFold">${rnrFold ? '펼치기 ▾' : '접기 ▴'}</button></div>
-    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${rnrBodyHtml(cur)}</div>`}
+    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${admin ? '<div class="note">✎ 이름·업무·안내문·제목을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다 (현재 버전에 저장). 월이 바뀌어 크게 바꿀 때는 <b>새 버전 만들기</b>.</div>' : ''}${rnrBodyHtml(cur, admin)}</div>`}
   </div>`;
 }
 function bindRnr(){
+  bindInlineEdit();
   const s = $('#rnrSeed'); if (s) s.onclick = seedRnr;
   const n = $('#rnrNew'); if (n) n.onclick = () => openRnrEditor(latestRnr());
   const h = $('#rnrHist'); if (h) h.onclick = openRnrHistory;
