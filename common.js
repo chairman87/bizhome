@@ -278,12 +278,16 @@ function login(name){ me = name; LS.set('bizhome_me', name); renderApp(); }
 function logout(){ me = ''; LS.del('bizhome_me'); renderApp(); }
 
 /* ---------- 모달(팝업 창) ---------- */
+/* 팝업 창. 바깥을 클릭해도 닫히지 않음(입력 중 실수 방지). 취소·✕·Esc 로 닫고, 입력한 내용이 있으면 Esc 때 한 번 물어봄 */
 function openModal(html, opts = {}){
   $('#modal').innerHTML = `<div class="ov" id="ov"><div class="modal ${opts.wide ? 'wide' : ''}">${html}</div></div>`;
-  if (!opts.locked) {   // locked: 바깥 클릭·Esc·✕ 로 닫을 수 없음
-    $('#ov').onclick = e => { if (e.target.id === 'ov') closeModal(); };
-    document.onkeydown = e => { if (e.key === 'Escape') closeModal(); };
-    document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+  const snapshot = () => [...document.querySelectorAll('#modal input:not([type=hidden]), #modal textarea')].map(i => i.type === 'checkbox' ? String(i.checked) : i.value).join('');
+  const initial = snapshot();
+  const dirty = () => snapshot() !== initial;
+  const tryClose = () => { if (!dirty() || confirm('입력한 내용이 사라집니다. 창을 닫을까요?')) closeModal(); };
+  if (!opts.locked) {   // locked: Esc·✕ 로도 닫을 수 없음(처음 비밀번호 정하기)
+    document.onkeydown = e => { if (e.key === 'Escape' && !(e.target && e.target.closest && e.target.closest('select'))) tryClose(); };
+    document.querySelectorAll('[data-close]').forEach(b => b.onclick = tryClose);
   } else {
     document.onkeydown = null;
     document.querySelectorAll('[data-close]').forEach(b => b.remove());
