@@ -267,7 +267,7 @@ function renderLogin(){
     ${picked ? `<div class="pwrow"><input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
     <p class="hint">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 새 비밀번호를 정하게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
     ${members.length ? (picked ? '' : '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>') : `<div class="pwrow"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
-    <div class="foot">${esc(store.label)}</div>
+    ${connError || store !== SupabaseStore ? `<div class="foot">${esc(connError ? "저장소 연결 오류: " + connError : store.label)}</div>` : ""}
   </div></div>`;
   const inp = $('#newName'); if (inp) {
     const go = async () => { const m = await addMember(inp.value); if (m) openSetPassword(m, { force: true, after: () => login(m.name) }); };
@@ -356,7 +356,7 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
     ${home ? `<a class="home" href="index.html">🏠 ${esc(BRAND.name)}</a>` : ''}
     <div class="brand">${esc(icon || '')} ${esc(title)}</div>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
-    <span class="conn ${connError ? 'bad' : ''}" title="${esc(connError)}">${connError ? '연결 오류' : store.label}</span>
+    ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}
     ${newLabel ? `<button class="btn primary" id="newBtn">+ <span class="newtxt">${esc(newLabel)}</span></button>` : ''}
     <button class="me" id="meBtn" title="사용자 바꾸기 / 팀원 관리">${avatar(me)}${esc(me)}${isAdmin() ? '<span class="hint" style="font-size:10px">관리자</span>' : ''}</button>
