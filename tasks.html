@@ -113,16 +113,16 @@ async function completeTask(id){
 /* 담당자가 진행 상황을 보고 */
 function openReport(id){
   const t = T().find(x => x.id === id); if (!t) return;
-  openModal(`${modalHead('진행 보고', stHtml(t.status))}
+  openModal(`${modalHead(isSelf(t) ? '진행률 업데이트' : '진행 보고', stTask(t))}
     <div class="mb">
-      <div><span class="title">${esc(t.title)}</span><div class="hint">${esc(t.created_by || '')}님 요청 · 마감 ${fmtDate(t.due_date) || '-'} · 현재 ${prog(t)}%</div></div>
+      <div><span class="title">${esc(t.title)}</span><div class="hint">${isSelf(t) ? '내 업무' : esc(t.created_by || '') + '님 요청'} · 마감 ${fmtDate(t.due_date) || '-'} · 현재 ${prog(t)}%</div></div>
       <div class="f"><label>진행률</label>
         <div class="range"><input type="range" id="rProg" min="0" max="100" step="5" value="${prog(t)}"><span class="pct" id="rPct">${prog(t)}%</span></div>
         <div class="quick">${[25, 50, 75, 100].map(p => `<button type="button" data-q="${p}">${p}%</button>`).join('')}</div></div>
-      <div class="f"><label>보고 내용</label><textarea id="rText" placeholder="어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요"></textarea></div>
-      <div class="hint">${isSelf(t) ? '내가 등록한 업무라 100%로 보고하면 바로 <b>완료</b>됩니다.' : `100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.`}</div>
+      <div class="f"><label>${isSelf(t) ? '메모 (선택)' : '보고 내용'}</label><textarea id="rText" placeholder="${isSelf(t) ? '진행 상황을 간단히 남겨 두면 나중에 기록으로 볼 수 있습니다' : '어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요'}"></textarea></div>
+      <div class="hint">${isSelf(t) ? '100%로 맞추면 바로 <b>완료</b> 처리됩니다.' : `100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.`}</div>
     </div>
-    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">보고하기</button></div>`);
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">${isSelf(t) ? '저장' : '보고하기'}</button></div>`);
   const rp = $('#rProg'), pct = $('#rPct');
   rp.oninput = () => pct.textContent = rp.value + '%';
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { rp.value = b.dataset.q; pct.textContent = rp.value + '%'; });
@@ -132,7 +132,7 @@ function openReport(id){
     // 남이 요청한 업무는 100% 보고 → 요청자가 확인(보고완료). 내가 등록한 내 업무는 100% → 바로 완료
     const status = p >= 100 ? (isSelf(t) ? '완료' : '보고완료') : (t.status === '보류' ? '보류' : '진행중');
     closeModal();
-    await saveRow('tasks', { ...t, progress: p, status, completed_at: status === '완료' ? nowIso() : null, comments: [...(t.comments || []), log(text || `진행률 ${p}% 보고`, 'report', p)] });
+    await saveRow('tasks', { ...t, progress: p, status, completed_at: status === '완료' ? nowIso() : null, comments: [...(t.comments || []), log(text || `진행률 ${p}%`, isSelf(t) ? 'comment' : 'report', p)] });
     toast(status === '완료' ? '완료했습니다. 보관함으로 옮겨졌습니다' : p >= 100 ? '보고완료로 표시했습니다' : '진행 상황을 보고했습니다');
   };
 }
@@ -253,8 +253,8 @@ function tableHtml(list){
 function actionButtons(t){
   if (isDone(t)) return '';
   let h = '';
-  if (t.assignee === me && t.status !== '보고완료') h += `<button class="btn sm primary" data-report="${t.id}">진행 보고</button>`;
-  if (isSelf(t) && t.assignee === me) { h += `<button class="btn sm" data-fin="${t.id}">완료처리</button>`; return h; }   // 내가 등록한 내 업무는 스스로 완료
+  if (t.assignee === me && t.status !== '보고완료') h += `<button class="btn sm primary" data-report="${t.id}">${isSelf(t) ? '진행률' : '진행 보고'}</button>`;
+  if (isSelf(t) && t.assignee === me) { h += `<button class="btn sm" data-fin="${t.id}">완료</button>`; return h; }   // 내가 등록한 내 업무는 스스로 완료
   if (t.created_by === me || isAdmin()) {
     if (t.status === '보고완료') h += `<button class="btn sm primary" data-fin="${t.id}">완료처리</button><button class="btn sm" data-revise="${t.id}">보완 요청</button>`;
     else if (t.assignee !== me) h += `<button class="btn sm" data-fin="${t.id}">완료처리</button>`;
@@ -360,7 +360,7 @@ function openTask(id, preset = {}){
     </div>
     <div class="mf">
       ${t ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
-      ${t && t.assignee === me && !isDone(t) ? `<button class="btn" id="mReport">진행 보고</button>` : ''}
+      ${t && t.assignee === me && !isDone(t) ? `<button class="btn" id="mReport">${isSelf(t) ? '진행률 업데이트' : '진행 보고'}</button>` : ''}
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="mSave">${t ? '저장' : selfMode ? '등록' : '요청하기'}</button>
     </div>`);
