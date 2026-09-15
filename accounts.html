@@ -3,20 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>공용계정 관리</title>
+<title>계정·구독 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
 <style>
-  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .wrap-wide{max-width:1800px}
+  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v.red{color:var(--red)}.stat .v.orange{color:var(--orange)}
+  .stat .s{font-size:11px;color:var(--fg3)}
   .mono{font-family:Consolas,"Malgun Gothic",monospace;font-size:13px}
   .pw{display:inline-flex;align-items:center;gap:4px}
-  .pw .v{min-width:90px;letter-spacing:1px}
+  .pw .v{min-width:80px;letter-spacing:1px}
   .ib{border:1px solid var(--line2);background:var(--bg);border-radius:4px;padding:1px 6px;font-size:12px;color:var(--fg2)}
   .ib:hover{background:var(--bg3);color:var(--fg)}
   .site{color:var(--blue);text-decoration:none;font-size:12px}
   .site:hover{text-decoration:underline}
   td.memo2{color:var(--fg2);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  td.small{font-size:12px;color:var(--fg2)}
+  .lock{font-size:11px;color:#9a6700;background:#fbeccc;border-radius:4px;padding:0 5px;margin-left:4px}
+  .exp{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .exp.soon{color:var(--orange);font-weight:600}
+  .exp.over{color:var(--red);font-weight:600}
+  .grp{display:inline-block;padding:0 7px;border-radius:4px;font-size:11px;background:var(--bg3);color:var(--fg2);white-space:nowrap}
+  .sec{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;font-size:12px;color:var(--fg2);font-weight:600}
 </style>
 </head>
 <body>
@@ -26,62 +40,145 @@
 
 <script>
 /* ================================================================
-   공용계정 관리 — 팀이 함께 쓰는 계정(네이버 광고, 쿠팡 윙 등) 목록
-   모두 볼 수 있음. 추가·수정은 누구나, 삭제는 관리자만. 비밀번호는 가려 두고 👁 로 보기
+   계정·구독 관리 — 팀이 함께 쓰는 계정과 유료 구독을 한 곳에서
+   한 줄 = { group_name(구분), service, url, purpose, login_id, password, owner(담당자/구매자), shared_with(공유 사용자),
+            fee(구독료), cycle(월/년/없음), billing_day(결제일), start_date, end_date(만료일), admin_only, memo }
 ================================================================ */
-const A = () => (DATA.accounts || []).slice().sort((a, b) => String(a.service || '').localeCompare(String(b.service || ''), 'ko'));
+const GROUP_ORDER = ['식이해법연구소', '레모너리', '서리맥스', '흑생마', '피에이치뷰티', '편집툴', '광고 계정'];
+const CYCLES = ['없음', '월', '년'];
+const ALL = () => (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only);   // 관리자만 보기 항목은 관리자에게만
+const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
+let view = LS.get('acc_view') || 'all';
 let q = '';
-let shown = {};   // 비밀번호 보이기 상태 (계정 id → true)
-const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : '';
+let shown = {};
+let sort = { key: 'service', dir: 'asc' };
 
+const won = n => (n == null || n === '' || isNaN(Number(n))) ? '' : Number(n).toLocaleString('ko-KR') + '원';
+const monthly = a => { const f = Number(a.fee); if (!f) return 0; return a.cycle === '년' ? Math.round(f / 12) : a.cycle === '월' ? f : 0; };
+const isSub = a => Number(a.fee) > 0 || a.end_date || a.billing_day;
+const daysTo = d => d ? dayDiff(d) : null;
+function expHtml(d){ if (!d) return '<span class="hint">-</span>'; const n = daysTo(d); const cls = n < 0 ? 'over' : n <= 30 ? 'soon' : ''; return `<span class="exp ${cls}">${fmtDate(d)}${n < 0 ? ` (${-n}일 지남)` : n <= 30 ? ` (D-${n})` : ''}</span>`; }
+const feeHtml = a => Number(a.fee) > 0 ? `${won(a.fee)}${a.cycle && a.cycle !== '없음' ? '/' + a.cycle : ''}` : (a.cycle === '없음' && a.fee === 0 ? '무료' : '');
+const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : '';
+const pwHtml = a => `<span class="pw"><span class="v mono">${a.password ? (shown[a.id] ? esc(a.password) : '••••••••') : '<span class="hint">-</span>'}</span>${a.password ? `<button class="ib" data-eye="${a.id}">${shown[a.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(a.password)}">복사</button>` : ''}</span>`;
+function normalize(table, a){ return { ...a, admin_only: !!a.admin_only, cycle: CYCLES.includes(a.cycle) ? a.cycle : (Number(a.fee) > 0 ? '월' : '없음') }; }
+
+/* ---------- 화면 ---------- */
 function render(){
-  const list = A().filter(a => !q || [a.service, a.login_id, a.purpose, a.owner, a.memo, a.url].some(v => (v || '').toLowerCase().includes(q.toLowerCase())));
-  $('#app').innerHTML = headerHtml({ icon: '🔐', title: '공용계정 관리' }) + `<main class="wrap">
-    <div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
-      <input type="search" id="fq" placeholder="검색 (서비스, 아이디, 용도, 담당자)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
-      <span class="count">${list.length}건</span></div>
-    ${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` :
-      list.length ? `<div class="tablewrap"><table style="min-width:900px"><thead><tr><th>서비스</th><th>주소</th><th>아이디</th><th>비밀번호</th><th>용도</th><th>담당자</th><th>메모</th><th>수정</th></tr></thead><tbody>
-      ${list.map(a => `<tr class="row" data-id="${a.id}">
-        <td><span class="title">${esc(a.service)}</span></td>
-        <td>${siteHtml(a.url)}</td>
-        <td><span class="mono">${esc(a.login_id || '')}</span> ${a.login_id ? `<button class="ib" data-copy="${esc(a.login_id)}" title="복사">복사</button>` : ''}</td>
-        <td><span class="pw"><span class="v mono">${a.password ? (shown[a.id] ? esc(a.password) : '••••••••') : '<span class="hint">-</span>'}</span>${a.password ? `<button class="ib" data-eye="${a.id}" title="${shown[a.id] ? '가리기' : '보기'}">${shown[a.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(a.password)}" title="복사">복사</button>` : ''}</span></td>
-        <td>${esc(a.purpose || '')}</td>
-        <td>${who(a.owner)}</td>
-        <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
-        <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button></td>
-      </tr>`).join('')}</tbody></table></div>
-      <div class="hint" style="margin-top:8px">마지막 수정: 각 줄의 수정 창에서 확인할 수 있습니다. 비밀번호가 바뀌면 여기도 꼭 고쳐 주세요.</div>`
-      : `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`}
-  </main>`;
-  bindHeader(() => {}, null, m => `담당 계정 ${A().filter(a => a.owner === m.name).length}개`);
-  $('#newBtn2').onclick = () => openEdit(null);
-  const fq = $('#fq'); fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
-  document.querySelectorAll('[data-eye]').forEach(b => b.onclick = e => { e.stopPropagation(); shown[b.dataset.eye] = !shown[b.dataset.eye]; render(); });
+  const tabs = [{ key: 'all', label: '전체' }, ...groups().map(g => ({ key: 'g:' + g, label: g })), null, { key: 'subs', label: '구독·결제', badge: ALL().filter(a => a.end_date && daysTo(a.end_date) <= 30).length }];
+  if (!tabs.some(t => t && t.key === view)) view = 'all';
+  $('#app').innerHTML = headerHtml({ icon: '🔐', title: '계정·구독 관리', tabs, active: view })
+    + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
+      <input type="search" id="fq" placeholder="검색 (서비스, 아이디, 목적, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
+      <span class="count" id="cnt"></span></div><div id="view">${view === 'subs' ? subsHtml() : tableHtml()}</div>`}</main>`;
+  bindHeader(k => { view = k; LS.set('acc_view', k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null, view.startsWith('g:') ? { group_name: view.slice(2) } : {});
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; renderView(); };
+  bindView();
+}
+function listOf(){
+  const base = view === 'subs' ? ALL().filter(isSub) : view.startsWith('g:') ? ALL().filter(a => a.group_name === view.slice(2)) : ALL();
+  const s = q.trim().toLowerCase();
+  return base.filter(a => !s || [a.service, a.login_id, a.purpose, a.owner, a.memo, a.url, a.group_name, a.shared_with].some(v => (v || '').toLowerCase().includes(s)));
+}
+function statsHtml(){
+  const all = ALL(), subs = all.filter(isSub);
+  const mSum = subs.reduce((s, a) => s + monthly(a), 0);
+  const soon = all.filter(a => a.end_date && daysTo(a.end_date) <= 30 && daysTo(a.end_date) >= 0).length, over = all.filter(a => a.end_date && daysTo(a.end_date) < 0).length;
+  const today = new Date().getDate(); const dueSoon = subs.filter(a => a.billing_day && a.billing_day >= today && a.billing_day <= today + 7).length;
+  return `<div class="stats">
+    <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개</div></div>
+    <div class="stat"><div class="l">유료 구독</div><div class="v">${subs.filter(a => Number(a.fee) > 0).length}개</div><div class="s">월 환산 합계 ${won(mSum) || '0원'} (연 ${won(mSum * 12)})</div></div>
+    <div class="stat"><div class="l">30일 내 만료</div><div class="v ${soon ? 'orange' : ''}">${soon}개</div><div class="s">${over ? `<span style="color:var(--red)">만료 지남 ${over}개</span>` : '만료 지난 것 없음'}</div></div>
+    <div class="stat"><div class="l">7일 내 결제일</div><div class="v ${dueSoon ? 'orange' : ''}">${dueSoon}개</div><div class="s">오늘 ${today}일 기준</div></div>
+  </div>`;
+}
+function tableHtml(){
+  const list = sortBy(listOf(), sort, { fee: f => Number(f) || 0 });
+  const showGroup = !view.startsWith('g:');
+  const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', '목적'], ['login_id', '아이디'], ['password', '비밀번호'], ['fee', '구독료'], ['end_date', '만료일'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
+  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
+  return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
+    ${list.map(a => `<tr class="row" data-id="${a.id}">
+      ${showGroup ? `<td><span class="grp">${esc(a.group_name || '-')}</span></td>` : ''}
+      <td><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
+      <td>${siteHtml(a.url)}</td>
+      <td class="small">${esc(a.purpose || '')}</td>
+      <td><span class="mono">${esc(a.login_id || '')}</span>${a.login_id ? ` <button class="ib" data-copy="${esc(a.login_id)}">복사</button>` : ''}</td>
+      <td>${pwHtml(a)}</td>
+      <td class="small">${feeHtml(a)}${a.billing_day ? `<div class="hint">매${a.cycle === '년' ? '년' : '월'} ${a.billing_day}일 결제</div>` : ''}</td>
+      <td>${expHtml(a.end_date)}</td>
+      <td>${who(a.owner)}</td>
+      <td class="small">${esc(a.shared_with || '')}</td>
+      <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
+      <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function subsHtml(){
+  const list = listOf().sort((a, b) => (a.end_date || '9999') .localeCompare(b.end_date || '9999') || (a.billing_day || 99) - (b.billing_day || 99));
+  if (!list.length) return '<div class="empty">구독료·만료일·결제일이 들어 있는 계정이 없습니다. 계정 수정 창의 "구독·결제" 칸에 넣으면 여기에 모입니다.</div>';
+  const mSum = list.reduce((s, a) => s + monthly(a), 0);
+  return `<div class="tablewrap"><table style="min-width:1000px"><thead><tr><th>서비스</th><th>구분</th><th>구독료</th><th>월 환산</th><th>결제일</th><th>시작일</th><th>만료일</th><th>구매자/담당자</th><th>공유 사용자</th><th>비고</th><th></th></tr></thead><tbody>
+    ${list.map(a => `<tr class="row" data-id="${a.id}">
+      <td><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
+      <td><span class="grp">${esc(a.group_name || '-')}</span></td>
+      <td class="num">${feeHtml(a) || '<span class="hint">-</span>'}</td>
+      <td class="num">${monthly(a) ? won(monthly(a)) : '<span class="hint">-</span>'}</td>
+      <td class="small">${a.billing_day ? `매${a.cycle === '년' ? '년' : '월'} ${a.billing_day}일` : '-'}</td>
+      <td class="small">${fmtDate(a.start_date) || '-'}</td>
+      <td>${expHtml(a.end_date)}</td>
+      <td>${who(a.owner)}</td>
+      <td class="small">${esc(a.shared_with || '')}</td>
+      <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
+      <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button></td>
+    </tr>`).join('')}
+    <tr><td colspan="3" style="text-align:right;font-weight:600">월 환산 합계</td><td class="num" style="font-weight:700">${won(mSum)}</td><td colspan="7" class="hint">연 ${won(mSum * 12)} · 년 단위 구독은 12로 나눠 계산</td></tr>
+  </tbody></table></div>`;
+}
+function renderView(){ $('#view').innerHTML = view === 'subs' ? subsHtml() : tableHtml(); bindView(); }
+function bindView(){
+  const c = $('#cnt'); if (c) c.textContent = `${listOf().length}개`;
+  bindSort(sort, renderView, { service: 'asc', group_name: 'asc', owner: 'asc', login_id: 'asc' });
+  document.querySelectorAll('[data-eye]').forEach(b => b.onclick = e => { e.stopPropagation(); shown[b.dataset.eye] = !shown[b.dataset.eye]; renderView(); });
   document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(b.dataset.copy); toast('복사했습니다'); } catch { toast('복사할 수 없습니다. 직접 선택해서 복사하세요', true); } });
   document.querySelectorAll('[data-edit]').forEach(b => b.onclick = e => { e.stopPropagation(); openEdit(b.dataset.edit); });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openEdit(tr.dataset.id); });
 }
 
-function openEdit(id){
-  const a = id ? A().find(x => x.id === id) : null;
-  const d = a || { service: '', url: '', login_id: '', password: '', purpose: '', owner: '', memo: '' };
+/* ---------- 추가·수정 창 ---------- */
+function openEdit(id, preset = {}){
+  const a = id ? ALL().find(x => x.id === id) : null;
+  const d = a || { group_name: '', service: '', url: '', purpose: '', login_id: '', password: '', owner: '', shared_with: '', fee: '', cycle: '없음', billing_day: '', start_date: '', end_date: '', admin_only: false, memo: '', ...preset };
   openModal(`${modalHead(a ? '계정 정보' : '계정 추가')}
     <div class="mb">
-      <div class="f2">
-        <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버 광고, 쿠팡 윙" maxlength="60"></div>
-        <div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: searchad.naver.com"></div>
+      <div class="f3">
+        <div class="f"><label>구분 (회사/용도)</label><input id="aGroup" value="${esc(d.group_name || '')}" list="grpList" placeholder="예: 식이해법연구소"><datalist id="grpList">${[...new Set([...GROUP_ORDER, ...groups()])].map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>
+        <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버, 어도비" maxlength="60"></div>
+        <div class="f"><label>목적</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="예: email, ad, tool" maxlength="80"></div>
       </div>
+      <div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: adobe.co.kr"></div>
+      <div class="sec">로그인</div>
       <div class="f2">
         <div class="f"><label>아이디</label><input id="aId" value="${esc(d.login_id || '')}" autocomplete="off"></div>
-        <div class="f"><label>비밀번호</label><input id="aPw" value="${esc(d.password || '')}" autocomplete="off"></div>
+        <div class="f"><label>비밀번호</label><div style="display:flex;gap:4px"><input id="aPw" type="password" value="${esc(d.password || '')}" autocomplete="off" style="flex:1"><button type="button" class="btn sm" id="aPwEye">👁</button></div></div>
+      </div>
+      <div class="sec">구독·결제 (유료가 아니면 비워 두세요)</div>
+      <div class="f3">
+        <div class="f"><label>구독료 (원)</label><input type="number" id="aFee" value="${esc(d.fee ?? '')}" min="0" step="100" placeholder="예: 39000"></div>
+        <div class="f"><label>주기</label><select id="aCycle">${CYCLES.map(c => `<option ${d.cycle === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="f"><label>결제일 (매월/매년 며칠)</label><input type="number" id="aBill" value="${esc(d.billing_day ?? '')}" min="1" max="31" placeholder="예: 10"></div>
       </div>
       <div class="f2">
-        <div class="f"><label>용도</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="예: 검색광고 운영" maxlength="80"></div>
-        <div class="f"><label>담당자</label><select id="aOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
+        <div class="f"><label>사용 시작일</label><input type="date" id="aStart" value="${esc(d.start_date || '')}"></div>
+        <div class="f"><label>사용 만료일 (갱신일)</label><input type="date" id="aEnd" value="${esc(d.end_date || '')}"></div>
       </div>
-      <div class="f"><label>메모</label><textarea id="aMemo" placeholder="추가 인증 방법, 주의사항 등">${esc(d.memo || '')}</textarea></div>
+      <div class="sec">담당·공유</div>
+      <div class="f2">
+        <div class="f"><label>담당자 / 구매자</label><select id="aOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
+        <div class="f"><label>공유 사용자</label><input id="aShared" value="${esc(d.shared_with || '')}" placeholder="예: 류수연, 김채은"></div>
+      </div>
+      <div class="f"><label>비고</label><textarea id="aMemo" placeholder="추가 인증 방법, 주의사항, 업체코드 등">${esc(d.memo || '')}</textarea></div>
+      ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aAdminOnly" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기 (팀원에게는 숨김)</label>` : ''}
       ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
     </div>
     <div class="mf">
@@ -90,17 +187,21 @@ function openEdit(id){
       <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
     </div>`, { wide: true });
   $('#aService').focus();
+  $('#aPwEye').onclick = () => { const p = $('#aPw'); p.type = p.type === 'password' ? 'text' : 'password'; };
   $('#aSave').onclick = async () => {
     const service = $('#aService').value.trim(); if (!service) { $('#aService').focus(); toast('서비스 이름을 입력하세요', true); return; }
-    const row = { id: a ? a.id : uid(), service, url: $('#aUrl').value.trim() || null, login_id: $('#aId').value.trim() || null, password: $('#aPw').value.trim() || null,
-      purpose: $('#aPurpose').value.trim() || null, owner: $('#aOwner').value || null, memo: $('#aMemo').value.trim() || null,
+    const fee = $('#aFee').value === '' ? null : Number($('#aFee').value);
+    const row = { id: a ? a.id : uid(), group_name: $('#aGroup').value.trim() || null, service, url: $('#aUrl').value.trim() || null, purpose: $('#aPurpose').value.trim() || null,
+      login_id: $('#aId').value.trim() || null, password: $('#aPw').value.trim() || null, owner: $('#aOwner').value || null, shared_with: $('#aShared').value.trim() || null,
+      fee, cycle: fee ? ($('#aCycle').value === '없음' ? '월' : $('#aCycle').value) : '없음', billing_day: $('#aBill').value ? Number($('#aBill').value) : null,
+      start_date: $('#aStart').value || null, end_date: $('#aEnd').value || null, admin_only: $('#aAdminOnly') ? $('#aAdminOnly').checked : !!(a && a.admin_only), memo: $('#aMemo').value.trim() || null,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('accounts', row); toast(a ? '저장했습니다' : '계정을 추가했습니다');
   };
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🔐', title: '공용계정 관리', tables: ['accounts'], render });
+boot({ icon: '🔐', title: '계정·구독 관리', tables: ['accounts'], render, normalize });
 </script>
 </body>
 </html>

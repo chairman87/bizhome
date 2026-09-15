@@ -80,6 +80,7 @@ alter table ads enable row level security; drop policy if exists "team_all" on a
 -- 4-3) 공지사항 · 공용계정 (sql-notices-accounts.sql 과 동일)
 create table if not exists notices (id uuid primary key, title text not null, content text, pinned boolean default false, reads jsonb default '[]', created_by text, created_at timestamptz default now(), updated_at timestamptz default now());
 create table if not exists accounts (id uuid primary key, service text not null, url text, login_id text, password text, purpose text, owner text, memo text, created_by text, created_at timestamptz default now(), updated_by text, updated_at timestamptz default now());
+alter table accounts add column if not exists group_name text; alter table accounts add column if not exists shared_with text; alter table accounts add column if not exists fee numeric; alter table accounts add column if not exists cycle text; alter table accounts add column if not exists billing_day int; alter table accounts add column if not exists start_date date; alter table accounts add column if not exists end_date date; alter table accounts add column if not exists admin_only boolean default false;
 alter table notices enable row level security; alter table accounts enable row level security;
 drop policy if exists "team_all" on notices; drop policy if exists "team_all" on accounts;
 create policy "team_all" on notices for all using (true) with check (true); create policy "team_all" on accounts for all using (true) with check (true);
