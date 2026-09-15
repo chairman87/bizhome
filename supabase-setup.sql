@@ -73,6 +73,10 @@ create table if not exists leaves (
   updated_at timestamptz default now()
 );
 
+-- 4-4) 광고 영상 리스트 (sql-ads.sql 과 동일)
+create table if not exists ads (id uuid primary key, product text not null, date date, title text not null, editor text, meta_account text, meta_budget text, tiktok text, status text default '운영중', note text, created_by text, created_at timestamptz default now(), updated_by text, updated_at timestamptz default now());
+alter table ads enable row level security; drop policy if exists "team_all" on ads; create policy "team_all" on ads for all using (true) with check (true); alter publication supabase_realtime add table ads;
+
 -- 4-3) 공지사항 · 공용계정 (sql-notices-accounts.sql 과 동일)
 create table if not exists notices (id uuid primary key, title text not null, content text, pinned boolean default false, reads jsonb default '[]', created_by text, created_at timestamptz default now(), updated_at timestamptz default now());
 create table if not exists accounts (id uuid primary key, service text not null, url text, login_id text, password text, purpose text, owner text, memo text, created_by text, created_at timestamptz default now(), updated_by text, updated_at timestamptz default now());

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>광고 영상 리스트</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .wrap-wide{max-width:1800px}
+  table.ads{min-width:1000px}
+  table.ads th{text-align:center}
+  table.ads td{padding:5px 8px;font-size:13px}
+  td.c{text-align:center;white-space:nowrap}
+  td.ttl{font-weight:500;min-width:220px}
+  td.note{color:var(--fg2);font-size:12px;max-width:260px;white-space:pre-wrap;word-break:break-word}
+  .off{background:#e5e5e5;color:#444;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
+  .del{background:#fee2e2;color:#b91c1c;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
+  .run{background:#dcfce7;color:#15803d;padding:0 8px;border-radius:3px;font-size:12px}
+  [data-edit]{cursor:text}
+  [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
+  .inline{width:100%;font:inherit;font-size:13px;border:2px solid var(--blue);border-radius:4px;padding:2px 6px;background:var(--bg)}
+  /* 월별 */
+  .sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:16px}
+  .sum table{min-width:0;width:100%;border:1px solid var(--line)}
+  .sum th{text-align:center;color:#fff;font-weight:600}
+  .sum td{text-align:center;font-weight:600;font-size:15px}
+  .sum .p th{background:#1d4ed8}.sum .p td{background:#dbeafe}
+  .sum .e th{background:#991b1b}.sum .e td{background:#fecaca}
+  .sum td.l{background:var(--bg2);color:var(--fg2);font-size:12px;font-weight:500}
+  .wk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .wk .h{background:#222;color:#fff;text-align:center;font-weight:700;padding:6px 0;font-size:12px}
+  .wk .d{background:var(--bg);min-height:150px;padding:0 0 6px;cursor:pointer}
+  .wk .d:hover{background:var(--bg2)}
+  .wk .d.out{background:#fafaf9}
+  .wk .d .dn{background:#e5e5e5;font-weight:700;padding:3px 8px;font-size:13px}
+  .wk .d.today .dn{color:var(--red)}
+  .wk .d.out .dn{color:var(--fg3)}
+  .wk .it{padding:2px 8px;font-size:12px;line-height:1.45;cursor:pointer;word-break:break-word}
+  .wk .it:hover{background:#fffbea}
+  .wk .it b{font-weight:700}
+  .p-레{color:#1d4ed8}.p-서{color:#15803d}.p-흑{color:#6d28d9}
+  .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   광고 영상 리스트 — 마케팅 팀장이 구글시트로 관리하던 표
+   한 줄 = { product(제품), date(게재일), title(영상 타이틀), editor(편집자), meta_account(메타 계정),
+            meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(사유/수정 콘티) }
+================================================================ */
+const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
+const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑' };
+const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
+const G = () => DATA.ads || [];
+let view = LS.get('ads_view') || PRODUCTS[0];
+let filter = { q: '', editor: '', meta: '', status: '' };
+let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
+let sort = { key: 'date', dir: 'desc' };
+
+const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
+const editors = () => uniq(G().map(a => a.editor));
+const metas = () => uniq(G().map(a => a.meta_account));
+const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(String(b).replace(/,/g, '')); return isNaN(n) ? esc(b) : n.toLocaleString('ko-KR'); };
+const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
+const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
+function normalize(table, a){ return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중' }; }
+
+/* ---------- 화면 ---------- */
+function render(){
+  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }];
+  $('#app').innerHTML = headerHtml({ icon: '🎬', title: '광고 영상 리스트', tabs, active: view })
+    + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : productHtml(view)}</main>`;
+  bindHeader(k => { view = k; LS.set('ads_view', k); render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
+  bindView();
+}
+
+/* 제품별 표 */
+function listOf(p){
+  const q = filter.q.trim().toLowerCase();
+  return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.status || a.status === filter.status));
+}
+function productHtml(p){
+  const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '메타'], ['meta_budget', '메타 예산'], ['tiktok', '틱톡'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
+  return `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
+      <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
+      <select id="fe"><option value="">편집자: 전체</option>${editors().map(e => `<option ${filter.editor === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
+      <select id="fm"><option value="">메타: 전체</option>${metas().map(e => `<option ${filter.meta === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
+      <select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <span class="count">${list.length}건 · 운영중 ${listOf(p).filter(a => a.status === '운영중').length} · OFF ${listOf(p).filter(a => a.status === 'OFF').length} · 삭제·수정필요 ${listOf(p).filter(a => a.status === '삭제·수정필요').length}</span></div>
+    <div class="hint" style="margin-bottom:8px">칸을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다. 줄을 클릭하면 상세 창이 열립니다.</div>
+    ${list.length ? `<div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
+    ${list.map(a => `<tr class="row" data-id="${a.id}">
+      <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
+      <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
+      <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
+      <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
+      <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}</td>
+      <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
+      <td class="c"><select data-status="${a.id}" style="border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px">${STATUSES.map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+      <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}</td>
+    </tr>`).join('')}</tbody></table></div>` : `<div class="empty">${filter.q || filter.editor || filter.meta || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. <b>＋ 영상 추가</b>로 넣어 주세요.`}</div>`}`;
+}
+
+/* 월별 현황: 제품별·제작자별 개수 + 월~금 달력 */
+function monthHtml(){
+  const [y, m] = month.split('-').map(Number);
+  const inMonth = G().filter(a => (a.date || '').startsWith(month));
+  const byP = PRODUCTS.map(p => [p, inMonth.filter(a => a.product === p).length]);
+  const eds = uniq(inMonth.map(a => a.editor));
+  const byE = eds.map(e => [e, inMonth.filter(a => a.editor === e).length]);
+  // 월~금만 있는 달력 (첫 주 월요일부터)
+  const first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
+  const start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+  let cells = '';
+  for (let d = new Date(start); d <= last; d.setDate(d.getDate() + 7)) {
+    for (let i = 0; i < 5; i++) {
+      const day = new Date(d); day.setDate(d.getDate() + i);
+      const key = ymd(day), out = day.getMonth() !== m - 1;
+      const items = inMonth.filter(a => a.date === key).sort((a, b) => PRODUCTS.indexOf(a.product) - PRODUCTS.indexOf(b.product));
+      cells += `<div class="d ${out ? 'out' : ''} ${key === todayStr() ? 'today' : ''}" data-day="${key}"><div class="dn">${out ? '' : `${m}/${day.getDate()}`}</div>
+        ${items.map(a => `<div class="it ${a.status === '삭제·수정필요' ? 'del' : ''}" data-open="${a.id}" title="${esc(a.title)} · ${esc(a.editor || '')} · ${a.status}"><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b>${esc(a.title)}${a.editor ? '_' + esc(a.editor) : ''}</div>`).join('')}</div>`;
+    }
+  }
+  return `<div class="actions"><button class="btn sm" id="mPrev">‹</button><h2 style="margin:0;font-size:18px">${y}년 ${m}월</h2><button class="btn sm" id="mNext">›</button><button class="btn sm" id="mToday">이번 달</button>
+      <span class="hint">날짜를 누르면 그 날짜로 영상을 추가합니다 · 월을 넘기면 다음 달 표가 자동으로 생깁니다</span></div>
+    <div class="sum">
+      <table class="p"><tr><th>제품</th>${byP.map(([p]) => `<th>${esc(p)}</th>`).join('')}<th>총 컨텐츠 수</th></tr><tr><td class="l">당월<br>컨텐츠 개수</td>${byP.map(([, n]) => `<td>${n}</td>`).join('')}<td>${inMonth.length}</td></tr></table>
+      <table class="e"><tr><th>제작자</th>${byE.map(([e]) => `<th>${esc(e)}</th>`).join('')}<th>총 컨텐츠 수</th></tr><tr><td class="l">당월<br>컨텐츠 개수</td>${byE.map(([, n]) => `<td>${n}</td>`).join('')}<td>${inMonth.length}</td></tr></table>
+    </div>
+    <div class="wk">${['MON', 'TUE', 'WED', 'THU', 'FRI'].map(h => `<div class="h">${h}</div>`).join('')}${cells}</div>`;
+}
+
+function bindView(){
+  const ab = $('#addBtn'); if (ab) ab.onclick = () => openAd(null, { product: view });
+  const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
+  const fe = $('#fe'); if (fe) fe.onchange = () => { filter.editor = fe.value; render(); };
+  const fm = $('#fm'); if (fm) fm.onchange = () => { filter.meta = fm.value; render(); };
+  const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; render(); };
+  bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
+  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
+  document.querySelectorAll('select[data-status]').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { const a = G().find(x => x.id === s.dataset.status); await saveRow('ads', { ...a, status: s.value, updated_by: me }); }; });
+  document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = e => { e.stopPropagation(); inlineEdit(el); });
+  const mp = $('#mPrev'); if (mp) {
+    const shift = n => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); month = ymd(d).slice(0, 7); render(); };
+    mp.onclick = () => shift(-1); $('#mNext').onclick = () => shift(1); $('#mToday').onclick = () => { month = todayStr().slice(0, 7); render(); };
+    document.querySelectorAll('.wk .d').forEach(d => d.onclick = e => { const it = e.target.closest('[data-open]'); if (it) openAd(it.dataset.open); else if (d.dataset.day) openAd(null, { date: d.dataset.day }); });
+  }
+}
+/* 칸 더블클릭 수정 */
+function inlineEdit(el){
+  const a = G().find(x => x.id === el.dataset.id); if (!a || el.querySelector('input,textarea')) return;
+  const k = el.dataset.edit, old = a[k] || '';
+  const box = document.createElement(k === 'note' || k === 'title' ? 'textarea' : 'input');
+  if (k === 'date') { box.type = 'date'; } box.className = 'inline'; box.value = old;
+  if (box.tagName === 'TEXTAREA') box.rows = 2;
+  el.innerHTML = ''; el.appendChild(box); box.focus(); if (box.type !== 'date') box.select();
+  let done = false;
+  const finish = async save => { if (done) return; done = true; const v = box.value.trim(); if (!save || v === String(old).trim()) { render(); return; } await saveRow('ads', { ...a, [k]: k === 'meta_budget' ? v.replace(/,/g, '') : v || null, updated_by: me }); };
+  box.onblur = () => finish(true);
+  box.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); finish(false); } else if (e.key === 'Enter' && (box.tagName !== 'TEXTAREA' || e.ctrlKey)) { e.preventDefault(); finish(true); } };
+}
+
+/* ---------- 추가·수정 창 ---------- */
+function openAd(id, preset = {}){
+  const a = id ? G().find(x => x.id === id) : null;
+  const d = a || { product: PRODUCTS.includes(view) ? view : PRODUCTS[0], date: todayStr(), title: '', editor: '', meta_account: '', meta_budget: '', tiktok: '', status: '운영중', note: '', ...preset };
+  openModal(`${modalHead(a ? '영상 정보' : '영상 추가')}
+    <div class="mb">
+      <div class="f3">
+        <div class="f"><label>제품</label><select id="aProduct">${PRODUCTS.map(p => `<option ${d.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>게재일</label><input type="date" id="aDate" value="${esc(d.date || '')}"></div>
+        <div class="f"><label>상태</label><select id="aStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="f"><label>영상 타이틀 *</label><input id="aTitle" value="${esc(d.title)}" placeholder="예: 유산균 들어간 고체레몬즙(심포니)" maxlength="200"></div>
+      <div class="f3">
+        <div class="f"><label>편집자</label><input id="aEditor" value="${esc(d.editor || '')}" list="edList" placeholder="예: 예솔"><datalist id="edList">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
+        <div class="f"><label>메타 계정</label><input id="aMeta" value="${esc(d.meta_account || '')}" list="metaList" placeholder="예: Diet Beauty"><datalist id="metaList">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
+        <div class="f"><label>메타 예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
+      </div>
+      <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
+      <div class="f"><label>질병 예방/치료 오인 사유 · 수정 콘티</label><textarea id="aNote">${esc(d.note || '')}</textarea></div>
+      ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${a ? `<button class="btn danger left" id="aDel">삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
+    </div>`, { wide: true });
+  $('#aTitle').focus();
+  $('#aSave').onclick = async () => {
+    const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
+    const row = { id: a ? a.id : uid(), product: $('#aProduct').value, date: $('#aDate').value || null, title, editor: $('#aEditor').value.trim() || null, meta_account: $('#aMeta').value.trim() || null,
+      meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, status: $('#aStatus').value, note: $('#aNote').value.trim() || null,
+      created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('ads', row); toast(a ? '저장했습니다' : '영상을 추가했습니다');
+  };
+  const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.title}" 을(를) 목록에서 삭제할까요?`)) { closeModal(); await removeRow('ads', a.id); toast('삭제했습니다'); } };
+}
+
+boot({ icon: '🎬', title: '광고 영상 리스트', tables: ['ads'], render, normalize });
+</script>
+</body>
+</html>
