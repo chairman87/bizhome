@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>영업 미팅 현황</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
+<style>
+  .grade{font-size:13px;margin-right:4px}
+  .site{color:var(--blue);text-decoration:none;font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
+  .site:hover{text-decoration:underline}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .s{font-size:11px;color:var(--fg3)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   [영업] 미팅 현황 Board — 들어온 문의(DB)와 영업 진행 상황 관리
+================================================================ */
+const ST = { '대기중': ['#dbeafe','#1d4ed8'], '미팅·협의중': ['#ede9fe','#6d28d9'], '계약': ['#dcfce7','#15803d'], '보류': ['#e9e9e7','#5a5a55'], '거절': ['#fee2e2','#b91c1c'] };
+const STATUSES = Object.keys(ST);
+const stHtml = s => tag(s, ...(ST[s] || ST['대기중']));
+const GRADES = { hot: ['🟢', '유망'], warm: ['🟠', '보통'], cold: ['⚪', '낮음'] };
+const gradeHtml = g => GRADES[g] ? `<span class="grade" title="관심도: ${GRADES[g][1]}">${GRADES[g][0]}</span>` : '<span class="grade">📄</span>';
+const SOURCES = ['홈페이지 문의', '전화', '소개', '광고', '인바운드 메일', '직접 발굴', '기타'];
+const L = () => DATA.leads || [];
+
+let view = LS.get('sales_view') || 'all';
+let filter = { q: '', owner: '', status: '', grade: '' };
+let sort = { key: 'created_at', dir: 'desc' };
+const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+
+const VIEWS = [['all', '전체'], ['funnel', '영업 퍼널 Board'], ['owner', '담당자별'], ['calendar', '미팅 달력']];
+const isClosed = l => l.status === '거절' || l.status === '계약';
+const cmtHtml = l => (l.comments && l.comments.length) ? `<span class="cmt">💬 ${l.comments.length}</span>` : '';
+const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, ''))}</a>` : '';
+
+function normalize(table, l){
+  return { ...l, status: STATUSES.includes(l.status) ? l.status : '대기중', comments: Array.isArray(l.comments) ? l.comments : [] };
+}
+async function setStatus(id, status){
+  const l = L().find(x => x.id === id); if (!l || l.status === status) return;
+  await saveRow('leads', { ...l, status, comments: [...(l.comments || []), { by: me, text: `상태 변경: ${l.status} → ${status}`, at: nowIso(), kind: 'log' }] });
+}
+
+/* ---------- 화면 ---------- */
+function render(){
+  $('#app').innerHTML = headerHtml({ icon: '📌', title: '영업 미팅 현황', tabs: VIEWS.map(v => ({ key: v[0], label: v[1] })), active: view, newLabel: '새 업체 등록' })
+    + `<main class="wrap">${statsHtml()}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
+  bindHeader(k => { view = k; LS.set('sales_view', k); render(); }, () => openLead(null), m => `담당 ${L().filter(l => l.owner === m.name && !isClosed(l)).length}건 진행중`);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
+  const fo = $('#fo'); if (fo) fo.onchange = () => { filter.owner = fo.value; renderView(); };
+  const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; renderView(); };
+  const fg = $('#fg'); if (fg) fg.onchange = () => { filter.grade = fg.value; renderView(); };
+  bindView();
+}
+function statsHtml(){
+  const all = L(), month = todayStr().slice(0, 7);
+  const n = s => all.filter(l => l.status === s).length;
+  const budget = all.filter(l => l.status === '미팅·협의중').reduce((a, l) => a + (Number(l.budget) || 0), 0);
+  const closed = all.filter(isClosed).length, won = n('계약');
+  return `<div class="stats">
+    <div class="stat"><div class="l">이번 달 들어온 DB</div><div class="v">${all.filter(l => (l.created_at || '').slice(0, 7) === month).length}</div><div class="s">전체 ${all.length}건</div></div>
+    <div class="stat"><div class="l">대기중</div><div class="v">${n('대기중')}</div><div class="s">아직 연락 전</div></div>
+    <div class="stat"><div class="l">미팅·협의중</div><div class="v">${n('미팅·협의중')}</div><div class="s">예산 합계 ${fmtMoney(budget) || '-'}</div></div>
+    <div class="stat"><div class="l">계약</div><div class="v">${won}</div><div class="s">${closed ? `성사율 ${Math.round(won / closed * 100)}%` : '결과 없음'}</div></div>
+    <div class="stat"><div class="l">거절</div><div class="v">${n('거절')}</div><div class="s">보류 ${n('보류')}건</div></div>
+  </div>`;
+}
+function filtered(){
+  const q = filter.q.trim().toLowerCase();
+  return L().filter(l =>
+    (!q || [l.company, l.contact, l.memo, l.owner, l.website, l.source].some(v => (v || '').toLowerCase().includes(q))) &&
+    (!filter.owner || l.owner === filter.owner) &&
+    (!filter.status || l.status === filter.status) &&
+    (!filter.grade || l.grade === filter.grade));
+}
+function viewHtml(){
+  const list = filtered();
+  return ({ all: tableHtml, funnel: funnelHtml, owner: ownerHtml, calendar: calHtml })[view](list);
+}
+function toolbarHtml(){
+  return `<div class="toolbar">
+    <input type="search" id="fq" placeholder="검색 (회사명, 담당자, 메모, 웹사이트)" value="${esc(filter.q)}">
+    <select id="fo"><option value="">담당자: 전체</option>${memberOptions(filter.owner)}</select>
+    ${view !== 'funnel' ? `<select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
+    <select id="fg"><option value="">관심도: 전체</option>${Object.entries(GRADES).map(([k, v]) => `<option value="${k}" ${filter.grade === k ? 'selected' : ''}>${v[0]} ${v[1]}</option>`).join('')}</select>
+    <span class="count">${filtered().length}건</span>
+  </div>`;
+}
+function renderView(){
+  $('#view').innerHTML = viewHtml();
+  const c = document.querySelector('.toolbar .count'); if (c) c.textContent = `${filtered().length}건`;
+  bindView();
+}
+const sortLeads = list => sortBy(list, sort, { status: s => STATUSES.indexOf(s), grade: g => ['hot', 'warm', 'cold'].indexOf(g), budget: b => Number(b) || 0 });
+
+/* 전체 표 */
+function tableHtml(list){
+  if (!list.length) return `<div class="empty">${filter.q || filter.owner || filter.status || filter.grade ? '조건에 맞는 업체가 없습니다.' : '등록된 업체가 없습니다.<br>오른쪽 위 <b>+ 새 업체 등록</b>으로 추가하세요.'}</div>`;
+  const cols = [['created_at', '등록일'], ['company', '회사명'], ['status', '상태'], ['owner', '담당자'], ['budget', '예산'], ['meeting_date', '미팅 일자'], ['website', '웹사이트'], ['source', '유입 경로']];
+  const th = cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('') + '<th>비고</th>';
+  const rows = sortLeads(list).map(l => `<tr class="row" data-id="${l.id}">
+      <td><span class="date">${fmtDateTime(l.created_at)}</span></td>
+      <td>${gradeHtml(l.grade)}<span class="title">${esc(l.company)}</span>${l.contact ? `<span class="hint"> / ${esc(l.contact)}</span>` : ''}${cmtHtml(l)}</td>
+      <td>${stHtml(l.status)}</td>
+      <td>${who(l.owner)}</td>
+      <td class="num">${fmtMoney(l.budget)}</td>
+      <td>${l.meeting_date ? dueHtml(l.meeting_date, isClosed(l)) : '<span class="date muted">-</span>'}</td>
+      <td>${siteHtml(l.website)}</td>
+      <td class="hint">${esc(l.source || '')}</td>
+      <td class="memo" title="${esc(l.memo || '')}">${esc(l.memo || '')}</td>
+    </tr>`).join('');
+  return `<div class="tablewrap"><table style="min-width:980px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* 영업 퍼널 Board (상태별 칸) */
+function funnelHtml(list){
+  return `<div class="kanban" style="grid-template-columns:repeat(${STATUSES.length},minmax(0,1fr))">${STATUSES.map(s => {
+    const items = sortLeads(list.filter(l => l.status === s));
+    const sum = items.reduce((a, l) => a + (Number(l.budget) || 0), 0);
+    return `<div class="col" data-col="${s}"><h3>${stHtml(s)}<span class="n">${items.length}</span>${sum ? `<span class="sum">${fmtMoney(sum)}</span>` : ''}</h3>
+      ${items.map(l => `<div class="kc" draggable="true" data-id="${l.id}">
+        <div class="t">${gradeHtml(l.grade)}${esc(l.company)}${cmtHtml(l)}</div>
+        <div class="meta">${who(l.owner)}${l.budget ? `<span class="num">${fmtMoney(l.budget)}</span>` : ''}${l.meeting_date ? `📅 ${fmtDate(l.meeting_date)}` : ''}</div>
+        <div class="mv">${STATUSES.filter(x => x !== s).map(x => `<button data-move="${l.id}" data-to="${x}">→ ${x}</button>`).join('')}</div>
+      </div>`).join('')}</div>`;
+  }).join('')}</div>`;
+}
+
+/* 담당자별 */
+function ownerHtml(list){
+  const groups = [...members.map(m => m.name), null];
+  return `<div class="grid">${groups.map(name => {
+    const mine = sortLeads(list.filter(l => (l.owner || null) === name));
+    if (!name && !mine.length) return '';
+    const active = mine.filter(l => !isClosed(l)), won = mine.filter(l => l.status === '계약');
+    return `<div class="card">
+      <h3>${name ? `${avatar(name)}${esc(name)}` : '담당자 미지정'}<span class="stat">진행중 ${active.length} · 계약 ${won.length} · 전체 ${mine.length}</span></h3>
+      ${mine.slice(0, 12).map(l => `<div class="item" data-id="${l.id}">${gradeHtml(l.grade)}<span class="t">${esc(l.company)}</span>${stHtml(l.status)}${l.meeting_date ? `<span class="hint">📅 ${fmtDate(l.meeting_date)}</span>` : ''}</div>`).join('') || '<div class="item" style="color:var(--fg3);cursor:default">없음</div>'}
+      ${mine.length > 12 ? `<div class="more">외 ${mine.length - 12}건 (전체 표에서 담당자 필터로 보세요)</div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* 미팅 달력 */
+function calHtml(list){
+  return calendarHtml(cal, list, {
+    date: l => l.meeting_date,
+    label: l => `${l.owner ? `<span class="who">${esc(l.owner)} · </span>` : ''}${esc(l.company)}`,
+    cls: l => isClosed(l) ? 'done' : '',
+    hint: '미팅 일자 기준 · 날짜를 누르면 그 날짜 미팅으로 새 업체를 등록합니다',
+  });
+}
+
+function bindView(){
+  const v = $('#view');
+  bindSort(sort, renderView, { company: 'asc', owner: 'asc', status: 'asc' });
+  v.querySelectorAll('tr.row, .item[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('[data-link]')) return; openLead(el.dataset.id); });
+  v.querySelectorAll('.kc').forEach(c => {
+    c.onclick = e => { if (e.target.tagName === 'BUTTON') return; openLead(c.dataset.id); };
+    c.ondragstart = e => { e.dataTransfer.setData('text/plain', c.dataset.id); c.classList.add('dragging'); };
+    c.ondragend = () => c.classList.remove('dragging');
+  });
+  v.querySelectorAll('[data-move]').forEach(b => b.onclick = e => { e.stopPropagation(); setStatus(b.dataset.move, b.dataset.to); });
+  v.querySelectorAll('.col').forEach(col => {
+    col.ondragover = e => { e.preventDefault(); col.classList.add('over'); };
+    col.ondragleave = () => col.classList.remove('over');
+    col.ondrop = e => { e.preventDefault(); col.classList.remove('over'); setStatus(e.dataTransfer.getData('text/plain'), col.dataset.col); };
+  });
+  bindCalendar(cal, renderView, day => openLead(null, { meeting_date: day, status: '미팅·협의중' }), id => openLead(id));
+}
+
+/* ---------- 업체 등록·수정 창 ---------- */
+function openLead(id, preset = {}){
+  const l = id ? L().find(x => x.id === id) : null;
+  const d = l || { company: '', contact: '', grade: 'warm', status: '대기중', owner: me, budget: '', meeting_date: '', website: '', source: '', memo: '', comments: [], ...preset };
+  openModal(`${modalHead(l ? '업체 정보' : '새 업체 등록', l ? stHtml(l.status) : '')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>회사명 *</label><input id="mCompany" value="${esc(d.company)}" placeholder="예: (주)더건강" maxlength="100"></div>
+        <div class="f"><label>상대 담당자 / 연락처</label><input id="mContact" value="${esc(d.contact || '')}" placeholder="예: 배효빈 과장 010-0000-0000" maxlength="200"></div>
+      </div>
+      <div class="f3">
+        <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="f"><label>관심도</label><select id="mGrade">${Object.entries(GRADES).map(([k, v]) => `<option value="${k}" ${d.grade === k ? 'selected' : ''}>${v[0]} ${v[1]}</option>`).join('')}</select></div>
+        <div class="f"><label>우리 쪽 담당자</label><select id="mOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
+      </div>
+      <div class="f3">
+        <div class="f"><label>예산 (원)</label><input type="number" id="mBudget" value="${esc(d.budget ?? '')}" placeholder="예: 3000000" min="0" step="10000"></div>
+        <div class="f"><label>미팅 일자</label><input type="date" id="mMeeting" value="${esc(d.meeting_date || '')}"></div>
+        <div class="f"><label>유입 경로</label><select id="mSource"><option value="">-</option>${SOURCES.map(s => `<option ${d.source === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="f"><label>웹사이트</label><input id="mSite" value="${esc(d.website || '')}" placeholder="예: burnadex.co.kr"></div>
+      <div class="f"><label>비고</label><textarea id="mMemo" placeholder="문의 내용, 요구 사항, 다음 할 일 등">${esc(d.memo || '')}</textarea></div>
+      ${l ? commentsHtml(l.comments || []) + `<div class="hint">등록: ${esc(l.created_by || '')} ${fmtDateTime(l.created_at)}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${l ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="mSave">${l ? '저장' : '등록'}</button>
+    </div>`, { wide: true });
+  $('#mCompany').focus();
+  const save = async (extra) => {
+    const n = {
+      id: l ? l.id : uid(),
+      company: $('#mCompany').value.trim(),
+      contact: $('#mContact').value.trim() || null,
+      grade: $('#mGrade').value,
+      status: $('#mStatus').value,
+      owner: $('#mOwner').value || null,
+      budget: $('#mBudget').value === '' ? null : Number($('#mBudget').value),
+      meeting_date: $('#mMeeting').value || null,
+      website: $('#mSite').value.trim() || null,
+      source: $('#mSource').value || null,
+      memo: $('#mMemo').value.trim() || null,
+      comments: l ? [...(l.comments || [])] : [],
+      created_by: l ? l.created_by : me,
+      created_at: l ? l.created_at : nowIso(),
+    };
+    if (!n.company) { $('#mCompany').focus(); toast('회사명을 입력하세요', true); return; }
+    if (l && l.status !== n.status) n.comments.push({ by: me, text: `상태 변경: ${l.status} → ${n.status}`, at: nowIso(), kind: 'log' });
+    if (extra) n.comments.push(extra);
+    closeModal();
+    await saveRow('leads', n);
+    toast(l ? '저장했습니다' : '업체를 등록했습니다');
+  };
+  $('#mSave').onclick = () => save();
+  $('#mCompany').onkeydown = e => { if (e.key === 'Enter') save(); };
+  if (l) {
+    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text) { $('#cText').focus(); return; } save({ by: me, text, at: nowIso(), kind: 'comment' }); };
+    $('#mDelete').onclick = async () => { if (confirm(`"${l.company}" 업체를 삭제할까요?`)) { closeModal(); await removeRow('leads', l.id); toast('삭제했습니다'); } };
+  }
+}
+
+boot({ icon: '📌', title: '영업 미팅 현황', tables: ['leads'], render, normalize });
+</script>
+</body>
+</html>
