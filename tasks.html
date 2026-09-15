@@ -40,6 +40,8 @@
   .card .avg{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg2)}
   .card .avg .bar{flex:1;width:auto}
   #mMemo{min-height:180px}   /* 요청 내용 칸 높이 */
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .actions .btn{padding:9px 16px;font-size:14px}
 </style>
 </head>
 <body>
@@ -155,10 +157,13 @@ function openRevise(id){
 
 /* ---------- 화면 ---------- */
 function render(){
-  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무요청/보고', tabs: VIEWS(), active: view, newLabel: '업무 요청', extra: '<button class="btn" id="selfBtn" title="내가 직접 할 일을 등록">+ <span class="newtxt">내 업무 등록</span></button>' })
-    + `<main class="wrap">${view === 'all' ? statsHtml() : ''}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
-  bindHeader(k => { view = k; LS.set('tasks_view', k); render(); }, () => openTask(null), m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
+  // 등록·요청 버튼은 오른쪽 구석 대신 표 바로 위 왼쪽에 둠 (누르기 편하게)
+  const actions = `<div class="actions"><button class="btn primary" id="selfBtn" title="내가 직접 할 일을 등록">＋ 내 업무 등록</button><button class="btn primary" id="reqBtn" style="background:#6d28d9;border-color:#6d28d9" title="다른 사람에게 업무 요청">＋ 업무 요청</button></div>`;
+  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무요청/보고', tabs: VIEWS(), active: view })
+    + `<main class="wrap">${actions}${view === 'all' ? statsHtml() : ''}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
+  bindHeader(k => { view = k; LS.set('tasks_view', k); render(); }, null, m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
   $('#selfBtn').onclick = () => openTask(null, { assignee: me, self: true });
+  $('#reqBtn').onclick = () => openTask(null);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   const fa = $('#fa'); if (fa) fa.onchange = () => { filter.person = fa.value; renderView(); };
   const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; renderView(); };
