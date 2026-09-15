@@ -5,8 +5,8 @@
 
 /* ========== 설정: Supabase 연결 정보 (비어 있으면 이 브라우저에만 저장되는 임시 모드) ========== */
 const CONFIG = {
-  SUPABASE_URL: "",   // 예: "https://abcdefgh.supabase.co"
-  SUPABASE_KEY: "",   // Supabase 프로젝트의 anon public 키
+  SUPABASE_URL: "https://nflznotjmdqvqtjkzsec.supabase.co",   // Supabase 프로젝트 주소
+  SUPABASE_KEY: "sb_publishable_grDEdL-mRivtPAta6qNVTw_Di-opchT",   // 공개용(publishable) 키
 };
 
 /* ---------- 작은 도우미 ---------- */
