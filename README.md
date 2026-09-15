@@ -1,6 +1,6 @@
 # 인트라넷 (팀 업무 시스템)
 
-**팀원 접속 주소: https://chairman87.github.io/bizhome/** (2026-09-15 개통)
+**팀원 접속 주소: https://phb.kr/** (2026-09-15 개통 · 가비아 도메인 phb.kr, 옛 주소 chairman87.github.io/bizhome 은 자동으로 넘어옴)
 - 저장소: Supabase 프로젝트 `bizhome` (서울) · 화면 파일: GitHub `chairman87/bizhome`
 - 화면 파일을 고친 뒤에는 폴더의 **`올리기.bat`** 을 더블클릭하면(또는 클로드에게 "올려줘") GitHub 에 올라가고 1~2분 뒤 반영됩니다. 이 폴더는 GitHub 저장소와 git 으로 연결되어 있습니다(2026-09-15).
 

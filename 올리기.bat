@@ -12,7 +12,7 @@ if errorlevel 1 (
   echo !!! 올리기에 실패했습니다. 인터넷 연결이나 GitHub 로그인을 확인하세요.
 ) else (
   echo.
-  echo 완료. 1~2분 뒤 https://chairman87.github.io/bizhome/ 에서 Ctrl+Shift+R 로 새로고침하세요.
+  echo 완료. 1~2분 뒤 https://phb.kr/ 에서 Ctrl+Shift+R 로 새로고침하세요.
 )
 echo.
 pause
