@@ -12,10 +12,14 @@ create table if not exists members (
   role        text default 'member',   -- admin(관리자) / member(팀원)
   leave_total numeric default 15,      -- 연차 총 일수
   password    text,                    -- 로그인 비밀번호 (관리자가 볼 수 있음)
+  hire_date   date,                    -- 입사일 (연차 자동 계산 기준)
+  leave_adjust numeric default 0,      -- 연차 조정 (개근 못 한 달 -1 등)
   updated_at  timestamptz default now()
 );
 -- 이미 만든 저장소에 비밀번호 칸만 추가할 때는 아래 한 줄만 실행
 alter table members add column if not exists password text;
+alter table members add column if not exists hire_date date;
+alter table members add column if not exists leave_adjust numeric default 0;
 
 -- 2) 비즈홈 메뉴 (부서와 페이지. 관리자가 화면에서 편집)
 create table if not exists menu (

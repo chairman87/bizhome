@@ -67,8 +67,34 @@ function weekdays(a, b){
   return n;
 }
 const calcDays = (type, a, b) => { const t = TYPES[type] || TYPES['기타']; return t[0] < 1 ? t[0] : weekdays(a, b); };
-const usedDays = (name, year) => L().filter(l => l.name === name && l.status === '승인' && (TYPES[l.type] || [1, false])[1] && (l.start_date || '').startsWith(year)).reduce((a, l) => a + (Number(l.days) || 0), 0);
-const totalDays = name => { const m = members.find(x => x.name === name); return m && m.leave_total != null ? Number(m.leave_total) : DEFAULT_TOTAL; };
+/* ---- 연차 계산 (근로기준법 제60조) ----
+   입사 1년 미만: 한 달 개근마다 1일 (최대 11일). 1년 이상: 15일, 3년차부터 2년마다 +1일 (최대 25일)
+   연차 기간은 입사일 기준(입사일 ~ 다음 입사 기념일 전날). 입사일이 없으면 예전 방식(총 일수 직접 입력, 달력 연도 기준) */
+function addMonths(d, n){ const r = new Date(d.getFullYear(), d.getMonth() + n, d.getDate()); if (r.getDate() !== d.getDate()) r.setDate(0); return r; }
+function leaveInfo(name){
+  const m = members.find(x => x.name === name) || {};
+  const adjust = Number(m.leave_adjust) || 0;
+  if (!m.hire_date) {
+    const y = filter.year, manual = m.leave_total != null ? Number(m.leave_total) : DEFAULT_TOTAL;
+    return { auto: false, base: manual, adjust, total: manual + adjust, start: y + '-01-01', end: y + '-12-31', label: '입사일 없음 · 직접 입력한 총 일수', months: null };
+  }
+  const hire = parseYmd(m.hire_date), today = parseYmd(todayStr());
+  let months = (today.getFullYear() - hire.getFullYear()) * 12 + (today.getMonth() - hire.getMonth());
+  if (today.getDate() < hire.getDate()) months--;
+  months = Math.max(0, months);
+  const years = Math.floor(months / 12);
+  let base, start, label;
+  if (years < 1) { base = Math.min(11, months); start = hire; label = `입사 ${fmtDate(m.hire_date)} · ${months}개월 근속 → 월 1일씩 ${base}일 (1년 미만, 최대 11일)`; }
+  else { base = Math.min(25, 15 + Math.floor((years - 1) / 2)); start = addMonths(hire, years * 12); label = `입사 ${fmtDate(m.hire_date)} · ${years + 1}년차 → ${base}일`; }
+  const end = addMonths(start, 12); end.setDate(end.getDate() - 1);
+  return { auto: true, base, adjust, total: base + adjust, start: ymd(start), end: ymd(end), label, months };
+}
+/* 해당 연차 기간에 승인된 연차·반차 합계 */
+function usedDays(name, info){
+  info = info || leaveInfo(name);
+  return L().filter(l => l.name === name && l.status === '승인' && (TYPES[l.type] || [1, false])[1] && l.start_date >= info.start && l.start_date <= info.end).reduce((a, l) => a + (Number(l.days) || 0), 0);
+}
+const totalDays = name => leaveInfo(name).total;
 const period = l => l.start_date === l.end_date || !l.end_date ? fmtDate(l.start_date) : `${fmtDate(l.start_date)} ~ ${fmtDate(l.end_date)}`;
 const typeKey = t => t.includes('반차') ? '반차' : (TYPES[t] ? t : '기타');
 const years = () => [...new Set([String(new Date().getFullYear()), ...L().map(l => (l.start_date || '').slice(0, 4)).filter(Boolean)])].sort().reverse();
@@ -109,7 +135,7 @@ async function cancelLeave(id){
 function render(){
   $('#app').innerHTML = headerHtml({ icon: '📅', title: '연차/휴가 등록', tabs: VIEWS(), active: view, newLabel: '휴가 신청' })
     + `<main class="wrap">${view === 'mine' ? myStatsHtml() : ''}${['mine', 'all'].includes(view) ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
-  bindHeader(k => { view = k; LS.set('leave_view', k); render(); }, () => openLeave(null), m => `올해 사용 ${usedDays(m.name, String(new Date().getFullYear()))}일`);
+  bindHeader(k => { view = k; LS.set('leave_view', k); render(); }, () => openLeave(null), m => `남은 연차 ${totalDays(m.name) - usedDays(m.name)}일`);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   const fa = $('#fa'); if (fa) fa.onchange = () => { filter.person = fa.value; renderView(); };
   const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; renderView(); };
@@ -117,11 +143,11 @@ function render(){
   bindView();
 }
 function myStatsHtml(){
-  const y = filter.year, used = usedDays(me, y), total = totalDays(me), left = total - used;
+  const info = leaveInfo(me), used = usedDays(me, info), total = info.total, left = total - used;
   const pending = L().filter(l => l.name === me && l.status === '신청').length;
   return `<div class="stats">
-    <div class="stat"><div class="l">${y}년 연차 총</div><div class="v">${total}일</div><div class="s">관리자가 팀원별 현황에서 조정</div></div>
-    <div class="stat"><div class="l">사용</div><div class="v">${used}일</div><div class="s">승인된 연차·반차 합계</div></div>
+    <div class="stat"><div class="l">내 연차 (${fmtDate(info.start)} ~ ${fmtDate(info.end)})</div><div class="v">${total}일</div><div class="s">${esc(info.label)}${info.adjust ? ` · 조정 ${info.adjust > 0 ? '+' : ''}${info.adjust}일` : ''}</div></div>
+    <div class="stat"><div class="l">사용</div><div class="v">${used}일</div><div class="s">이 기간에 승인된 연차·반차 합계</div></div>
     <div class="stat"><div class="l">남은 연차</div><div class="v ${left <= 2 ? 'orange' : ''}">${left}일</div><div class="s"><span class="bar ${left <= 2 ? 'warn' : ''}"><i style="width:${total ? Math.min(100, used / total * 100) : 0}%"></i></span></div></div>
     <div class="stat"><div class="l">승인 대기</div><div class="v ${pending ? 'orange' : ''}">${pending}건</div><div class="s">관리자 확인 전</div></div>
   </div>`;
@@ -194,14 +220,18 @@ function calHtml(list){
 /* 팀원별 현황 */
 function membersHtml(){
   const y = filter.year;
-  return `<div class="toolbar"><select id="fy">${years().map(x => `<option ${y === x ? 'selected' : ''}>${x}</option>`).join('')}</select><span class="hint">${isAdmin() ? '연차 총 일수는 관리자가 여기서 바로 고칠 수 있습니다' : ''}</span></div>
+  const admin = isAdmin();
+  return `<div class="toolbar"><select id="fy">${years().map(x => `<option ${y === x ? 'selected' : ''}>${x}</option>`).join('')}</select><span class="hint">${admin ? '입사일을 넣으면 연차가 자동 계산됩니다 (1년 미만: 월 1일씩 최대 11일, 1년 이상: 15일). 개근하지 못한 달은 조정 칸에 -1 씩 넣으세요.' : ''}</span></div>
   <div class="grid">${members.map(m => {
-    const used = usedDays(m.name, y), total = totalDays(m.name), left = total - used;
-    const mine = L().filter(l => l.name === m.name && (l.start_date || '').startsWith(y) && l.status !== '취소').sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+    const info = leaveInfo(m.name), used = usedDays(m.name, info), total = info.total, left = total - used;
+    const mine = L().filter(l => l.name === m.name && l.start_date >= info.start && l.start_date <= info.end && l.status !== '취소').sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
     return `<div class="card">
       <h3>${avatar(m.name)}${esc(m.name)}<span class="stat">남은 연차 <b style="color:${left <= 2 ? 'var(--orange)' : 'inherit'}">${left}일</b> / ${total}일</span></h3>
-      <div class="row2">사용 ${used}일 <span class="bar ${left <= 2 ? 'warn' : ''}"><i style="width:${total ? Math.min(100, used / total * 100) : 0}%"></i></span>
-        ${isAdmin() ? `총 <input type="number" min="0" max="60" step="0.5" value="${total}" data-total="${m.id}" title="연차 총 일수">일` : ''}</div>
+      <div class="row2" style="flex-wrap:wrap">${admin ? `입사일 <input type="date" value="${esc(m.hire_date || '')}" data-hire="${m.id}" style="width:140px;text-align:left">` : `<span class="hint">${info.auto ? '입사 ' + fmtDate(m.hire_date) : ''}</span>`}
+        ${admin && !info.auto ? `총 <input type="number" min="0" max="60" step="0.5" value="${info.base}" data-total="${m.id}" title="입사일이 없을 때 쓰는 총 일수">일` : ''}
+        ${admin ? `조정 <input type="number" min="-30" max="30" step="0.5" value="${info.adjust}" data-adj="${m.id}" title="개근 못 한 달은 -1, 특별 부여는 +">일` : ''}</div>
+      <div class="row2"><span class="hint" style="flex:1">${esc(info.label)} · 기간 ${fmtDate(info.start)} ~ ${fmtDate(info.end)}</span></div>
+      <div class="row2">사용 ${used}일 <span class="bar ${left <= 2 ? 'warn' : ''}"><i style="width:${total ? Math.min(100, used / total * 100) : 0}%"></i></span></div>
       ${mine.slice(0, 8).map(l => `<div class="item" data-id="${l.id}"><span class="t">${esc(l.type)} · ${period(l)}</span><span class="days">${l.days}일</span>${stHtml(l.status)}</div>`).join('') || '<div class="item" style="color:var(--fg3);cursor:default">신청 없음</div>'}
       ${mine.length > 8 ? `<div class="more">외 ${mine.length - 8}건 (전체 탭에서 확인)</div>` : ''}
     </div>`;
@@ -219,6 +249,14 @@ function bindView(){
   v.querySelectorAll('[data-total]').forEach(inp => inp.onchange = async () => {
     const m = members.find(x => x.id === inp.dataset.total); if (!m) return;
     await saveRow('members', { ...m, leave_total: Number(inp.value) }); toast(`${m.name}님 연차 총 ${inp.value}일로 저장`);
+  });
+  v.querySelectorAll('[data-hire]').forEach(inp => inp.onchange = async () => {
+    const m = members.find(x => x.id === inp.dataset.hire); if (!m) return;
+    await saveRow('members', { ...m, hire_date: inp.value || null }); toast(inp.value ? `${m.name}님 입사일 ${fmtDate(inp.value)} 저장 → 연차 ${totalDays(m.name)}일` : `${m.name}님 입사일을 지웠습니다`);
+  });
+  v.querySelectorAll('[data-adj]').forEach(inp => inp.onchange = async () => {
+    const m = members.find(x => x.id === inp.dataset.adj); if (!m) return;
+    await saveRow('members', { ...m, leave_adjust: Number(inp.value) || 0 }); toast(`${m.name}님 조정 ${inp.value}일 저장 → 연차 ${totalDays(m.name)}일`);
   });
   bindCalendar(cal, renderView, day => openLeave(null, { start_date: day, end_date: day }), id => openLeave(id));
 }
@@ -254,7 +292,7 @@ function openLeave(id, preset = {}){
   const upd = () => {
     const t = $('#lType').value; if ((TYPES[t] || [1])[0] < 1) $('#lEnd').value = $('#lStart').value;
     const n = calcDays(t, $('#lStart').value, $('#lEnd').value);
-    const left = totalDays($('#lName').value) - usedDays($('#lName').value, ($('#lStart').value || '').slice(0, 4));
+    const left = totalDays($('#lName').value) - usedDays($('#lName').value);
     $('#lDays').innerHTML = `${n}일 (토·일 제외)${(TYPES[t] || [1, false])[1] ? ` · 남은 연차 ${left}일${n > left ? ' <span class="warn">→ 부족합니다</span>' : ''}` : ' · 연차에서 차감되지 않음'}`;
   };
   ['lType', 'lStart', 'lEnd', 'lName'].forEach(i => { const el = $('#' + i); if (el) el.onchange = upd; });
