@@ -1,5 +1,9 @@
 # 비즈홈 (팀 업무 시스템)
 
+**팀원 접속 주소: https://chairman87.github.io/bizhome/** (2026-09-15 개통)
+- 저장소: Supabase 프로젝트 `bizhome` (서울) · 화면 파일: GitHub `chairman87/bizhome`
+- 화면 파일을 고친 뒤에는 GitHub 저장소에서 **Add file → Upload files** 로 바뀐 파일을 다시 올리면 1~2분 뒤 반영됩니다.
+
 노션 대신 쓰는 우리 팀 업무 시스템입니다. 대문(비즈홈)에서 메뉴를 고르면 각 화면이 열립니다.
 파일 몇 개로 동작하며, 내용은 Supabase(무료 클라우드 저장소)에 저장되어 어디서나 접속할 수 있습니다.
 
