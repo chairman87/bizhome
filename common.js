@@ -147,49 +147,74 @@ async function removeRow(table, id){
 /* 관리자: 메뉴 편집, 팀원 삭제, 관리자 지정 가능. 처음 등록한 사람이 자동으로 관리자 */
 const isAdmin = () => { const m = members.find(x => x.name === me); return !!(m && m.role === 'admin'); };
 const admins = () => members.filter(m => m.role === 'admin');
-async function addMember(name, password){
+/* 비밀번호: 처음은 1234. 1234인 상태로 로그인하면 바꾸는 화면이 먼저 뜸 */
+const DEFAULT_PW = '1234';
+const pwOf = m => m.password || DEFAULT_PW;            // 비밀번호가 비어 있으면 초기값
+const mustChangePw = m => pwOf(m) === DEFAULT_PW;
+const PW_RULE = '8자 이상, 영문과 숫자를 모두 포함';
+function pwProblem(pw){
+  if (pw.length < 8) return '8자 이상이어야 합니다';
+  if (!/[a-zA-Z]/.test(pw)) return '영문자를 하나 이상 넣어 주세요';
+  if (!/[0-9]/.test(pw)) return '숫자를 하나 이상 넣어 주세요';
+  if (/\s/.test(pw)) return '띄어쓰기는 쓸 수 없습니다';
+  if (pw === DEFAULT_PW || /^(\d)\1+$/.test(pw) || pw === '12345678') return '너무 쉬운 비밀번호입니다';
+  return '';
+}
+async function addMember(name){
   name = (name || '').trim(); if (!name) return null;
   const dup = members.find(m => m.name === name);
   if (dup) { toast('이미 있는 이름입니다', true); return dup; }
-  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length, role: members.length === 0 ? 'admin' : 'member', password: (password || '').trim() || null };
+  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length, role: members.length === 0 ? 'admin' : 'member', password: DEFAULT_PW };
   await saveRow('members', m);
   return m;
 }
-async function setPassword(id, password){
+async function setPassword(id, password, quiet){
   const m = members.find(x => x.id === id); if (!m) return;
   if (!isAdmin() && m.name !== me) { toast('본인 비밀번호만 바꿀 수 있습니다', true); return; }
-  await saveRow('members', { ...m, password: (password || '').trim() || null });
-  toast(password ? `${m.name}님 비밀번호를 저장했습니다` : `${m.name}님 비밀번호를 없앴습니다`);
+  await saveRow('members', { ...m, password });
+  if (!quiet) toast(password === DEFAULT_PW ? `${m.name}님 비밀번호를 1234로 초기화했습니다` : `${m.name}님 비밀번호를 저장했습니다`);
 }
-/* 비밀번호를 묻는 작은 창. 맞으면 onOk() */
+/* 비밀번호를 묻는 작은 창. 맞으면 onOk() (초기 비밀번호면 먼저 바꾸게 함) */
 function askPassword(m, onOk){
-  if (!m.password) { onOk(); return; }
   openModal(`${modalHead('비밀번호 확인')}
     <div class="mb"><div>${who(m.name)}</div>
       <div class="f"><label>비밀번호</label><input type="password" id="pwIn" autocomplete="current-password"></div>
-      <div class="hint">비밀번호를 잊었으면 관리자에게 물어보세요.</div></div>
+      <div class="hint">비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.</div></div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pwOk">확인</button></div>`);
   const inp = $('#pwIn'); inp.focus();
-  const go = () => { if (inp.value === m.password) { closeModal(); onOk(); } else { toast('비밀번호가 맞지 않습니다', true); inp.select(); } };
+  const go = () => {
+    if (inp.value !== pwOf(m)) { toast('비밀번호가 맞지 않습니다', true); inp.select(); return; }
+    closeModal();
+    if (mustChangePw(m)) openSetPassword(m, { force: true, after: onOk }); else onOk();
+  };
   $('#pwOk').onclick = go;
   inp.onkeydown = e => { if (e.key === 'Enter') go(); };
 }
-/* 비밀번호 정하기/바꾸기 창 */
-function openSetPassword(m, after){
-  openModal(`${modalHead(m.name === me ? '내 비밀번호 바꾸기' : `${esc(m.name)}님 비밀번호 정하기`)}
+/* 비밀번호 정하기/바꾸기 창. force=true 면 닫을 수 없음(처음 로그인) */
+function openSetPassword(m, opts = {}){
+  const force = !!opts.force;
+  openModal(`${modalHead(force ? '비밀번호를 새로 정해 주세요' : m.name === me ? '내 비밀번호 바꾸기' : `${esc(m.name)}님 비밀번호 정하기`)}
     <div class="mb">
-      <div class="f"><label>새 비밀번호 (4자 이상)</label><input id="pw1" autocomplete="new-password" maxlength="30"></div>
-      <div class="f"><label>한 번 더</label><input id="pw2" autocomplete="new-password" maxlength="30"></div>
-      <div class="hint">비워 두고 저장하면 비밀번호 없이 들어갈 수 있게 됩니다. ${isAdmin() ? '관리자는 팀원 관리에서 모든 비밀번호를 볼 수 있습니다.' : ''}</div>
+      ${force ? `<div>${who(m.name)}<div class="hint" style="margin-top:6px">처음 로그인이거나 관리자가 초기화한 상태입니다. 초기 비밀번호(1234) 대신 본인만 아는 비밀번호로 바꿔야 들어갈 수 있습니다.</div></div>` : ''}
+      <div class="f"><label>새 비밀번호</label><input type="password" id="pw1" autocomplete="new-password" maxlength="30"><div class="hint" id="pwHint">${PW_RULE}</div></div>
+      <div class="f"><label>한 번 더</label><input type="password" id="pw2" autocomplete="new-password" maxlength="30"></div>
+      <label class="hint" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="pwShow"> 입력한 글자 보기</label>
+      ${isAdmin() && !force ? '<div class="hint">관리자는 팀원 관리에서 모든 비밀번호를 볼 수 있습니다.</div>' : ''}
     </div>
-    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pwSave">저장</button></div>`);
-  $('#pw1').focus();
-  $('#pwSave').onclick = async () => {
-    const a = $('#pw1').value.trim(), b = $('#pw2').value.trim();
-    if (a !== b) { toast('두 칸이 서로 다릅니다', true); return; }
-    if (a && a.length < 4) { toast('4자 이상으로 정해 주세요', true); return; }
-    closeModal(); await setPassword(m.id, a); if (after) after();
+    <div class="mf">${force ? '' : '<button class="btn" data-close>취소</button>'}<button class="btn primary" id="pwSave">저장</button></div>`, { locked: force });
+  const p1 = $('#pw1'), p2 = $('#pw2'), hint = $('#pwHint');
+  p1.focus();
+  p1.oninput = () => { const pr = pwProblem(p1.value); hint.textContent = p1.value ? (pr || '사용할 수 있는 비밀번호입니다 ✓') : PW_RULE; hint.className = 'hint' + (p1.value && pr ? ' warn' : ''); };
+  $('#pwShow').onchange = e => { p1.type = p2.type = e.target.checked ? 'text' : 'password'; };
+  const save = async () => {
+    const a = p1.value, b = p2.value;
+    const pr = pwProblem(a); if (pr) { toast(pr, true); p1.focus(); return; }
+    if (a !== b) { toast('두 칸이 서로 다릅니다', true); p2.focus(); return; }
+    closeModal(); await setPassword(m.id, a, force); if (opts.after) opts.after();
   };
+  $('#pwSave').onclick = save;
+  p2.onkeydown = e => { if (e.key === 'Enter') save(); };
+  p1.onkeydown = e => { if (e.key === 'Enter') p2.focus(); };
 }
 async function setRole(id, role){
   if (!isAdmin()) { toast('관리자만 할 수 있습니다', true); return; }
@@ -214,27 +239,23 @@ function renderLogin(){
     <p>${members.length ? '본인 이름을 선택하세요' : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
     ${connError ? `<p style="color:var(--red)">저장소 연결 오류: ${esc(connError)}</p>` : ''}
     <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" style="${m.name === loginPick ? 'border-color:var(--blue);background:#eef4fd' : ''}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}</div>
-    ${picked ? `<div class="addrow" style="margin-bottom:20px"><input type="password" id="loginPw" placeholder="${esc(picked.name)}님 비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>` : ''}
-    <details ${members.length ? '' : 'open'} style="margin-top:8px"><summary class="hint" style="cursor:pointer">${members.length ? '목록에 내 이름이 없어요 (새로 등록)' : '첫 팀원 등록'}</summary>
-      <div class="addrow" style="margin-top:10px;flex-wrap:wrap"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><input type="password" id="newPw" placeholder="비밀번호 (4자 이상)" maxlength="30"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>
-    </details>
+    ${picked ? `<div class="addrow" style="margin-bottom:8px"><input type="password" id="loginPw" placeholder="${esc(picked.name)}님 비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
+    <p class="hint" style="margin-bottom:20px">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 바꾸게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
+    ${members.length ? '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>' : `<div class="addrow" style="margin-top:10px"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
     <p style="margin-top:24px;font-size:12px">${store.label}</p>
   </div>`;
-  const inp = $('#newName'), pw = $('#newPw');
-  const go = async () => {
-    if (members.length && pw.value.trim().length < 4) { pw.focus(); toast('비밀번호를 4자 이상 정해 주세요', true); return; }
-    const m = await addMember(inp.value, pw.value); if (m) login(m.name);
-  };
-  $('#addNameBtn').onclick = go;
-  pw.onkeydown = e => { if (e.key === 'Enter') go(); };
-  inp.onkeydown = e => { if (e.key === 'Enter') pw.focus(); };
-  document.querySelectorAll('[data-login]').forEach(b => b.onclick = () => {
-    const m = members.find(x => x.name === b.dataset.login);
-    if (!m.password) { login(m.name); return; }
-    loginPick = m.name; renderLogin(); $('#loginPw').focus();
-  });
+  const inp = $('#newName'); if (inp) {
+    const go = async () => { const m = await addMember(inp.value); if (m) openSetPassword(m, { force: true, after: () => login(m.name) }); };
+    $('#addNameBtn').onclick = go;
+    inp.onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
+  document.querySelectorAll('[data-login]').forEach(b => b.onclick = () => { loginPick = b.dataset.login; renderLogin(); $('#loginPw').focus(); });
   const lb = $('#loginBtn'); if (lb) {
-    const tryLogin = () => { if ($('#loginPw').value === picked.password) { loginPick = ''; login(picked.name); } else { toast('비밀번호가 맞지 않습니다', true); $('#loginPw').select(); } };
+    const tryLogin = () => {
+      if ($('#loginPw').value !== pwOf(picked)) { toast('비밀번호가 맞지 않습니다', true); $('#loginPw').select(); return; }
+      loginPick = '';
+      if (mustChangePw(picked)) openSetPassword(picked, { force: true, after: () => login(picked.name) }); else login(picked.name);
+    };
     lb.onclick = tryLogin; $('#loginPw').onkeydown = e => { if (e.key === 'Enter') tryLogin(); };
   }
 }
@@ -244,9 +265,14 @@ function logout(){ me = ''; LS.del('bizhome_me'); renderApp(); }
 /* ---------- 모달(팝업 창) ---------- */
 function openModal(html, opts = {}){
   $('#modal').innerHTML = `<div class="ov" id="ov"><div class="modal ${opts.wide ? 'wide' : ''}">${html}</div></div>`;
-  $('#ov').onclick = e => { if (e.target.id === 'ov') closeModal(); };
-  document.onkeydown = e => { if (e.key === 'Escape') closeModal(); };
-  document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+  if (!opts.locked) {   // locked: 바깥 클릭·Esc·✕ 로 닫을 수 없음
+    $('#ov').onclick = e => { if (e.target.id === 'ov') closeModal(); };
+    document.onkeydown = e => { if (e.key === 'Escape') closeModal(); };
+    document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+  } else {
+    document.onkeydown = null;
+    document.querySelectorAll('[data-close]').forEach(b => b.remove());
+  }
 }
 function closeModal(){ $('#modal').innerHTML = ''; document.onkeydown = null; }
 const modalHead = (title, extra = '') => `<div class="mh"><h2>${title}</h2>${extra}<button class="x" data-close>✕</button></div>`;
@@ -264,28 +290,29 @@ let showPw = false;   // 관리자 화면에서 비밀번호 보이기 상태
 function openMembers(counter){
   const admin = isAdmin();
   const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
-      ${admin ? `<span class="cnt" style="min-width:90px;font-family:monospace" title="비밀번호">${m.password ? (showPw ? esc(m.password) : '••••••') : '<span style="color:var(--orange)">없음</span>'}</span>` : ''}
+      ${admin ? `<span class="cnt" style="min-width:110px;font-family:monospace" title="비밀번호">${mustChangePw(m) ? '<span style="color:var(--orange)">1234 (초기)</span>' : (showPw ? esc(pwOf(m)) : '••••••')}</span>` : ''}
       <span class="cnt">${counter ? esc(counter(m)) : ''}</span>
-      ${admin || m.name === me ? `<button class="btn sm" data-pw="${m.id}">${m.name === me ? '내 비밀번호' : '비밀번호'}</button>` : ''}
+      ${m.name === me ? `<button class="btn sm" data-pw="${m.id}">내 비밀번호 바꾸기</button>` : ''}
+      ${admin && m.name !== me ? `<button class="btn sm" data-reset="${m.id}" ${mustChangePw(m) ? 'disabled' : ''} title="1234로 되돌리기">초기화</button>` : ''}
       ${m.name !== me ? `<button class="btn sm" data-switch="${esc(m.name)}">이 이름으로 전환</button>` : ''}
-      ${admin ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
+      ${admin && m.name !== me ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
       <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button>` : ''}</div>`).join('');
   openModal(`${modalHead('팀원 관리', admin ? `<button class="btn sm" id="mmShowPw">${showPw ? '🙈 비밀번호 가리기' : '👁 비밀번호 보기'}</button>` : '')}
     <div class="mb">
       <div>${rows || '<span class="hint">팀원이 없습니다</span>'}</div>
-      ${admin ? `<div class="addrow" style="justify-content:flex-start;flex-wrap:wrap"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><input type="password" id="mmPw" placeholder="비밀번호 (4자 이상)" maxlength="30"><button class="btn" id="mmAdd">추가</button></div>` : ''}
-      <div class="hint">${admin ? '관리자는 모든 팀원의 비밀번호를 보고 바꿀 수 있습니다. 비밀번호가 "없음"인 사람은 이름만 누르면 들어올 수 있으니 정해 주세요. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 물어보세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
+      ${admin ? `<div class="addrow" style="justify-content:flex-start"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><button class="btn" id="mmAdd">추가</button><span class="hint">새 팀원은 비밀번호 1234로 시작합니다</span></div>` : ''}
+      <div class="hint">${admin ? '"1234 (초기)"인 사람은 아직 로그인해서 비밀번호를 바꾸지 않은 사람입니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
     </div>
     <div class="mf"><button class="btn left" id="mmLogout">다른 사용자로 접속</button><button class="btn primary" data-close>닫기</button></div>`, { wide: admin });
   $('#mmLogout').onclick = () => { closeModal(); logout(); };
   const sp = $('#mmShowPw'); if (sp) sp.onclick = () => { showPw = !showPw; openMembers(counter); };
   const ma = $('#mmAdd'); if (ma) {
-    const add = async () => { if ($('#mmPw').value.trim().length < 4) { $('#mmPw').focus(); toast('비밀번호를 4자 이상 정해 주세요', true); return; } const m = await addMember($('#mmName').value, $('#mmPw').value); if (m) openMembers(counter); };
+    const add = async () => { const m = await addMember($('#mmName').value); if (m) openMembers(counter); };
     ma.onclick = add;
-    $('#mmName').onkeydown = e => { if (e.key === 'Enter') $('#mmPw').focus(); };
-    $('#mmPw').onkeydown = e => { if (e.key === 'Enter') add(); };
+    $('#mmName').onkeydown = e => { if (e.key === 'Enter') add(); };
   }
-  document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { const m = members.find(x => x.id === b.dataset.pw); closeModal(); openSetPassword(m, () => openMembers(counter)); });
+  document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { const m = members.find(x => x.id === b.dataset.pw); closeModal(); openSetPassword(m, { after: () => openMembers(counter) }); });
+  document.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { const m = members.find(x => x.id === b.dataset.reset); if (m && confirm(`${m.name}님 비밀번호를 1234로 초기화할까요?\n다음 로그인 때 새 비밀번호를 정하게 됩니다.`)) { await setPassword(m.id, DEFAULT_PW); openMembers(counter); } });
   document.querySelectorAll('[data-switch]').forEach(b => b.onclick = () => { const m = members.find(x => x.name === b.dataset.switch); closeModal(); askPassword(m, () => login(m.name)); });
   document.querySelectorAll('[data-role]').forEach(b => b.onclick = async () => { await setRole(b.dataset.role, b.dataset.to); openMembers(counter); });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
