@@ -301,7 +301,7 @@ function openMembers(counter){
       ${admin ? `<div class="addrow" style="justify-content:flex-start"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><button class="btn" id="mmAdd">추가</button><span class="hint">새 팀원은 비밀번호 1234로 시작합니다</span></div>` : ''}
       <div class="hint">${admin ? '"1234 (초기)"인 사람은 아직 로그인해서 비밀번호를 바꾸지 않은 사람입니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
     </div>
-    <div class="mf"><button class="btn left" id="mmLogout">다른 사용자로 접속</button><button class="btn primary" data-close>닫기</button></div>`, { wide: admin });
+    <div class="mf"><button class="btn left" id="mmLogout">로그아웃</button><button class="btn primary" data-close>닫기</button></div>`, { wide: admin });
   $('#mmLogout').onclick = () => { closeModal(); logout(); };
   const sp = $('#mmShowPw'); if (sp) sp.onclick = () => { showPw = !showPw; openMembers(counter); };
   const ma = $('#mmAdd'); if (ma) {
