@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공용계정 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .mono{font-family:Consolas,"Malgun Gothic",monospace;font-size:13px}
+  .pw{display:inline-flex;align-items:center;gap:4px}
+  .pw .v{min-width:90px;letter-spacing:1px}
+  .ib{border:1px solid var(--line2);background:var(--bg);border-radius:4px;padding:1px 6px;font-size:12px;color:var(--fg2)}
+  .ib:hover{background:var(--bg3);color:var(--fg)}
+  .site{color:var(--blue);text-decoration:none;font-size:12px}
+  .site:hover{text-decoration:underline}
+  td.memo2{color:var(--fg2);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   공용계정 관리 — 팀이 함께 쓰는 계정(네이버 광고, 쿠팡 윙 등) 목록
+   모두 볼 수 있음. 추가·수정은 누구나, 삭제는 관리자만. 비밀번호는 가려 두고 👁 로 보기
+================================================================ */
+const A = () => (DATA.accounts || []).slice().sort((a, b) => String(a.service || '').localeCompare(String(b.service || ''), 'ko'));
+let q = '';
+let shown = {};   // 비밀번호 보이기 상태 (계정 id → true)
+const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : '';
+
+function render(){
+  const list = A().filter(a => !q || [a.service, a.login_id, a.purpose, a.owner, a.memo, a.url].some(v => (v || '').toLowerCase().includes(q.toLowerCase())));
+  $('#app').innerHTML = headerHtml({ icon: '🔐', title: '공용계정 관리' }) + `<main class="wrap">
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
+      <input type="search" id="fq" placeholder="검색 (서비스, 아이디, 용도, 담당자)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
+      <span class="count">${list.length}건</span></div>
+    ${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` :
+      list.length ? `<div class="tablewrap"><table style="min-width:900px"><thead><tr><th>서비스</th><th>주소</th><th>아이디</th><th>비밀번호</th><th>용도</th><th>담당자</th><th>메모</th><th>수정</th></tr></thead><tbody>
+      ${list.map(a => `<tr class="row" data-id="${a.id}">
+        <td><span class="title">${esc(a.service)}</span></td>
+        <td>${siteHtml(a.url)}</td>
+        <td><span class="mono">${esc(a.login_id || '')}</span> ${a.login_id ? `<button class="ib" data-copy="${esc(a.login_id)}" title="복사">복사</button>` : ''}</td>
+        <td><span class="pw"><span class="v mono">${a.password ? (shown[a.id] ? esc(a.password) : '••••••••') : '<span class="hint">-</span>'}</span>${a.password ? `<button class="ib" data-eye="${a.id}" title="${shown[a.id] ? '가리기' : '보기'}">${shown[a.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(a.password)}" title="복사">복사</button>` : ''}</span></td>
+        <td>${esc(a.purpose || '')}</td>
+        <td>${who(a.owner)}</td>
+        <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
+        <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button></td>
+      </tr>`).join('')}</tbody></table></div>
+      <div class="hint" style="margin-top:8px">마지막 수정: 각 줄의 수정 창에서 확인할 수 있습니다. 비밀번호가 바뀌면 여기도 꼭 고쳐 주세요.</div>`
+      : `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`}
+  </main>`;
+  bindHeader(() => {}, null, m => `담당 계정 ${A().filter(a => a.owner === m.name).length}개`);
+  $('#newBtn2').onclick = () => openEdit(null);
+  const fq = $('#fq'); fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('[data-eye]').forEach(b => b.onclick = e => { e.stopPropagation(); shown[b.dataset.eye] = !shown[b.dataset.eye]; render(); });
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(b.dataset.copy); toast('복사했습니다'); } catch { toast('복사할 수 없습니다. 직접 선택해서 복사하세요', true); } });
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = e => { e.stopPropagation(); openEdit(b.dataset.edit); });
+  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openEdit(tr.dataset.id); });
+}
+
+function openEdit(id){
+  const a = id ? A().find(x => x.id === id) : null;
+  const d = a || { service: '', url: '', login_id: '', password: '', purpose: '', owner: '', memo: '' };
+  openModal(`${modalHead(a ? '계정 정보' : '계정 추가')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버 광고, 쿠팡 윙" maxlength="60"></div>
+        <div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: searchad.naver.com"></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>아이디</label><input id="aId" value="${esc(d.login_id || '')}" autocomplete="off"></div>
+        <div class="f"><label>비밀번호</label><input id="aPw" value="${esc(d.password || '')}" autocomplete="off"></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>용도</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="예: 검색광고 운영" maxlength="80"></div>
+        <div class="f"><label>담당자</label><select id="aOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
+      </div>
+      <div class="f"><label>메모</label><textarea id="aMemo" placeholder="추가 인증 방법, 주의사항 등">${esc(d.memo || '')}</textarea></div>
+      ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${a && isAdmin() ? `<button class="btn danger left" id="aDel">삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
+    </div>`, { wide: true });
+  $('#aService').focus();
+  $('#aSave').onclick = async () => {
+    const service = $('#aService').value.trim(); if (!service) { $('#aService').focus(); toast('서비스 이름을 입력하세요', true); return; }
+    const row = { id: a ? a.id : uid(), service, url: $('#aUrl').value.trim() || null, login_id: $('#aId').value.trim() || null, password: $('#aPw').value.trim() || null,
+      purpose: $('#aPurpose').value.trim() || null, owner: $('#aOwner').value || null, memo: $('#aMemo').value.trim() || null,
+      created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('accounts', row); toast(a ? '저장했습니다' : '계정을 추가했습니다');
+  };
+  const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
+}
+
+boot({ icon: '🔐', title: '공용계정 관리', tables: ['accounts'], render });
+</script>
+</body>
+</html>

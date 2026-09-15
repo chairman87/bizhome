@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공지사항</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
+  .n{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .n:last-child{border-bottom:0}
+  .n:hover{background:var(--bg2)}
+  .n .pin{color:var(--red);font-size:13px;flex:none}
+  .n .t{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .n.unread .t{font-weight:700}
+  .n .new{background:var(--red);color:#fff;font-size:10px;border-radius:3px;padding:0 5px;font-weight:600}
+  .n .m{font-size:12px;color:var(--fg3);white-space:nowrap}
+  .n.pinned{background:#fffbea}
+  .content{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:14px;padding:4px 0}
+  .content a{word-break:break-all}
+  .readers{font-size:12px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  #nContent{min-height:220px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   공지사항 — 관리자가 쓰고, 팀원이 읽음. 열어 보면 "읽음"이 기록됨
+   한 글 = { title, content, pinned, reads:[이름...], created_by, created_at }
+================================================================ */
+const N = () => (DATA.notices || []).slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const isRead = n => (n.reads || []).includes(me);
+const unreadCount = () => N().filter(n => !isRead(n)).length;
+let q = '';
+
+function normalize(table, n){ return { ...n, reads: Array.isArray(n.reads) ? n.reads : [], pinned: !!n.pinned }; }
+/* 글 내용 속 인터넷 주소를 누를 수 있는 링크로 */
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
+function render(){
+  const list = N().filter(n => !q || [n.title, n.content, n.created_by].some(v => (v || '').toLowerCase().includes(q.toLowerCase())));
+  $('#app').innerHTML = headerHtml({ icon: '📢', title: '공지사항' }) + `<main class="wrap" style="max-width:1000px">
+    <div class="actions">${isAdmin() ? '<button class="btn primary" id="newBtn2">＋ 공지 작성</button>' : ''}
+      <input type="search" id="fq" placeholder="검색" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:200px">
+      <span class="count">${list.length}건${unreadCount() ? ` · 안 읽음 ${unreadCount()}건` : ''}</span></div>
+    ${!DATA.notices ? `<div class="empty">공지 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` :
+      list.length ? `<div class="list">${list.map(n => `<div class="n ${n.pinned ? 'pinned' : ''} ${isRead(n) ? '' : 'unread'}" data-id="${n.id}">
+        ${n.pinned ? '<span class="pin" title="고정">📌</span>' : ''}<span class="t">${esc(n.title)}</span>${isRead(n) ? '' : '<span class="new">NEW</span>'}
+        ${isAdmin() ? `<span class="m" title="읽은 사람">👁 ${(n.reads || []).length}/${members.length}</span>` : ''}
+        <span class="m">${esc(n.created_by || '')} · ${fmtDate((n.created_at || '').slice(0, 10))}</span></div>`).join('')}</div>`
+      : `<div class="empty">${q ? '검색 결과가 없습니다.' : '아직 공지가 없습니다.' + (isAdmin() ? ' <b>＋ 공지 작성</b>으로 첫 공지를 올려 보세요.' : '')}</div>`}
+  </main>`;
+  bindHeader(() => {}, null, m => `안 읽은 공지 ${N().filter(n => !(n.reads || []).includes(m.name)).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const fq = $('#fq'); fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('.n[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
+}
+
+/* 글 보기 (열면 읽음 기록) */
+async function openView(id){
+  const n = N().find(x => x.id === id); if (!n) return;
+  if (!isRead(n)) { saveRow('notices', { ...n, reads: [...(n.reads || []), me] }); }
+  const admin = isAdmin();
+  openModal(`${modalHead(`${n.pinned ? '📌 ' : ''}${esc(n.title)}`)}
+    <div class="mb">
+      <div class="hint">${esc(n.created_by || '')} · ${fmtDateTime(n.created_at)}${n.updated_at && n.updated_at !== n.created_at ? ` · 수정 ${fmtDateTime(n.updated_at)}` : ''}</div>
+      <div class="content">${linkify(n.content || '')}</div>
+      ${admin ? `<div class="readers">읽음 ${(n.reads || []).length}/${members.length}: ${(n.reads || []).map(r => who(r)).join('') || '<span class="hint">아직 없음</span>'}
+        ${members.filter(m => !(n.reads || []).includes(m.name)).length ? `<span class="hint">· 안 읽음: ${members.filter(m => !(n.reads || []).includes(m.name)).map(m => esc(m.name)).join(', ')}</span>` : ''}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${admin ? `<button class="btn danger left" id="nDel">삭제</button><button class="btn" id="nPin">${n.pinned ? '고정 해제' : '위에 고정'}</button><button class="btn" id="nEdit">수정</button>` : ''}
+      <button class="btn primary" data-close>닫기</button>
+    </div>`, { wide: true });
+  if (admin) {
+    $('#nEdit').onclick = () => { closeModal(); openEdit(n.id); };
+    $('#nPin').onclick = async () => { closeModal(); await saveRow('notices', { ...n, pinned: !n.pinned }); toast(n.pinned ? '고정을 해제했습니다' : '위에 고정했습니다'); };
+    $('#nDel').onclick = async () => { if (confirm(`"${n.title}" 공지를 삭제할까요?`)) { closeModal(); await removeRow('notices', n.id); toast('삭제했습니다'); } };
+  }
+}
+/* 글 쓰기·수정 (관리자) */
+function openEdit(id){
+  if (!isAdmin()) { toast('관리자만 공지를 쓸 수 있습니다', true); return; }
+  const n = id ? N().find(x => x.id === id) : null;
+  openModal(`${modalHead(n ? '공지 수정' : '공지 작성')}
+    <div class="mb">
+      <div class="f"><label>제목 *</label><input id="nTitle" value="${esc(n ? n.title : '')}" maxlength="120" placeholder="예: 10월 휴무 안내"></div>
+      <div class="f"><label>내용</label><textarea id="nContent" placeholder="내용을 적어 주세요. 인터넷 주소는 자동으로 링크가 됩니다.">${esc(n ? n.content || '' : '')}</textarea></div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="nPinned" ${n && n.pinned ? 'checked' : ''}> 목록 맨 위에 고정</label>
+      ${n ? '<div class="hint">수정해도 "읽음" 기록은 그대로 남습니다. 다시 읽게 하려면 새 공지로 올리세요.</div>' : ''}
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="nSave">${n ? '저장' : '올리기'}</button></div>`, { wide: true });
+  $('#nTitle').focus();
+  $('#nSave').onclick = async () => {
+    const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('제목을 입력하세요', true); return; }
+    const row = { id: n ? n.id : uid(), title, content: $('#nContent').value.trim(), pinned: $('#nPinned').checked, reads: n ? n.reads : [me], created_by: n ? n.created_by : me, created_at: n ? n.created_at : nowIso() };
+    closeModal(); await saveRow('notices', row); toast(n ? '저장했습니다' : '공지를 올렸습니다');
+  };
+}
+
+boot({ icon: '📢', title: '공지사항', tables: ['notices'], render, normalize });
+</script>
+</body>
+</html>

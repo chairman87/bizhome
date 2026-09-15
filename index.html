@@ -63,6 +63,8 @@ const SCREENS = [
   ['tasks.html', '업무요청/보고'],
   ['rnr.html', '업무 분장'],
   ['leave.html', '연차/휴가 등록'],
+  ['notices.html', '공지사항'],
+  ['accounts.html', '공용계정 관리'],
   ['members', '팀원 관리'],
   ['url', '외부 링크 (인터넷 주소 입력)'],
 ];
@@ -72,6 +74,7 @@ const EMOJIS = ['📝','📋','📅','📆','🗓️','⏰','📊','📈','📉'
 const DEFAULT_MENU = [
   ['인사', 'orange', [['📅', '연차/휴가 등록', 'leave.html'], ['😎', '멤버 리스트', 'members']]],
   ['업무지원', 'blue', [['📝', '업무요청/보고', 'tasks.html'], ['📋', '업무 분장', 'rnr.html']]],
+  ['총무', 'yellow', [['📢', '공지사항', 'notices.html'], ['🔐', '공용계정 관리', 'accounts.html']]],
 ];
 
 const M = () => DATA.menu || [];
@@ -103,11 +106,12 @@ function render(){
   if (!M().length && isAdmin() && !seeding) { seedDefault(); }
   const admin = isAdmin();
   if (!admin) editing = false;
-  const tasks = DATA.tasks || [], leaves = DATA.leaves || [];
+  const tasks = DATA.tasks || [], leaves = DATA.leaves || [], notices = DATA.notices || [];
   const badges = {
     // 남이 나에게 새로 요청한 것 + 내가 요청한 것 중 확인 기다리는 보고 (내가 직접 등록한 내 업무는 제외)
     'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료')).length,
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
+    'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
@@ -249,7 +253,7 @@ function openDept(id){
   $('#dName').onkeydown = e => { if (e.key === 'Enter') save(); };
   if (d) $('#dDel').onclick = () => { closeModal(); delDept(d.id); };
 }
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices'], render });
 </script>
 </body>
 </html>
