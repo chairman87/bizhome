@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프로젝트 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
+<style>
+  .wrap-wide{max-width:1800px}
+  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  /* 프로젝트 카드 */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .pcard{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:14px 16px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .pcard:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .pcard h3{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
+  .pcard .goal{color:var(--fg2);font-size:13px;margin-bottom:8px;white-space:pre-wrap}
+  .pcard .meta{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--fg2);align-items:center}
+  .bar{display:inline-block;width:100%;height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;vertical-align:middle}
+  .bar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+  .bar.done i{background:var(--green)}
+  .pct{font-size:12px;color:var(--fg2);font-variant-numeric:tabular-nums}
+  /* 프로젝트 머리 */
+  .phead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .phead h2{margin:0;font-size:20px}
+  .phead .meta{font-size:12px;color:var(--fg2)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}.stat .v{font-size:20px;font-weight:700}.stat .v.red{color:var(--red)}.stat .v.orange{color:var(--orange)}
+  /* 단계 */
+  .phase{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin-bottom:12px;overflow:hidden}
+  .phase h3{margin:0;padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--line);font-size:14px;display:flex;align-items:center;gap:8px}
+  .phase h3 .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .phase h3 .sp{flex:1}
+  .phase h3 .pbar{width:120px}
+  .phase h3 button{border:1px solid transparent;background:transparent;border-radius:4px;padding:0 5px;font-size:12px;color:var(--fg3)}
+  .phase h3 button:hover{background:rgba(0,0,0,.06);color:var(--fg)}
+  .phase.collapsed .items{display:none}
+  .it{display:grid;grid-template-columns:28px 1fr 130px 150px 110px 28px;gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);font-size:13px}
+  .it:hover{background:var(--bg2)}
+  .it .t{cursor:pointer;min-width:0}
+  .it .t .title{font-weight:500}
+  .it.done .t .title{color:var(--fg3);text-decoration:line-through}
+  .it .t .sub{font-size:12px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .it input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--green)}
+  .it select{border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px;padding:2px}
+  .it .mv{display:flex;gap:2px;justify-content:flex-end}
+  .it .mv button{border:0;background:transparent;color:var(--fg3);font-size:11px;padding:0 3px;cursor:pointer}
+  .it .mv button:hover{color:var(--fg)}
+  .addit{display:flex;gap:6px;padding:6px 14px 8px 50px;align-items:center}
+  .addit input{flex:1;border:1px dashed var(--line2);border-radius:4px;padding:5px 8px;font:inherit;font-size:13px;background:transparent}
+  .addit input:focus{border-style:solid;border-color:var(--blue);outline:2px solid #bfdbfe;background:#fff}
+  .addphase{border:2px dashed var(--line2);border-radius:10px;padding:12px;color:var(--fg3);text-align:center;background:transparent;width:100%;font-size:13px}
+  .addphase:hover{color:var(--fg);border-color:var(--fg3)}
+  .chk{font-size:11px;color:var(--fg3);margin-left:6px}
+  /* 간트 */
+  .gwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
+  .gantt{display:grid;font-size:12px;min-width:max-content}
+  .gantt .gh{position:sticky;top:0;background:var(--bg2);border-bottom:1px solid var(--line);font-size:11px;color:var(--fg2);text-align:center;padding:2px 0;white-space:nowrap;overflow:hidden}
+  .gantt .gl{position:sticky;left:0;background:var(--bg);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1}
+  .gantt .gl.ph{background:var(--bg2);font-weight:700;color:var(--fg2)}
+  .gantt .gc{border-bottom:1px solid var(--line);border-right:1px solid #f1f1ef;position:relative;min-height:26px}
+  .gantt .gc.we{background:#fafaf9}
+  .gantt .gc.today{background:#fff4e5}
+  .gantt .gc.ph{background:var(--bg2)}
+  .gbar{position:absolute;top:5px;height:16px;border-radius:4px;background:#93c5fd;cursor:pointer;z-index:1;font-size:11px;color:#1e3a8a;padding:0 6px;white-space:nowrap;overflow:hidden;line-height:16px}
+  .gbar.done{background:#86efac;color:#14532d}.gbar.over{background:#fca5a5;color:#7f1d1d}.gbar.hold{background:#e5e5e5;color:#555}.gbar.today{background:#fdba74;color:#7c2d12}
+  /* 체크 사항 */
+  .check{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  .check:hover{background:var(--bg2)}
+  .check input[type=checkbox]{width:16px;height:16px;margin-top:2px;accent-color:var(--green)}
+  .check .tx{flex:1;white-space:pre-wrap;word-break:break-word}
+  .check.done .tx{color:var(--fg3);text-decoration:line-through}
+  .check .by{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .check .x{padding:0 4px;font-size:14px}
+  .cl-row{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+  .cl-row input[type=text]{flex:1;border:1px solid var(--line2);border-radius:4px;padding:4px 8px;font:inherit;font-size:13px}
+  .cl-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--green)}
+  @media (max-width:720px){ .it{grid-template-columns:24px 1fr 90px;} .it .as,.it .mv{display:none} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   프로젝트 관리 — 프로젝트(예: 화장품 브랜드 런칭) 안에 단계별 할 일 · 일정 · 체크 사항
+   projects: { name, goal, status, start_date, target_date, owner, memo, checks:[{id,text,done,by,at}] }
+   project_items: { project_id, phase, title, assignee, start_date, due_date, status, note, checklist:[{text,done}], sort_order }
+================================================================ */
+const PST = { '진행중': ['#dbeafe','#1d4ed8'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
+const IST = { '예정': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
+const ISTATUSES = Object.keys(IST);
+const P = () => DATA.projects || [];
+const I = () => DATA.project_items || [];
+const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
+const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
+let cur = LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
+let tab = LS.get('proj_tab') || 'process';
+let collapsed = {};
+const isDone = it => it.status === '완료';
+const isOver = it => !isDone(it) && it.status !== '보류' && it.due_date && it.due_date < todayStr();
+const itemsOf = pid => I().filter(x => x.project_id === pid).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+const phasesOf = pid => { const seen = []; itemsOf(pid).forEach(x => { if (!seen.includes(x.phase || '기타')) seen.push(x.phase || '기타'); }); (P().find(p => p.id === pid) || {}).phases?.forEach(ph => { if (!seen.includes(ph)) seen.push(ph); }); return seen; };
+const pctOf = pid => { const l = itemsOf(pid); return l.length ? Math.round(l.filter(isDone).length / l.length * 100) : 0; };
+const cmtN = it => (it.checklist || []).length ? `<span class="chk">☑ ${(it.checklist || []).filter(c => c.done).length}/${it.checklist.length}</span>` : '';
+
+/* 새 프로젝트에 넣을 수 있는 기본 프로세스 */
+const TEMPLATES = {
+  '화장품 브랜드 런칭': [
+    ['기획', ['브랜드 컨셉·타깃 정리', '제품 라인업·가격 정하기', '경쟁 제품 조사', '예산·일정 확정']],
+    ['제품 개발', ['제조사(OEM/ODM) 선정', '샘플 요청·테스트', '성분·처방 확정', '용기·부자재 선정']],
+    ['디자인/패키지', ['브랜드 로고·BI', '용기·단상자 디자인', '표시사항 문안 작성', '인쇄 교정·감리']],
+    ['인허가/표시사항', ['화장품책임판매업 확인', '표시사항 법규 검토', '상표 출원', '기능성 심사(해당 시)']],
+    ['생산', ['발주·생산 일정 확정', '초도 생산', '품질 검사·입고', '물류(3PL) 세팅']],
+    ['판매 채널 준비', ['자사몰 상세페이지', '스마트스토어·쿠팡 등록', '가격·배송 정책', 'CS 응대 가이드']],
+    ['마케팅', ['런칭 콘텐츠·영상 제작', '광고 계정·소재 준비', '인플루언서·체험단', 'SNS 채널 오픈']],
+    ['런칭', ['런칭일 확정', '오픈 이벤트', '초기 반응·리뷰 모니터링', '런칭 후 개선 사항 정리']],
+  ],
+  '빈 프로젝트': [['1단계', []]],
+};
+function normalize(table, r){ return table === 'projects' ? { ...r, status: PST[r.status] ? r.status : '진행중', checks: Array.isArray(r.checks) ? r.checks : [], phases: Array.isArray(r.phases) ? r.phases : [] } : { ...r, status: ISTATUSES.includes(r.status) ? r.status : '예정', checklist: Array.isArray(r.checklist) ? r.checklist : [] }; }
+
+/* ---------- 화면 ---------- */
+function render(){
+  const p = P().find(x => x.id === cur);
+  if (!p) { cur = ''; renderList(); return; }
+  renderProject(p);
+}
+function renderList(){
+  const list = P().slice().sort((a, b) => (a.status === '완료') - (b.status === '완료') || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리' }) + `<main class="wrap">
+    ${!DATA.projects || !DATA.project_items ? `<div class="empty">프로젝트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : `
+    <div class="actions"><button class="btn primary" id="newP">＋ 새 프로젝트</button><span class="count">${list.length}개</span></div>
+    ${list.length ? `<div class="pgrid">${list.map(p => { const its = itemsOf(p.id), over = its.filter(isOver).length, pct = pctOf(p.id); return `<div class="pcard" data-open="${p.id}">
+      <h3>${esc(p.name)} ${stP(p.status)}</h3>
+      ${p.goal ? `<div class="goal">${esc(p.goal)}</div>` : ''}
+      <div class="meta"><span class="bar ${pct === 100 ? 'done' : ''}" style="width:140px"><i style="width:${pct}%"></i></span><span class="pct">${pct}% (${its.filter(isDone).length}/${its.length})</span>
+        ${over ? `<span style="color:var(--red);font-weight:600">지연 ${over}</span>` : ''}${p.target_date ? `<span>목표 ${fmtDate(p.target_date)}${dayDiff(p.target_date) >= 0 && p.status !== '완료' ? ` (D-${dayDiff(p.target_date)})` : ''}</span>` : ''}${p.owner ? who(p.owner) : ''}</div>
+    </div>`; }).join('')}</div>` : '<div class="empty">아직 프로젝트가 없습니다. <b>＋ 새 프로젝트</b>로 시작하세요.</div>'}`}
+  </main>`;
+  bindHeader(() => {}, null, m => `담당 항목 ${I().filter(x => x.assignee === m.name && !isDone(x)).length}건`);
+  const nb = $('#newP'); if (nb) nb.onclick = () => openProject(null);
+  document.querySelectorAll('[data-open]').forEach(c => c.onclick = () => { cur = c.dataset.open; LS.set('proj_cur', cur); render(); });
+}
+function renderProject(p){
+  const its = itemsOf(p.id), over = its.filter(isOver), pct = pctOf(p.id), mine = its.filter(x => x.assignee === me && !isDone(x)).length;
+  const tabs = [{ key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
+  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리', tabs, active: tab }) + `<main class="wrap wrap-wide">
+    <div class="phead"><button class="btn sm" id="backBtn">‹ 목록</button><h2>${esc(p.name)}</h2>${stP(p.status)}<span class="meta">${p.start_date ? fmtDate(p.start_date) : '?'} ~ ${p.target_date ? fmtDate(p.target_date) : '?'}${p.owner ? ' · 총괄 ' + esc(fullName(p.owner)) : ''}</span><span style="flex:1"></span><button class="btn sm" id="editP">프로젝트 설정</button></div>
+    ${p.goal ? `<div class="hint" style="margin:-6px 0 12px;white-space:pre-wrap">${esc(p.goal)}</div>` : ''}
+    <div class="stats">
+      <div class="stat"><div class="l">진행률</div><div class="v">${pct}%</div><span class="bar ${pct === 100 ? 'done' : ''}"><i style="width:${pct}%"></i></span></div>
+      <div class="stat"><div class="l">항목</div><div class="v">${its.length}</div><div class="hint">완료 ${its.filter(isDone).length} · 진행중 ${its.filter(x => x.status === '진행중').length} · 예정 ${its.filter(x => x.status === '예정').length}</div></div>
+      <div class="stat"><div class="l">마감 지남</div><div class="v ${over.length ? 'red' : ''}">${over.length}</div><div class="hint">${over.length ? over.slice(0, 2).map(x => esc(x.title)).join(', ') : '없음'}</div></div>
+      <div class="stat"><div class="l">이번 주 마감</div><div class="v ${its.filter(x => !isDone(x) && x.due_date && dayDiff(x.due_date) >= 0 && dayDiff(x.due_date) <= 7).length ? 'orange' : ''}">${its.filter(x => !isDone(x) && x.due_date && dayDiff(x.due_date) >= 0 && dayDiff(x.due_date) <= 7).length}</div><div class="hint">내 담당 미완료 ${mine}건</div></div>
+    </div>
+    <div id="view">${tab === 'gantt' ? ganttHtml(p) : tab === 'checks' ? checksHtml(p) : processHtml(p)}</div>
+  </main>`;
+  bindHeader(k => { tab = k; LS.set('proj_tab', k); render(); }, null, m => `담당 항목 ${its.filter(x => x.assignee === m.name && !isDone(x)).length}건`);
+  $('#backBtn').onclick = () => { cur = ''; LS.set('proj_cur', ''); render(); };
+  $('#editP').onclick = () => openProject(p.id);
+  bindView(p);
+}
+
+/* 프로세스 (단계별 목록) */
+function processHtml(p){
+  const phases = phasesOf(p.id);
+  return phases.map((ph, pi) => {
+    const list = itemsOf(p.id).filter(x => (x.phase || '기타') === ph); const done = list.filter(isDone).length; const pct = list.length ? Math.round(done / list.length * 100) : 0;
+    return `<div class="phase ${collapsed[ph] ? 'collapsed' : ''}">
+      <h3><button data-fold="${esc(ph)}" title="접기/펼치기">${collapsed[ph] ? '▸' : '▾'}</button><span data-phase-name="${esc(ph)}" title="더블클릭하면 단계 이름을 바꿉니다">${esc(ph)}</span><span class="n">${done}/${list.length}</span><span class="bar pbar ${pct === 100 ? 'done' : ''}"><i style="width:${pct}%"></i></span><span class="sp"></span>
+        <button data-pmove="${esc(ph)}" data-dir="-1" ${pi === 0 ? 'disabled' : ''} title="위로">↑</button><button data-pmove="${esc(ph)}" data-dir="1" ${pi === phases.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button data-pdel="${esc(ph)}" title="단계 삭제">✕</button></h3>
+      <div class="items">
+        ${list.map((it, i) => `<div class="it ${isDone(it) ? 'done' : ''}" data-id="${it.id}">
+          <input type="checkbox" data-done="${it.id}" ${isDone(it) ? 'checked' : ''} title="완료">
+          <div class="t" data-open-item="${it.id}"><div class="title">${esc(it.title)}${cmtN(it)}</div>${it.note ? `<div class="sub">${esc(it.note)}</div>` : ''}</div>
+          <div class="as">${who(it.assignee)}</div>
+          <div>${it.due_date ? dueHtml(it.due_date, isDone(it)) : (it.start_date ? `<span class="hint">${fmtDate(it.start_date)}~</span>` : '<span class="hint">-</span>')}</div>
+          <div><select data-status="${it.id}">${ISTATUSES.map(s => `<option ${it.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+          <div class="mv"><button data-imove="${it.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''}>↑</button><button data-imove="${it.id}" data-dir="1" ${i === list.length - 1 ? 'disabled' : ''}>↓</button></div>
+        </div>`).join('')}
+        <div class="addit"><input data-add="${esc(ph)}" placeholder="＋ 할 일 입력 후 Enter"><span class="hint">담당·마감은 항목을 눌러 지정</span></div>
+      </div>
+    </div>`;
+  }).join('') + `<button class="addphase" id="addPhase">＋ 단계 추가</button>`;
+}
+/* 일정 (간트) */
+function ganttHtml(p){
+  const its = itemsOf(p.id).filter(x => x.start_date || x.due_date);
+  if (!its.length) return '<div class="empty">시작일이나 마감일이 있는 항목이 없습니다. 항목을 눌러 날짜를 넣으면 여기에 막대로 표시됩니다.</div>';
+  const dates = its.flatMap(x => [x.start_date, x.due_date]).filter(Boolean).concat([p.start_date, p.target_date, todayStr()].filter(Boolean)).sort();
+  let s = parseYmd(dates[0]), e = parseYmd(dates[dates.length - 1]); s.setDate(s.getDate() - 3); e.setDate(e.getDate() + 7);
+  const days = []; for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) days.push(ymd(d));
+  const idx = d => days.indexOf(d);
+  const cw = 22, labelW = 240;
+  const head = days.map((d, i) => { const dt = parseYmd(d); return `<div class="gh ${dt.getDay() === 0 || dt.getDay() === 6 ? 'we' : ''}" style="grid-column:${i + 2}">${dt.getDate() === 1 || i === 0 ? `<b>${dt.getMonth() + 1}/${dt.getDate()}</b>` : dt.getDay() === 1 ? dt.getDate() : ''}</div>`; }).join('');
+  let rows = '', r = 2;
+  phasesOf(p.id).forEach(ph => {
+    const list = its.filter(x => (x.phase || '기타') === ph); if (!list.length) return;
+    rows += `<div class="gl ph" style="grid-row:${r}">${esc(ph)}</div>` + days.map((d, i) => `<div class="gc ph" style="grid-row:${r};grid-column:${i + 2}"></div>`).join(''); r++;
+    list.forEach(it => {
+      const a = it.start_date || it.due_date, b = it.due_date || it.start_date; const i0 = Math.max(0, idx(a)), i1 = Math.max(i0, idx(b));
+      const cls = isDone(it) ? 'done' : isOver(it) ? 'over' : it.status === '보류' ? 'hold' : (it.due_date === todayStr() ? 'today' : '');
+      rows += `<div class="gl" data-open-item="${it.id}" title="${esc(it.title)}">${esc(it.title)}${it.assignee ? ` <span class="hint">${esc(it.assignee)}</span>` : ''}</div>`
+        + days.map((d, i) => `<div class="gc ${parseYmd(d).getDay() % 6 === 0 ? 'we' : ''} ${d === todayStr() ? 'today' : ''}" style="grid-row:${r};grid-column:${i + 2}"></div>`).join('')
+        + `<div class="gbar ${cls}" data-open-item="${it.id}" style="grid-row:${r};grid-column:${i0 + 2} / ${i1 + 3};left:2px;right:2px">${esc(it.title)}</div>`;
+      r++;
+    });
+  });
+  return `<div class="hint" style="margin-bottom:8px">막대: 파랑=예정·진행중, 초록=완료, 빨강=마감 지남, 주황=오늘 마감, 회색=보류 · 막대를 누르면 수정</div>
+    <div class="gwrap"><div class="gantt" style="grid-template-columns:${labelW}px repeat(${days.length},${cw}px)"><div class="gl" style="grid-row:1;background:var(--bg2)"></div>${head}${rows}</div></div>`;
+}
+/* 체크 사항 */
+function checksHtml(p){
+  const cs = (p.checks || []).slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+  return `<div class="hint" style="margin-bottom:8px">프로세스 항목은 아니지만 챙겨야 할 것들을 적어 두는 곳입니다. 예: "표시사항 폰트 크기 확인", "샘플 사진 보관"</div>
+    <div class="addit" style="padding:0 0 10px"><input id="addCheck" placeholder="＋ 체크할 내용 입력 후 Enter" style="flex:1"></div>
+    <div style="border:1px solid var(--line);border-radius:var(--radius);overflow:hidden">${cs.map(c => `<div class="check ${c.done ? 'done' : ''}"><input type="checkbox" data-cdone="${c.id}" ${c.done ? 'checked' : ''}><span class="tx">${esc(c.text)}</span><span class="by">${esc(c.by || '')} ${fmtDate((c.at || '').slice(0, 10))}</span><button class="x" data-cdel="${c.id}" title="삭제">✕</button></div>`).join('') || '<div class="empty">아직 없습니다.</div>'}</div>`;
+}
+
+function bindView(p){
+  const v = $('#view');
+  v.querySelectorAll('[data-open-item]').forEach(el => el.onclick = e => { e.stopPropagation(); openItem(el.dataset.openItem); });
+  v.querySelectorAll('[data-done]').forEach(c => c.onchange = () => setItemStatus(c.dataset.done, c.checked ? '완료' : '진행중'));
+  v.querySelectorAll('select[data-status]').forEach(s => s.onchange = () => setItemStatus(s.dataset.status, s.value));
+  v.querySelectorAll('[data-add]').forEach(inp => inp.onkeydown = async e => { if (e.key !== 'Enter') return; const t = inp.value.trim(); if (!t) return; const ph = inp.dataset.add; const list = itemsOf(p.id).filter(x => (x.phase || '기타') === ph); inp.value = ''; await saveRow('project_items', { id: uid(), project_id: p.id, phase: ph, title: t, assignee: null, start_date: null, due_date: null, status: '예정', note: null, checklist: [], sort_order: list.length ? Math.max(...list.map(x => x.sort_order || 0)) + 1 : 0, created_by: me, created_at: nowIso() }); const again = document.querySelector(`[data-add="${CSS.escape(ph)}"]`); if (again) again.focus(); });
+  v.querySelectorAll('[data-imove]').forEach(b => b.onclick = e => { e.stopPropagation(); moveItem(p, b.dataset.imove, Number(b.dataset.dir)); });
+  v.querySelectorAll('[data-fold]').forEach(b => b.onclick = () => { collapsed[b.dataset.fold] = !collapsed[b.dataset.fold]; render(); });
+  v.querySelectorAll('[data-phase-name]').forEach(el => el.ondblclick = () => renamePhase(p, el.dataset.phaseName));
+  v.querySelectorAll('[data-pmove]').forEach(b => b.onclick = () => movePhase(p, b.dataset.pmove, Number(b.dataset.dir)));
+  v.querySelectorAll('[data-pdel]').forEach(b => b.onclick = () => delPhase(p, b.dataset.pdel));
+  const ap = $('#addPhase'); if (ap) ap.onclick = async () => { const name = prompt('새 단계 이름'); if (!name || !name.trim()) return; await saveRow('projects', { ...p, phases: [...(p.phases || []), name.trim()] }); };
+  const ac = $('#addCheck'); if (ac) ac.onkeydown = async e => { if (e.key !== 'Enter') return; const t = ac.value.trim(); if (!t) return; ac.value = ''; await saveRow('projects', { ...p, checks: [...(p.checks || []), { id: uid(), text: t, done: false, by: me, at: nowIso() }] }); const again = $('#addCheck'); if (again) again.focus(); };
+  v.querySelectorAll('[data-cdone]').forEach(c => c.onchange = async () => { await saveRow('projects', { ...p, checks: (p.checks || []).map(x => x.id === c.dataset.cdone ? { ...x, done: c.checked, done_by: me, done_at: nowIso() } : x) }); });
+  v.querySelectorAll('[data-cdel]').forEach(b => b.onclick = async () => { if (confirm('이 체크 사항을 삭제할까요?')) await saveRow('projects', { ...p, checks: (p.checks || []).filter(x => x.id !== b.dataset.cdel) }); });
+}
+async function setItemStatus(id, status){ const it = I().find(x => x.id === id); if (!it || it.status === status) return; await saveRow('project_items', { ...it, status, done_at: status === '완료' ? nowIso() : null, updated_by: me }); }
+async function moveItem(p, id, dir){
+  const it = I().find(x => x.id === id); const list = itemsOf(p.id).filter(x => (x.phase || '기타') === (it.phase || '기타'));
+  const i = list.findIndex(x => x.id === id), j = i + dir; if (j < 0 || j >= list.length) return;
+  const order = list.map(x => x.id); [order[i], order[j]] = [order[j], order[i]];
+  for (let k = 0; k < order.length; k++) { const row = I().find(x => x.id === order[k]); if (row.sort_order !== k) await saveRow('project_items', { ...row, sort_order: k }); }
+}
+async function renamePhase(p, ph){
+  const name = prompt('단계 이름 바꾸기', ph); if (!name || !name.trim() || name.trim() === ph) return;
+  const n = name.trim();
+  for (const it of itemsOf(p.id).filter(x => (x.phase || '기타') === ph)) await saveRow('project_items', { ...it, phase: n });
+  await saveRow('projects', { ...p, phases: phasesOf(p.id).map(x => x === ph ? n : x) });
+}
+async function movePhase(p, ph, dir){
+  const phs = phasesOf(p.id); const i = phs.indexOf(ph), j = i + dir; if (j < 0 || j >= phs.length) return;
+  [phs[i], phs[j]] = [phs[j], phs[i]];
+  // 단계 순서는 항목 sort_order 로 표현: 단계 순서대로 100단위로 다시 매김
+  for (let k = 0; k < phs.length; k++) { const list = I().filter(x => x.project_id === p.id && (x.phase || '기타') === phs[k]).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)); for (let m = 0; m < list.length; m++) { const so = k * 100 + m; if (list[m].sort_order !== so) await saveRow('project_items', { ...list[m], sort_order: so }); } }
+  await saveRow('projects', { ...p, phases: phs });
+}
+async function delPhase(p, ph){
+  const list = itemsOf(p.id).filter(x => (x.phase || '기타') === ph);
+  if (!confirm(`"${ph}" 단계를 삭제할까요?${list.length ? `\n안에 있는 항목 ${list.length}개도 함께 삭제됩니다.` : ''}`)) return;
+  for (const it of list) await removeRow('project_items', it.id);
+  await saveRow('projects', { ...p, phases: (p.phases || []).filter(x => x !== ph) });
+}
+
+/* ---------- 프로젝트 만들기·설정 ---------- */
+function openProject(id){
+  const p = id ? P().find(x => x.id === id) : null;
+  const d = p || { name: '', goal: '', status: '진행중', start_date: todayStr(), target_date: '', owner: me, memo: '' };
+  openModal(`${modalHead(p ? '프로젝트 설정' : '새 프로젝트')}
+    <div class="mb">
+      <div class="f"><label>프로젝트 이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 화장품 브랜드 런칭 (OO)" maxlength="80"></div>
+      <div class="f"><label>목표 · 설명</label><textarea id="pGoal" placeholder="무엇을 언제까지 어떻게">${esc(d.goal || '')}</textarea></div>
+      <div class="f3">
+        <div class="f"><label>시작일</label><input type="date" id="pStart" value="${esc(d.start_date || '')}"></div>
+        <div class="f"><label>목표일 (런칭일)</label><input type="date" id="pTarget" value="${esc(d.target_date || '')}"></div>
+        <div class="f"><label>상태</label><select id="pStatus">${Object.keys(PST).map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="f"><label>총괄 담당</label><select id="pOwner"><option value="">미정</option>${memberOptions(d.owner)}</select></div>
+      ${p ? '' : `<div class="f"><label>기본 프로세스 넣기</label><select id="pTpl">${Object.keys(TEMPLATES).map(t => `<option>${t}</option>`).join('')}</select><div class="hint">"화장품 브랜드 런칭"을 고르면 8단계 32개 항목이 미리 들어갑니다. 필요 없는 것은 지우고, 이름은 더블클릭으로 바꾸면 됩니다.</div></div>`}
+    </div>
+    <div class="mf">
+      ${p && isAdmin() ? `<button class="btn danger left" id="pDel">프로젝트 삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="pSave">${p ? '저장' : '만들기'}</button>
+    </div>`);
+  $('#pName').focus();
+  $('#pSave').onclick = async () => {
+    const name = $('#pName').value.trim(); if (!name) { $('#pName').focus(); toast('프로젝트 이름을 입력하세요', true); return; }
+    const row = { id: p ? p.id : uid(), name, goal: $('#pGoal').value.trim() || null, status: $('#pStatus').value, start_date: $('#pStart').value || null, target_date: $('#pTarget').value || null, owner: $('#pOwner').value || null,
+      checks: p ? p.checks : [], phases: p ? p.phases : [], created_by: p ? p.created_by : me, created_at: p ? p.created_at : nowIso() };
+    const tplName = p ? null : $('#pTpl').value;
+    closeModal();
+    if (!p && tplName) { row.phases = TEMPLATES[tplName].map(([ph]) => ph); }
+    await saveRow('projects', row);
+    if (!p && tplName) {
+      let k = 0;
+      for (const [ph, items] of TEMPLATES[tplName]) for (const t of items) { await store.upsert('project_items', { id: uid(), project_id: row.id, phase: ph, title: t, status: '예정', checklist: [], sort_order: k++, created_by: me, created_at: nowIso(), updated_at: nowIso() }); }
+      await reload();
+    }
+    cur = row.id; LS.set('proj_cur', cur); tab = 'process'; render();
+    toast(p ? '저장했습니다' : '프로젝트를 만들었습니다');
+  };
+  const del = $('#pDel'); if (del) del.onclick = async () => { const n = itemsOf(p.id).length; if (!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n항목 ${n}개도 함께 삭제됩니다.`)) return; closeModal(); for (const it of itemsOf(p.id)) await removeRow('project_items', it.id); await removeRow('projects', p.id); cur = ''; render(); toast('삭제했습니다'); };
+}
+
+/* ---------- 항목 상세 ---------- */
+function openItem(id){
+  const it = I().find(x => x.id === id); if (!it) return;
+  const p = P().find(x => x.id === it.project_id);
+  const cl = (it.checklist || []).map(c => ({ ...c }));
+  openModal(`${modalHead('할 일', stI(it.status))}
+    <div class="mb">
+      <div class="f"><label>할 일 *</label><input id="iTitle" value="${esc(it.title)}" maxlength="200"></div>
+      <div class="f3">
+        <div class="f"><label>단계</label><select id="iPhase">${phasesOf(p.id).map(ph => `<option ${(it.phase || '기타') === ph ? 'selected' : ''}>${esc(ph)}</option>`).join('')}</select></div>
+        <div class="f"><label>담당자</label><select id="iAssignee"><option value="">미정</option>${memberOptions(it.assignee)}</select></div>
+        <div class="f"><label>상태</label><select id="iStatus">${ISTATUSES.map(s => `<option ${it.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>시작일</label><input type="date" id="iStart" value="${esc(it.start_date || '')}"></div>
+        <div class="f"><label>마감일</label><input type="date" id="iDue" value="${esc(it.due_date || '')}"></div>
+      </div>
+      <div class="f"><label>메모</label><textarea id="iNote" placeholder="진행 내용, 참고 링크, 결정 사항">${esc(it.note || '')}</textarea></div>
+      <div class="f"><label>세부 체크리스트</label><div id="clBox"></div><div class="cl-row"><input type="text" id="clNew" placeholder="＋ 세부 항목 입력 후 Enter"></div></div>
+      <div class="hint">등록: ${esc(it.created_by || '')} ${fmtDateTime(it.created_at)}${it.done_at ? ` · 완료: ${fmtDateTime(it.done_at)}` : ''}</div>
+    </div>
+    <div class="mf"><button class="btn danger left" id="iDel">삭제</button><button class="btn" data-close>취소</button><button class="btn primary" id="iSave">저장</button></div>`, { wide: true });
+  const paint = () => { $('#clBox').innerHTML = cl.map((c, i) => `<div class="cl-row"><input type="checkbox" data-ci="${i}" ${c.done ? 'checked' : ''}><input type="text" data-ct="${i}" value="${esc(c.text)}"><button class="x" data-cx="${i}">✕</button></div>`).join(''); document.querySelectorAll('[data-ci]').forEach(c => c.onchange = () => cl[+c.dataset.ci].done = c.checked); document.querySelectorAll('[data-ct]').forEach(t => t.oninput = () => cl[+t.dataset.ct].text = t.value); document.querySelectorAll('[data-cx]').forEach(b => b.onclick = () => { cl.splice(+b.dataset.cx, 1); paint(); }); };
+  paint();
+  $('#clNew').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const t = $('#clNew').value.trim(); if (!t) return; cl.push({ text: t, done: false }); $('#clNew').value = ''; paint(); } };
+  $('#iTitle').focus();
+  $('#iSave').onclick = async () => {
+    const title = $('#iTitle').value.trim(); if (!title) { toast('할 일을 입력하세요', true); return; }
+    const status = $('#iStatus').value;
+    closeModal();
+    await saveRow('project_items', { ...it, title, phase: $('#iPhase').value, assignee: $('#iAssignee').value || null, status, start_date: $('#iStart').value || null, due_date: $('#iDue').value || null, note: $('#iNote').value.trim() || null, checklist: cl.filter(c => c.text.trim()), done_at: status === '완료' ? (it.done_at || nowIso()) : null, updated_by: me });
+    toast('저장했습니다');
+  };
+  $('#iDel').onclick = async () => { if (confirm(`"${it.title}" 을(를) 삭제할까요?`)) { closeModal(); await removeRow('project_items', it.id); toast('삭제했습니다'); } };
+}
+
+boot({ icon: '🗂️', title: '프로젝트 관리', tables: ['projects', 'project_items'], render, normalize });
+</script>
+</body>
+</html>

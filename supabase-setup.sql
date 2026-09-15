@@ -73,6 +73,11 @@ create table if not exists leaves (
   updated_at timestamptz default now()
 );
 
+-- 4-5) 프로젝트 관리 (sql-projects.sql 과 동일)
+create table if not exists projects (id uuid primary key, name text not null, goal text, status text default '진행중', start_date date, target_date date, owner text, phases jsonb default '[]', checks jsonb default '[]', memo text, created_by text, created_at timestamptz default now(), updated_at timestamptz default now());
+create table if not exists project_items (id uuid primary key, project_id uuid not null, phase text, title text not null, assignee text, start_date date, due_date date, status text default '예정', note text, checklist jsonb default '[]', sort_order int default 0, done_at timestamptz, created_by text, created_at timestamptz default now(), updated_by text, updated_at timestamptz default now());
+alter table projects enable row level security; alter table project_items enable row level security; drop policy if exists "team_all" on projects; drop policy if exists "team_all" on project_items; create policy "team_all" on projects for all using (true) with check (true); create policy "team_all" on project_items for all using (true) with check (true); alter publication supabase_realtime add table projects; alter publication supabase_realtime add table project_items;
+
 -- 4-4) 광고 영상 리스트 (sql-ads.sql 과 동일)
 create table if not exists ads (id uuid primary key, product text not null, date date, title text not null, editor text, meta_account text, meta_budget text, tiktok text, status text default '운영중', note text, created_by text, created_at timestamptz default now(), updated_by text, updated_at timestamptz default now());
 alter table ads enable row level security; drop policy if exists "team_all" on ads; create policy "team_all" on ads for all using (true) with check (true); alter publication supabase_realtime add table ads;
