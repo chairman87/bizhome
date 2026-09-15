@@ -114,7 +114,7 @@
   /* 달력 */
   .calhead{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .calhead h2{margin:0;font-size:18px}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--line);gap:1px}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--line);gap:1px}
   .cal .wd{background:var(--bg2);text-align:center;font-size:12px;color:var(--fg2);padding:6px 0}
   .cal .day{background:var(--bg);min-height:96px;padding:4px;display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0}
   .cal .day:hover{background:var(--bg2)}
@@ -169,15 +169,17 @@
   .toast.err{background:var(--red)}
 
   @media (max-width:720px){
-    .top{padding:0 10px;gap:6px}
-    .brand{font-size:15px;margin-right:0}
+    .top{padding:6px 10px;gap:6px;height:auto;flex-wrap:wrap}
+    .brand{font-size:15px;margin-right:auto}
+    .tabs{order:10;flex-basis:100%;border-top:1px solid var(--line);padding-top:4px}
     .conn{display:none}
+    .newtxt{display:none}
     .wrap{padding:10px}
     .kanban{grid-template-columns:1fr}
-    .cal .day{min-height:64px}
+    .cal .day{min-height:64px;padding:2px}
+    .calhead .count{display:none}
     .ev .who{display:none}
     .f2{grid-template-columns:1fr}
-    .btn.newtxt{display:none}
   }
 </style>
 </head>
