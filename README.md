@@ -1,4 +1,4 @@
-# 비즈홈 (팀 업무 시스템)
+# 인트라넷 (팀 업무 시스템)
 
 **팀원 접속 주소: https://chairman87.github.io/bizhome/** (2026-09-15 개통)
 - 저장소: Supabase 프로젝트 `bizhome` (서울) · 화면 파일: GitHub `chairman87/bizhome`

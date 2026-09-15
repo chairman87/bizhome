@@ -9,6 +9,9 @@ const CONFIG = {
   SUPABASE_KEY: "sb_publishable_grDEdL-mRivtPAta6qNVTw_Di-opchT",   // 공개용(publishable) 키
 };
 
+/* ========== 이름·부제 (로그인 화면과 홈 제목에 쓰임) ========== */
+const BRAND = { name: '인트라넷', sub: '식이해법연구소 · (주)피에이치뷰티', icon: '🏢' };
+
 /* ---------- 작은 도우미 ---------- */
 const LS = {
   get(k){ try { return localStorage.getItem(k); } catch { return null; } },
@@ -137,6 +140,7 @@ let schemaWarn = '';
 const warnHtml = () => schemaWarn ? `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;font-size:13px;text-align:center">⚠ ${esc(schemaWarn)}</div>` : '';
 function renderApp(){
   if (!me || !members.some(m => m.name === me)) { me = ''; renderLogin(); return; }
+  document.body.classList.remove('login-bg');
   APP.render();
 }
 /* 한 줄 저장(화면 먼저 바꾸고 저장소에 씀). 실패하면 알리고 다시 읽음 */
@@ -250,16 +254,21 @@ const memberOptions = sel => members.map(m => `<option ${sel === m.name ? 'selec
 let loginPick = '';   // 로그인 화면에서 고른 이름
 function renderLogin(){
   const picked = members.find(m => m.name === loginPick);
-  $('#app').innerHTML = `${warnHtml()}<div class="login">
-    <h1>${esc(APP.icon || '🏠')} ${esc(APP.title || '비즈홈')}</h1>
-    <p>${members.length ? '본인 이름을 선택하세요' : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
-    ${connError ? `<p style="color:var(--red)">저장소 연결 오류: ${esc(connError)}</p>` : ''}
-    <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" style="${m.name === loginPick ? 'border-color:var(--blue);background:#eef4fd' : ''}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}</div>
-    ${picked ? `<div class="addrow" style="margin-bottom:8px"><input type="password" id="loginPw" placeholder="${esc(picked.name)}님 비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
-    <p class="hint" style="margin-bottom:20px">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 바꾸게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
-    ${members.length ? '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>' : `<div class="addrow" style="margin-top:10px"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
-    <p style="margin-top:24px;font-size:12px">${store.label}</p>
-  </div>`;
+  document.body.classList.add('login-bg');
+  const pageName = APP.title && APP.title !== BRAND.name ? APP.title : '';
+  $('#app').innerHTML = `${warnHtml()}<div class="login-wrap"><div class="login">
+    <div class="logo">${esc(BRAND.icon)}</div>
+    <h1>${esc(BRAND.name)}</h1>
+    <div class="sub">${esc(BRAND.sub)}</div>
+    ${pageName ? `<div class="page-tag">${esc(APP.icon || '')} ${esc(pageName)}</div>` : ''}
+    <p class="guide">${members.length ? (picked ? `<b>${esc(picked.name)}</b>님, 비밀번호를 입력하세요` : '본인 이름을 선택하세요') : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
+    ${connError ? `<p class="err">저장소 연결 오류: ${esc(connError)}</p>` : ''}
+    <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}</button>`).join('')}</div>
+    ${picked ? `<div class="pwrow"><input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
+    <p class="hint">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 새 비밀번호를 정하게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
+    ${members.length ? (picked ? '' : '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>') : `<div class="pwrow"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
+    <div class="foot">${esc(store.label)}</div>
+  </div></div>`;
   const inp = $('#newName'); if (inp) {
     const go = async () => { const m = await addMember(inp.value); if (m) openSetPassword(m, { force: true, after: () => login(m.name) }); };
     $('#addNameBtn').onclick = go;
@@ -344,7 +353,7 @@ function openMembers(counter){
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
-    ${home ? `<a class="home" href="index.html">🏠 비즈홈</a>` : ''}
+    ${home ? `<a class="home" href="index.html">🏠 ${esc(BRAND.name)}</a>` : ''}
     <div class="brand">${esc(icon || '')} ${esc(title)}</div>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     <span class="conn ${connError ? 'bad' : ''}" title="${esc(connError)}">${connError ? '연결 오류' : store.label}</span>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>비즈홈</title>
+<title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
@@ -109,7 +109,7 @@ function render(){
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
-  $('#app').innerHTML = headerHtml({ icon: '🏠', title: '비즈홈', home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
+  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
     ${editing ? `<div class="editbar">✎ 편집 중: 부서·페이지를 눌러 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제, ↑↓ 로 순서를 바꿉니다. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     <div class="depts">${depts().map((d, di, arr) => {
@@ -248,7 +248,7 @@ function openDept(id){
   $('#dName').onkeydown = e => { if (e.key === 'Enter') save(); };
   if (d) $('#dDel').onclick = () => { closeModal(); delDept(d.id); };
 }
-boot({ icon: '🏠', title: '비즈홈', tables: ['menu', 'tasks', 'leaves'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves'], render });
 </script>
 </body>
 </html>
