@@ -309,7 +309,6 @@ function openMembers(counter){
       <span class="cnt">${counter ? esc(counter(m)) : ''}</span>
       ${m.name === me ? `<button class="btn sm" data-pw="${m.id}">내 비밀번호 바꾸기</button>` : ''}
       ${admin && m.name !== me ? `<button class="btn sm" data-reset="${m.id}" ${mustChangePw(m) ? 'disabled' : ''} title="1234로 되돌리기">초기화</button>` : ''}
-      ${m.name !== me ? `<button class="btn sm" data-switch="${esc(m.name)}">이 이름으로 전환</button>` : ''}
       ${admin && m.name !== me ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
       <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button>` : ''}</div>`).join('');
   openModal(`${modalHead('팀원 관리', admin ? `<button class="btn sm" id="mmShowPw">${showPw ? '🙈 비밀번호 가리기' : '👁 비밀번호 보기'}</button>` : '')}
@@ -328,7 +327,6 @@ function openMembers(counter){
   }
   document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { const m = members.find(x => x.id === b.dataset.pw); closeModal(); openSetPassword(m, { after: () => openMembers(counter) }); });
   document.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { const m = members.find(x => x.id === b.dataset.reset); if (m && confirm(`${m.name}님 비밀번호를 1234로 초기화할까요?\n다음 로그인 때 새 비밀번호를 정하게 됩니다.`)) { await setPassword(m.id, DEFAULT_PW); openMembers(counter); } });
-  document.querySelectorAll('[data-switch]').forEach(b => b.onclick = () => { const m = members.find(x => x.name === b.dataset.switch); closeModal(); askPassword(m, () => login(m.name)); });
   document.querySelectorAll('[data-role]').forEach(b => b.onclick = async () => { await setRole(b.dataset.role, b.dataset.to); openMembers(counter); });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const m = members.find(x => x.id === b.dataset.del);
