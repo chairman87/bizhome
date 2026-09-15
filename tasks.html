@@ -77,7 +77,7 @@ const waitingMe = () => T().filter(t => t.created_by === me && t.status === '보
 
 const VIEWS = () => [
   { key: 'received', label: '받은 업무', badge: newForMe() }, { key: 'sent', label: '요청한 업무', badge: waitingMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
-  null, { key: 'assignee', label: '담당자별' }, { key: 'kanban', label: '칸반' }, { key: 'calendar', label: '달력' },
+  null, { key: 'assignee', label: '담당자별' }, { key: 'kanban', label: '상황판' }, { key: 'calendar', label: '달력' },
 ];
 
 /* 예전 형식으로 저장된 업무를 새 형식에 맞춤 */
