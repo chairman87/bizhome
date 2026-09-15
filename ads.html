@@ -19,6 +19,9 @@
   .off{background:#e5e5e5;color:#444;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
   .del{background:#fee2e2;color:#b91c1c;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
   .run{background:#dcfce7;color:#15803d;padding:0 8px;border-radius:3px;font-size:12px}
+  tr.newrow td{background:#fffbea;padding:4px 6px}
+  tr.newrow input,tr.newrow select{width:100%;border:1px solid #e0c25a;border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff}
+  tr.newrow input:focus,tr.newrow select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
   [data-edit]{cursor:text}
   [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
   .inline{width:100%;font:inherit;font-size:13px;border:2px solid var(--blue);border-radius:4px;padding:2px 6px;background:var(--bg)}
@@ -97,8 +100,19 @@ function productHtml(p){
       <select id="fm"><option value="">메타: 전체</option>${metas().map(e => `<option ${filter.meta === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
       <select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
       <span class="count">${list.length}건 · 운영중 ${listOf(p).filter(a => a.status === '운영중').length} · OFF ${listOf(p).filter(a => a.status === 'OFF').length} · 삭제·수정필요 ${listOf(p).filter(a => a.status === '삭제·수정필요').length}</span></div>
-    <div class="hint" style="margin-bottom:8px">칸을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다. 줄을 클릭하면 상세 창이 열립니다.</div>
-    ${list.length ? `<div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
+    <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
+    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
+    <tr class="newrow">
+      <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
+      <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
+      <td class="c"><input id="nEditor" list="edList2" value="${esc(lastNew.editor)}" placeholder="편집자" style="width:70px"><datalist id="edList2">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="메타" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
+      <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
+      <td class="c"><select id="nStatus">${STATUSES.map(s => `<option>${s}</option>`).join('')}</select></td>
+      <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
+    </tr>
+    ${list.length ? '' : `<tr><td colspan="8" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
@@ -108,7 +122,19 @@ function productHtml(p){
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       <td class="c"><select data-status="${a.id}" style="border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px">${STATUSES.map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}</td>
-    </tr>`).join('')}</tbody></table></div>` : `<div class="empty">${filter.q || filter.editor || filter.meta || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. <b>＋ 영상 추가</b>로 넣어 주세요.`}</div>`}`;
+    </tr>`).join('')}</tbody></table></div>`;
+}
+/* 맨 위 입력 줄에서 바로 추가 (Enter). 게재일·편집자·메타는 다음 줄에도 남겨 연달아 넣기 편하게 */
+let lastNew = { date: todayStr(), editor: '', meta: '' };
+async function addFromRow(){
+  const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
+  lastNew = { date: $('#nDate').value || todayStr(), editor: $('#nEditor').value.trim(), meta: $('#nMeta').value.trim() };
+  const row = { id: uid(), product: view, date: lastNew.date, title, editor: lastNew.editor || null, meta_account: lastNew.meta || null,
+    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
+    created_by: me, created_at: nowIso(), updated_by: me };
+  await saveRow('ads', row);
+  toast(`추가: ${title}`);
+  const t = $('#nTitle'); if (t) t.focus();
 }
 
 /* 월별 현황: 제품별·제작자별 개수 + 월~금 달력 */
@@ -142,6 +168,10 @@ function monthHtml(){
 
 function bindView(){
   const ab = $('#addBtn'); if (ab) ab.onclick = () => openAd(null, { product: view });
+  const na = $('#nAdd'); if (na) {
+    na.onclick = addFromRow;
+    document.querySelectorAll('.newrow input, .newrow select').forEach(i => { i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addFromRow(); } }; i.onclick = e => e.stopPropagation(); });
+  }
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
   const fe = $('#fe'); if (fe) fe.onchange = () => { filter.editor = fe.value; render(); };
   const fm = $('#fm'); if (fm) fm.onchange = () => { filter.meta = fm.value; render(); };
