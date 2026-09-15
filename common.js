@@ -151,13 +151,11 @@ const admins = () => members.filter(m => m.role === 'admin');
 const DEFAULT_PW = '1234';
 const pwOf = m => m.password || DEFAULT_PW;            // 비밀번호가 비어 있으면 초기값
 const mustChangePw = m => pwOf(m) === DEFAULT_PW;
-const PW_RULE = '8자 이상, 영문과 숫자를 모두 포함';
+const PW_RULE = '4자 이상 (초기 비밀번호 1234 는 쓸 수 없음)';
 function pwProblem(pw){
-  if (pw.length < 8) return '8자 이상이어야 합니다';
-  if (!/[a-zA-Z]/.test(pw)) return '영문자를 하나 이상 넣어 주세요';
-  if (!/[0-9]/.test(pw)) return '숫자를 하나 이상 넣어 주세요';
+  if (pw.length < 4) return '4자 이상이어야 합니다';
   if (/\s/.test(pw)) return '띄어쓰기는 쓸 수 없습니다';
-  if (pw === DEFAULT_PW || /^(\d)\1+$/.test(pw) || pw === '12345678') return '너무 쉬운 비밀번호입니다';
+  if (pw === DEFAULT_PW) return '초기 비밀번호 1234 는 쓸 수 없습니다';
   return '';
 }
 async function addMember(name){
