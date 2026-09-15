@@ -152,7 +152,8 @@ function openEdit(id, preset = {}){
   openModal(`${modalHead(a ? '계정 정보' : '계정 추가')}
     <div class="mb">
       <div class="f3">
-        <div class="f"><label>구분 (회사/용도)</label><input id="aGroup" value="${esc(d.group_name || '')}" list="grpList" placeholder="예: 식이해법연구소"><datalist id="grpList">${[...new Set([...GROUP_ORDER, ...groups()])].map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>
+        <div class="f"><label>구분 (회사/용도)</label><select id="aGroupSel"><option value="">(없음)</option>${[...new Set([...groups(), ...GROUP_ORDER])].map(g => `<option ${d.group_name === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new" ${d.group_name && ![...groups(), ...GROUP_ORDER].includes(d.group_name) ? 'selected' : ''}>＋ 직접 입력…</option></select>
+          <input id="aGroup" value="${esc(d.group_name || '')}" placeholder="새 구분 이름" style="margin-top:4px" ${d.group_name && ![...groups(), ...GROUP_ORDER].includes(d.group_name) ? '' : 'hidden'}></div>
         <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버, 어도비" maxlength="60"></div>
         <div class="f"><label>목적</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="예: email, ad, tool" maxlength="80"></div>
       </div>
@@ -188,6 +189,9 @@ function openEdit(id, preset = {}){
     </div>`, { wide: true });
   $('#aService').focus();
   $('#aPwEye').onclick = () => { const p = $('#aPw'); p.type = p.type === 'password' ? 'text' : 'password'; };
+  // 구분: 목록에서 고르고, "직접 입력"을 고르면 글자 칸이 나옴
+  const gs = $('#aGroupSel'), gi = $('#aGroup');
+  gs.onchange = () => { if (gs.value === '__new') { gi.hidden = false; gi.value = ''; gi.focus(); } else { gi.hidden = true; gi.value = gs.value; } };
   $('#aSave').onclick = async () => {
     const service = $('#aService').value.trim(); if (!service) { $('#aService').focus(); toast('서비스 이름을 입력하세요', true); return; }
     const fee = $('#aFee').value === '' ? null : Number($('#aFee').value);
