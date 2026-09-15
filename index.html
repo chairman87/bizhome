@@ -8,25 +8,34 @@
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
 <style>
-  .quick{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:20px}
-  .q{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--bg);cursor:pointer;display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-  .q:hover{background:var(--bg2);box-shadow:var(--shadow)}
-  .q .ic{font-size:24px}
-  .q .l{font-weight:600}
-  .q .s{font-size:12px;color:var(--fg2)}
-  .q .s b{color:var(--red)}
   .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
   .dept{border-radius:10px;padding:10px}
-  .dept h2{margin:4px 6px 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .dept h2{margin:4px 6px 10px;font-size:14px;display:flex;align-items:center;gap:6px}
   .dept h2 .nm{padding:2px 8px;border-radius:4px}
-  .dept h2 .n{font-weight:400;color:var(--fg2)}
-  .pg{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none;color:inherit;font-weight:500}
+  .dept h2 .n{font-weight:400;color:var(--fg2);flex:1}
+  .pg{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none;color:inherit;font-weight:500;width:100%;text-align:left}
   .pg:hover{box-shadow:var(--shadow);border-color:var(--line2)}
   .pg .ic{width:22px;text-align:center;font-size:16px;flex:none}
-  .pg .t{flex:1;min-width:0}
+  .pg .t{flex:1;min-width:0;word-break:break-word}
   .pg .soon{font-size:10px;color:var(--fg3);border:1px solid var(--line2);border-radius:4px;padding:0 4px;font-weight:400;white-space:nowrap}
   .pg.na{color:var(--fg2);font-weight:400}
   .pg .b{font-size:11px;color:#fff;background:var(--red);border-radius:999px;padding:0 6px;font-weight:600}
+  .addpg{border:0;background:transparent;color:inherit;opacity:.6;padding:8px 12px;width:100%;text-align:left;border-radius:8px;font-size:13px}
+  .addpg:hover{opacity:1;background:rgba(255,255,255,.6)}
+  .adddept{border:2px dashed var(--line2);border-radius:10px;padding:24px 10px;color:var(--fg3);text-align:center;background:transparent;width:100%;font-size:14px}
+  .adddept:hover{color:var(--fg);border-color:var(--fg3)}
+  /* 편집 모드 */
+  .ed{display:none;gap:2px;flex:none}
+  .editing .ed{display:inline-flex}
+  .ed button{border:1px solid transparent;background:transparent;border-radius:4px;padding:0 5px;font-size:12px;color:var(--fg2);line-height:20px}
+  .ed button:hover{background:rgba(0,0,0,.06);color:var(--fg)}
+  .ed button.del:hover{color:var(--red)}
+  .editing .pg{cursor:pointer}
+  .editing .pg .soon{display:none}
+  .editbar{background:#fff8e6;border:1px solid #f5e6a3;border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;font-size:13px;color:#7a5a00;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .emojis{display:flex;flex-wrap:wrap;gap:4px}
+  .emojis button{border:1px solid var(--line);background:var(--bg);border-radius:4px;font-size:16px;padding:2px 4px;line-height:1}
+  .emojis button:hover{background:var(--bg3)}
   .foot{margin-top:24px;font-size:12px;color:var(--fg3);text-align:center}
 </style>
 </head>
@@ -37,56 +46,209 @@
 
 <script>
 /* ================================================================
-   비즈홈 — 부서별 메뉴. href 가 있는 카드만 실제 화면이 연결되어 있음.
-   (여기 목록을 고치면 대문 메뉴가 바뀝니다)
+   비즈홈 — 부서별 메뉴 대문. 메뉴는 저장소(menu 표)에 있고 관리자가 화면에서 편집
 ================================================================ */
-const HOME = [
-  { name: '인사', bg: '#fdf3ec', tagBg: '#f9dcc4', tagFg: '#9a3b00', items: [
-    ['🥳', 'WELCOME!'], ['⏰', '근무시간 입력'], ['📅', '연차/휴가 등록'], ['🎓', '교육 결과보고'], ['🎯', 'KPI 평가/관리'], ['😎', '멤버 리스트', 'members'], ['😀', '채용공고 / 리스트'],
-  ]},
-  { name: '총무', bg: '#fdf9e7', tagBg: '#f5e6a3', tagFg: '#7a5a00', items: [
-    ['🛍️', '구매요청'], ['💳', '카드 사용내역'], ['💵', '정기결제 관리'], ['💰', '매출/비용 관리'], ['👩‍💼', '파트너사 관리'], ['🔐', '공용계정 관리'], ['🪪', '카드 관리'],
-  ]},
-  { name: '업무지원', bg: '#eef5fd', tagBg: '#cfe3fa', tagFg: '#0b4f9c', items: [
-    ['🗓️', '일일 업무보고'], ['📆', '주간업무 보고'], ['📝', '업무요청/보고', 'tasks.html'], ['🔔', '결재대기함'], ['📥', '프로그램 설치'], ['📄', '공유 자료실'], ['📒', '업무절차/SOP'], ['🖥️', '전사 회의록'],
-  ]},
-  { name: '마케팅', bg: '#fdeef3', tagBg: '#f9cfdc', tagFg: '#9c1f4a', items: [
-    ['👑', '대행팀 온보딩'], ['🧑‍🤝‍🧑', '클라이언트 온보딩'], ['🎯', '대행팀 KPI'], ['✏️', '콘텐츠 제작'], ['🎥', '영상 프리랜서 리스트'], ['🎁', '공구/협찬/시딩'], ['📄', '[온보딩] 대행팀 업무 프로세스'], ['🖥️', '커머스팀'], ['🎬', '셀프캠'], ['🔎', '연예인PPL'], ['📁', '상품기획/조사'], ['🪄', '광고소재 제작'], ['💌', 'CRM/메시지'], ['🧑‍🎤', '마케팅 활동로그'],
-  ]},
-  { name: '사업관리', bg: '#f4f4f2', tagBg: '#e2e2de', tagFg: '#444', items: [
-    ['📈', '전사 대시보드'], ['🕹️', '프로젝트 관리'], ['📉', '세일즈', 'sales.html'], ['💬', 'CS 응대가이드'], ['🧨', '리스크 관리'], ['🔒', '채용/인사 관리'],
-  ]},
+const DEPT_COLORS = {
+  orange: { n: '주황', bg: '#fdf3ec', tagBg: '#f9dcc4', tagFg: '#9a3b00' },
+  yellow: { n: '노랑', bg: '#fdf9e7', tagBg: '#f5e6a3', tagFg: '#7a5a00' },
+  blue:   { n: '파랑', bg: '#eef5fd', tagBg: '#cfe3fa', tagFg: '#0b4f9c' },
+  pink:   { n: '분홍', bg: '#fdeef3', tagBg: '#f9cfdc', tagFg: '#9c1f4a' },
+  gray:   { n: '회색', bg: '#f4f4f2', tagBg: '#e2e2de', tagFg: '#444444' },
+  green:  { n: '초록', bg: '#eef8f0', tagBg: '#cdebd3', tagFg: '#1b5e20' },
+  purple: { n: '보라', bg: '#f3effd', tagBg: '#dcd0f7', tagFg: '#4a2a8a' },
+};
+/* 페이지에 연결할 수 있는 화면 목록. 새 화면을 만들면 여기에 한 줄 추가 */
+const SCREENS = [
+  ['', '아직 없음 (준비 중)'],
+  ['tasks.html', '업무요청/보고'],
+  ['leave.html', '연차/휴가 등록'],
+  ['members', '팀원 관리'],
+  ['url', '외부 링크 (인터넷 주소 입력)'],
+];
+const EMOJIS = ['📝','📋','📅','📆','🗓️','⏰','📊','📈','📉','💰','💳','💵','🧾','🛍️','📦','📁','📄','📒','📚','🔔','✅','🎯','🏆','🎓','🧑‍💼','👥','😀','🤝','📣','💬','💌','✏️','🎨','🎬','🎥','📷','🔎','🔐','🔒','🛠️','⚙️','💻','🖥️','📱','🌐','🚀','🧨','🎁','⭐','❤️'];
+
+/* 처음 한 번 넣는 기본 메뉴. 관리자가 "메뉴 편집"으로 얼마든지 추가·수정 가능 */
+const DEFAULT_MENU = [
+  ['인사', 'orange', [['📅', '연차/휴가 등록', 'leave.html'], ['😎', '멤버 리스트', 'members']]],
+  ['업무지원', 'blue', [['📝', '업무요청/보고', 'tasks.html']]],
 ];
 
-function render(){
-  const tasks = DATA.tasks || [], leads = DATA.leads || [];
-  const inbox = tasks.filter(t => t.recipient === me && t.status === '회신대기').length;
-  const mine = tasks.filter(t => t.assignee === me && t.status !== '완료').length;
-  const over = tasks.filter(t => t.assignee === me && t.status !== '완료' && t.due_date && t.due_date < todayStr()).length;
-  const active = leads.filter(l => l.status === '대기중' || l.status === '미팅·협의중').length;
-  const waiting = leads.filter(l => l.status === '대기중').length;
-  $('#app').innerHTML = headerHtml({ icon: '🏠', title: '비즈홈' }) + `<main class="wrap">
-    <div class="quick">
-      <a class="q" href="tasks.html"><span class="ic">📝</span><div><div class="l">내 업무함</div><div class="s">내 업무 ${mine}건${over ? ` · <b>지연 ${over}건</b>` : ''}${inbox ? ` · <b>받은업무 ${inbox}건</b>` : ' · 받은업무 0건'}</div></div></a>
-      <a class="q" href="sales.html"><span class="ic">📌</span><div><div class="l">영업 미팅 현황</div><div class="s">진행중 ${active}건${waiting ? ` · <b>대기중 ${waiting}건</b>` : ''}</div></div></a>
-    </div>
-    <div class="depts">${HOME.map(d => `<section class="dept" style="background:${d.bg}">
-      <h2><span class="nm" style="background:${d.tagBg};color:${d.tagFg}">${esc(d.name)}</span><span class="n">${d.items.length}</span></h2>
-      ${d.items.map(([ic, t, href]) => {
-        const badge = href === 'tasks.html' && inbox ? `<span class="b">${inbox}</span>` : '';
-        if (href === 'members') return `<button class="pg" data-members style="width:100%;text-align:left"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="hint">${members.length}명</span></button>`;
-        if (href) return `<a class="pg" href="${href}"><span class="ic">${ic}</span><span class="t">${esc(t)}</span>${badge}</a>`;
-        return `<div class="pg na" data-soon="${esc(t)}"><span class="ic">${ic}</span><span class="t">${esc(t)}</span><span class="soon">준비 중</span></div>`;
-      }).join('')}
-    </section>`).join('')}</div>
-    <div class="foot">"준비 중" 메뉴는 아직 화면이 없습니다. 노션 캡처를 보내 주시면 하나씩 만들어 연결합니다.</div>
-  </main>`;
-  bindHeader(() => {}, null, m => `내 업무 ${tasks.filter(t => t.assignee === m.name && t.status !== '완료').length}건`);
-  document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
-  document.querySelectorAll('[data-soon]').forEach(b => b.onclick = () => toast(`"${b.dataset.soon}" 화면은 아직 준비 중입니다`));
+const M = () => DATA.menu || [];
+const bySort = (a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+const depts = () => M().filter(x => x.type === 'dept').sort(bySort);
+const pagesOf = id => M().filter(x => x.type === 'page' && x.parent === id).sort(bySort);
+let editing = false;
+let seeding = false;
+
+async function seedDefault(){
+  if (seeding) return; seeding = true;
+  try {
+    let n = 0;
+    for (const [name, color, pages] of DEFAULT_MENU) {
+      const d = { id: uid(), type: 'dept', parent: null, name, icon: null, color, href: null, sort_order: n++, created_at: nowIso(), updated_at: nowIso() };
+      await store.upsert('menu', d);
+      let k = 0;
+      for (const [icon, title, href] of pages) await store.upsert('menu', { id: uid(), type: 'page', parent: d.id, name: title, icon, color: null, href: href || null, sort_order: k++, created_at: nowIso(), updated_at: nowIso() });
+    }
+    toast('기본 메뉴를 넣었습니다. "메뉴 편집"으로 바꿀 수 있습니다');
+  } catch (e) { toast('기본 메뉴 넣기 실패: ' + (e.message || e), true); }
+  seeding = false;
+  await reload();
 }
 
-boot({ icon: '🏠', title: '비즈홈', tables: ['tasks', 'leads'], render });
+/* ---------- 화면 ---------- */
+function render(){
+  if (members.length && admins().length === 0) { ensureAdmin(); return; }
+  if (!M().length && isAdmin() && !seeding) { seedDefault(); }
+  const admin = isAdmin();
+  if (!admin) editing = false;
+  const tasks = DATA.tasks || [], leaves = DATA.leaves || [];
+  const badges = {
+    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청') || (t.created_by === me && t.status === '보고완료')).length,
+    'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
+  };
+  const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
+  $('#app').innerHTML = headerHtml({ icon: '🏠', title: '비즈홈', home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
+    ${editing ? `<div class="editbar">✎ 편집 중: 부서·페이지를 눌러 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제, ↑↓ 로 순서를 바꿉니다. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
+    <div class="depts">${depts().map((d, di, arr) => {
+      const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
+      const pages = pagesOf(d.id);
+      return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}">
+        <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
+          <span class="ed"><button data-dedit="${d.id}" title="부서 이름·색 바꾸기">✎</button><button data-dmove="${d.id}" data-dir="-1" ${di === 0 ? 'disabled' : ''} title="왼쪽으로">←</button><button data-dmove="${d.id}" data-dir="1" ${di === arr.length - 1 ? 'disabled' : ''} title="오른쪽으로">→</button><button class="del" data-ddel="${d.id}" title="부서 삭제">✕</button></span></h2>
+        ${pages.map((p, pi) => {
+          const ed = `<span class="ed"><button data-pmove="${p.id}" data-dir="-1" ${pi === 0 ? 'disabled' : ''} title="위로">↑</button><button data-pmove="${p.id}" data-dir="1" ${pi === pages.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="del" data-pdel="${p.id}" title="페이지 삭제">✕</button></span>`;
+          const inner = `<span class="ic">${esc(p.icon || '📄')}</span><span class="t">${esc(p.name)}</span>`;
+          if (editing) return `<div class="pg" data-pedit="${p.id}">${inner}${ed}</div>`;
+          if (p.href === 'members') return `<button class="pg" data-members>${inner}<span class="hint">${members.length}명</span></button>`;
+          if (p.href && /^https?:\/\//i.test(p.href)) return `<a class="pg" href="${esc(p.href)}" target="_blank" rel="noopener">${inner}<span class="hint">↗</span></a>`;
+          if (p.href) return `<a class="pg" href="${esc(p.href)}">${inner}${badges[p.href] ? `<span class="b" title="처리할 것">${badges[p.href]}</span>` : ''}</a>`;
+          return `<div class="pg na" data-soon="${esc(p.name)}">${inner}<span class="soon">준비 중</span></div>`;
+        }).join('')}
+        ${admin ? `<button class="addpg" data-padd="${d.id}">＋ 새 페이지</button>` : ''}
+      </section>`;
+    }).join('')}
+    ${admin && editing ? `<button class="adddept" id="deptAdd">＋ 부서 추가</button>` : ''}</div>
+    ${admin && !editing ? `<div class="foot">"준비 중" 페이지는 아직 화면이 없습니다. 연결할 화면이 생기면 메뉴 편집에서 지정합니다.</div>` : ''}
+  </main>`;
+  bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
+  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; render(); };
+  document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
+  document.querySelectorAll('[data-soon]').forEach(b => b.onclick = () => toast(`"${b.dataset.soon}" 화면은 아직 준비 중입니다`));
+  document.querySelectorAll('[data-padd]').forEach(b => b.onclick = () => openPage(null, b.dataset.padd));
+  document.querySelectorAll('[data-pedit]').forEach(b => b.onclick = e => { if (e.target.closest('.ed')) return; openPage(b.dataset.pedit); });
+  document.querySelectorAll('[data-pdel]').forEach(b => b.onclick = e => { e.stopPropagation(); delPage(b.dataset.pdel); });
+  document.querySelectorAll('[data-pmove]').forEach(b => b.onclick = e => { e.stopPropagation(); moveItem(b.dataset.pmove, Number(b.dataset.dir)); });
+  document.querySelectorAll('[data-dedit]').forEach(b => b.onclick = () => openDept(b.dataset.dedit));
+  document.querySelectorAll('[data-ddel]').forEach(b => b.onclick = () => delDept(b.dataset.ddel));
+  document.querySelectorAll('[data-dmove]').forEach(b => b.onclick = () => moveItem(b.dataset.dmove, Number(b.dataset.dir)));
+  const da = $('#deptAdd'); if (da) da.onclick = () => openDept(null);
+}
+
+/* ---------- 편집 동작 (관리자만) ---------- */
+function guard(){ if (!isAdmin()) { toast('관리자만 할 수 있습니다', true); return false; } return true; }
+async function moveItem(id, dir){
+  if (!guard()) return;
+  const it = M().find(x => x.id === id); if (!it) return;
+  const list = it.type === 'dept' ? depts() : pagesOf(it.parent);
+  const i = list.findIndex(x => x.id === id), j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  // 순서 번호를 0,1,2… 로 다시 매기면서 둘을 맞바꿈
+  const order = list.map(x => x.id); [order[i], order[j]] = [order[j], order[i]];
+  for (let k = 0; k < order.length; k++) { const row = M().find(x => x.id === order[k]); if (row.sort_order !== k) await saveRow('menu', { ...row, sort_order: k }); }
+}
+async function delPage(id){
+  if (!guard()) return;
+  const p = M().find(x => x.id === id); if (!p) return;
+  if (confirm(`페이지 "${p.name}" 을(를) 메뉴에서 삭제할까요?\n(연결된 화면의 내용은 지워지지 않습니다)`)) { await removeRow('menu', id); toast('삭제했습니다'); }
+}
+async function delDept(id){
+  if (!guard()) return;
+  const d = M().find(x => x.id === id); if (!d) return;
+  const pages = pagesOf(id);
+  if (!confirm(`부서 "${d.name}" 을(를) 삭제할까요?${pages.length ? `\n안에 있는 페이지 ${pages.length}개도 함께 삭제됩니다.` : ''}`)) return;
+  for (const p of pages) await removeRow('menu', p.id);
+  await removeRow('menu', id);
+  toast('부서를 삭제했습니다');
+}
+
+/* 페이지 추가·수정 창 */
+function openPage(id, deptId){
+  if (!guard()) return;
+  const p = id ? M().find(x => x.id === id) : null;
+  const d = p || { name: '', icon: '📄', parent: deptId, href: '' };
+  const isUrl = d.href && /^https?:\/\//i.test(d.href);
+  const screenVal = isUrl ? 'url' : (SCREENS.some(s => s[0] === d.href) ? (d.href || '') : '');
+  openModal(`${modalHead(p ? '페이지 수정' : '새 페이지')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>아이콘</label><input id="pIcon" value="${esc(d.icon || '')}" maxlength="4" style="font-size:18px;width:80px"></div>
+        <div class="f"><label>이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 구매요청" maxlength="40"></div>
+      </div>
+      <div class="emojis">${EMOJIS.map(e => `<button type="button" data-e="${e}">${e}</button>`).join('')}</div>
+      <div class="f2">
+        <div class="f"><label>부서</label><select id="pDept">${depts().map(x => `<option value="${x.id}" ${x.id === d.parent ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+        <div class="f"><label>누르면 열리는 화면</label><select id="pScreen">${SCREENS.map(([v, l]) => `<option value="${v}" ${screenVal === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      </div>
+      <div class="f" id="pUrlBox" ${screenVal === 'url' ? '' : 'hidden'}><label>인터넷 주소</label><input id="pUrl" value="${esc(isUrl ? d.href : '')}" placeholder="https://..."></div>
+      <div class="hint">화면이 아직 없는 메뉴는 "아직 없음"으로 두면 "준비 중"으로 표시됩니다. 새 화면을 만들면 여기서 연결합니다.</div>
+    </div>
+    <div class="mf">
+      ${p ? `<button class="btn danger left" id="pDel">삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="pSave">${p ? '저장' : '추가'}</button>
+    </div>`);
+  $('#pName').focus();
+  document.querySelectorAll('[data-e]').forEach(b => b.onclick = () => { $('#pIcon').value = b.dataset.e; });
+  $('#pScreen').onchange = () => { $('#pUrlBox').hidden = $('#pScreen').value !== 'url'; if ($('#pScreen').value === 'url') $('#pUrl').focus(); };
+  const save = async () => {
+    const name = $('#pName').value.trim(); if (!name) { $('#pName').focus(); toast('이름을 입력하세요', true); return; }
+    let href = $('#pScreen').value;
+    if (href === 'url') { href = $('#pUrl').value.trim(); if (!/^https?:\/\//i.test(href)) { $('#pUrl').focus(); toast('주소는 https:// 로 시작해야 합니다', true); return; } }
+    const parent = $('#pDept').value;
+    const n = { id: p ? p.id : uid(), type: 'page', parent, name, icon: $('#pIcon').value.trim() || '📄', color: null, href: href || null,
+      sort_order: p && p.parent === parent ? p.sort_order : pagesOf(parent).length, created_at: p ? p.created_at : nowIso() };
+    closeModal();
+    await saveRow('menu', n);
+    toast(p ? '저장했습니다' : '페이지를 추가했습니다');
+  };
+  $('#pSave').onclick = save;
+  $('#pName').onkeydown = e => { if (e.key === 'Enter') save(); };
+  if (p) $('#pDel').onclick = () => { closeModal(); delPage(p.id); };
+}
+
+/* 부서 추가·수정 창 */
+function openDept(id){
+  if (!guard()) return;
+  const d = id ? M().find(x => x.id === id) : null;
+  const cur = d ? d.color : Object.keys(DEPT_COLORS)[depts().length % Object.keys(DEPT_COLORS).length];
+  openModal(`${modalHead(d ? '부서 수정' : '새 부서')}
+    <div class="mb">
+      <div class="f"><label>부서 이름 *</label><input id="dName" value="${esc(d ? d.name : '')}" placeholder="예: 개발" maxlength="20"></div>
+      <div class="f"><label>색</label><div class="emojis" id="dColors">${Object.entries(DEPT_COLORS).map(([k, c]) => `<button type="button" data-c="${k}" style="background:${c.tagBg};color:${c.tagFg};padding:4px 10px;font-size:13px;border-color:${k === cur ? c.tagFg : 'transparent'}">${c.n}</button>`).join('')}</div></div>
+    </div>
+    <div class="mf">
+      ${d ? `<button class="btn danger left" id="dDel">삭제</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="dSave">${d ? '저장' : '추가'}</button>
+    </div>`);
+  let color = cur;
+  $('#dName').focus();
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { color = b.dataset.c; document.querySelectorAll('[data-c]').forEach(x => x.style.borderColor = x.dataset.c === color ? DEPT_COLORS[x.dataset.c].tagFg : 'transparent'); });
+  const save = async () => {
+    const name = $('#dName').value.trim(); if (!name) { $('#dName').focus(); toast('부서 이름을 입력하세요', true); return; }
+    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: null, sort_order: d ? d.sort_order : depts().length, created_at: d ? d.created_at : nowIso() };
+    closeModal();
+    await saveRow('menu', n);
+    toast(d ? '저장했습니다' : '부서를 추가했습니다');
+  };
+  $('#dSave').onclick = save;
+  $('#dName').onkeydown = e => { if (e.key === 'Enter') save(); };
+  if (d) $('#dDel').onclick = () => { closeModal(); delDept(d.id); };
+}
+
+boot({ icon: '🏠', title: '비즈홈', tables: ['menu', 'tasks', 'leaves'], render });
 </script>
 </body>
 </html>

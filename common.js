@@ -144,13 +144,26 @@ async function removeRow(table, id){
 }
 
 /* ---------- 팀원 ---------- */
+/* 관리자: 메뉴 편집, 팀원 삭제, 관리자 지정 가능. 처음 등록한 사람이 자동으로 관리자 */
+const isAdmin = () => { const m = members.find(x => x.name === me); return !!(m && m.role === 'admin'); };
+const admins = () => members.filter(m => m.role === 'admin');
 async function addMember(name){
   name = (name || '').trim(); if (!name) return null;
   const dup = members.find(m => m.name === name);
   if (dup) { toast('이미 있는 이름입니다', true); return dup; }
-  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length };
+  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length, role: members.length === 0 ? 'admin' : 'member' };
   await saveRow('members', m);
   return m;
+}
+async function setRole(id, role){
+  if (!isAdmin()) { toast('관리자만 할 수 있습니다', true); return; }
+  const m = members.find(x => x.id === id); if (!m) return;
+  if (m.role === 'admin' && role !== 'admin' && admins().length <= 1) { toast('관리자가 최소 한 명은 있어야 합니다', true); return; }
+  await saveRow('members', { ...m, role });
+}
+/* 예전 데이터에 관리자가 없으면 첫 팀원을 관리자로 */
+async function ensureAdmin(){
+  if (members.length && admins().length === 0) { const m = [...members].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]; await saveRow('members', { ...m, role: 'admin' }); }
 }
 function memberColor(name){ const m = members.find(x => x.name === name); return m ? m.color : '#adb5bd'; }
 const avatar = name => `<span class="av" style="background:${memberColor(name)}">${esc(String(name || '?').charAt(0))}</span>`;
@@ -195,14 +208,16 @@ function commentsHtml(list){
 }
 
 function openMembers(counter){
-  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span><span class="cnt">${counter ? esc(counter(m)) : ''}</span>
+  const admin = isAdmin();
+  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span><span class="cnt">${counter ? esc(counter(m)) : ''}</span>
       <button class="btn sm" data-switch="${esc(m.name)}">이 이름으로 전환</button>
-      <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button></div>`).join('');
+      ${admin ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
+      <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button>` : ''}</div>`).join('');
   openModal(`${modalHead('팀원 관리')}
     <div class="mb">
       <div>${rows || '<span class="hint">팀원이 없습니다</span>'}</div>
       <div class="addrow" style="justify-content:flex-start"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><button class="btn" id="mmAdd">추가</button></div>
-      <div class="hint">팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다. 삭제된 사람은 다시 접속할 때 이름을 새로 등록해야 합니다.</div>
+      <div class="hint">${admin ? '관리자는 메뉴 편집, 팀원 삭제, 관리자 지정을 할 수 있습니다. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '팀원 삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
     </div>
     <div class="mf"><button class="btn left" id="mmLogout">다른 사용자로 접속</button><button class="btn primary" data-close>닫기</button></div>`);
   $('#mmLogout').onclick = () => { closeModal(); logout(); };
@@ -210,21 +225,25 @@ function openMembers(counter){
   $('#mmAdd').onclick = add;
   $('#mmName').onkeydown = e => { if (e.key === 'Enter') add(); };
   document.querySelectorAll('[data-switch]').forEach(b => b.onclick = () => { closeModal(); login(b.dataset.switch); });
+  document.querySelectorAll('[data-role]').forEach(b => b.onclick = async () => { await setRole(b.dataset.role, b.dataset.to); openMembers(counter); });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const m = members.find(x => x.id === b.dataset.del);
-    if (m && confirm(`팀원 "${m.name}" 을(를) 목록에서 삭제할까요?`)) { await removeRow('members', m.id); openMembers(counter); }
+    if (!m) return;
+    if (m.role === 'admin' && admins().length <= 1) { toast('마지막 관리자는 삭제할 수 없습니다', true); return; }
+    if (confirm(`팀원 "${m.name}" 을(를) 목록에서 삭제할까요?`)) { await removeRow('members', m.id); openMembers(counter); }
   });
 }
 
 /* ---------- 상단 바 ---------- */
-function headerHtml({ icon, title, tabs = [], active, newLabel }){
+function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
   return `<header class="top">
-    <a class="home" href="index.html">🏠 비즈홈</a>
+    ${home ? `<a class="home" href="index.html">🏠 비즈홈</a>` : ''}
     <div class="brand">${esc(icon || '')} ${esc(title)}</div>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     <span class="conn ${connError ? 'bad' : ''}" title="${esc(connError)}">${connError ? '연결 오류' : store.label}</span>
+    ${extra}
     ${newLabel ? `<button class="btn primary" id="newBtn">+ <span class="newtxt">${esc(newLabel)}</span></button>` : ''}
-    <button class="me" id="meBtn" title="사용자 바꾸기 / 팀원 관리">${avatar(me)}${esc(me)}</button>
+    <button class="me" id="meBtn" title="사용자 바꾸기 / 팀원 관리">${avatar(me)}${esc(me)}${isAdmin() ? '<span class="hint" style="font-size:10px">관리자</span>' : ''}</button>
   </header>`;
 }
 function bindHeader(onTab, onNew, counter){

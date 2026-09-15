@@ -3,10 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>내 업무함</title>
+<title>업무요청/보고</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
+<style>
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:22px;font-weight:700;margin-top:2px}
+  .stat .v.red{color:var(--red)}
+  .stat .v.orange{color:var(--orange)}
+  .stat .v.purple{color:#6d28d9}
+  .stat .s{font-size:11px;color:var(--fg3)}
+  .prog{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .bar{display:inline-block;width:80px;height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;vertical-align:middle}
+  .bar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+  .bar.done i{background:var(--green)}
+  .bar.over i{background:var(--red)}
+  .pct{font-size:12px;color:var(--fg2);font-variant-numeric:tabular-nums;min-width:32px}
+  .pr{font-size:12px;white-space:nowrap}
+  .pr.high{color:var(--red);font-weight:600}
+  .pr.low{color:var(--fg3)}
+  .last{font-size:12px;color:var(--fg2);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
+  .last .at{color:var(--fg3);margin-left:4px}
+  .range{display:flex;align-items:center;gap:10px}
+  .range input[type=range]{flex:1;padding:0}
+  .range .pct{font-size:14px;font-weight:600;color:var(--fg);min-width:44px;text-align:right}
+  .quick{display:flex;gap:4px;flex-wrap:wrap}
+  .quick button{border:1px solid var(--line2);background:var(--bg);border-radius:4px;padding:1px 8px;font-size:12px;color:var(--fg2)}
+  .quick button:hover{background:var(--bg3);color:var(--fg)}
+  .cm .body .pg{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:0 6px;font-size:11px;font-weight:600;margin-right:6px}
+  .cm.report .body{background:#eef4fd}
+  .cm.revise .body{background:#fff4e5}
+  .card .item .bar{width:56px}
+  .card .avg{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg2)}
+  .card .avg .bar{flex:1;width:auto}
+</style>
 </head>
 <body>
 <div id="app"></div>
@@ -15,114 +48,159 @@
 
 <script>
 /* ================================================================
-   내 업무함
-   상태 흐름: 내 업무 → (요청하기) → 회신대기 → (회신하기) → 회신완료 → (완료처리) → 완료
+   업무요청/보고
+   흐름: 요청자가 업무 요청(담당자 지정) → 담당자가 [진행 보고](진행률+내용)
+         → 100% 보고하면 "보고완료" → 요청자가 [완료처리] 또는 [보완 요청]
 ================================================================ */
-const ST = { '내 업무': ['#e9e9e7','#5a5a55'], '회신대기': ['#fbeccc','#9a6700'], '회신완료': ['#dbeafe','#1d4ed8'], '완료': ['#dcfce7','#15803d'] };
+const ST = { '요청': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8'], '보고완료': ['#ede9fe','#6d28d9'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
 const STATUSES = Object.keys(ST);
-const stHtml = s => tag(s, ...(ST[s] || ST['내 업무']), true);
+const PRIORITIES = ['높음', '보통', '낮음'];
+const stHtml = s => tag(s, ...(ST[s] || ST['요청']), true);
+const prHtml = p => p === '높음' ? '<span class="pr high">! 높음</span>' : p === '낮음' ? '<span class="pr low">낮음</span>' : '';
 const T = () => DATA.tasks || [];
 
-let view = LS.get('tasks_view') || 'mine';
-let filter = { q: '', person: '', status: '' };
-let sort = { key: 'start_date', dir: 'desc' };
+let view = LS.get('tasks_view') || 'received';
+let filter = { q: '', person: '', status: '', hideDone: true };
+let sort = { key: 'due_date', dir: 'asc' };
 const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 let expanded = {};
 
-const VIEWS = [
-  ['mine', '내 업무'], ['inbox', '받은업무'], ['all', '전체'], ['archive', '보관함'],
-  null,
-  ['assignee', '담당자별'], ['kanban', '칸반'], ['calendar', '달력'],
-];
 const isDone = t => t.status === '완료';
-const isOver = t => !isDone(t) && t.due_date && t.due_date < todayStr();
+const isOver = t => !isDone(t) && t.status !== '보류' && t.due_date && t.due_date < todayStr();
+const prog = t => Math.max(0, Math.min(100, Number(t.progress) || 0));
+const progHtml = t => `<span class="prog"><span class="bar ${isDone(t) ? 'done' : isOver(t) ? 'over' : ''}"><i style="width:${prog(t)}%"></i></span><span class="pct">${prog(t)}%</span></span>`;
 const cmtHtml = t => (t.comments && t.comments.length) ? `<span class="cmt">💬 ${t.comments.length}</span>` : '';
-const inboxCount = () => T().filter(t => t.recipient === me && t.status === '회신대기').length;
+function lastLog(t){ const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'comment' || x.kind === 'revise'); return c ? `<span class="last" title="${esc(c.by)}: ${esc(c.text)}">${esc(c.by)}: ${esc(c.text)}<span class="at">${fmtDateTime(c.at).slice(5)}</span></span>` : '<span class="hint">-</span>'; }
+const newForMe = () => T().filter(t => t.assignee === me && t.status === '요청').length;
+const waitingMe = () => T().filter(t => t.created_by === me && t.status === '보고완료').length;
+
+const VIEWS = () => [
+  { key: 'received', label: '받은 업무', badge: newForMe() }, { key: 'sent', label: '요청한 업무', badge: waitingMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
+  null, { key: 'assignee', label: '담당자별' }, { key: 'kanban', label: '칸반' }, { key: 'calendar', label: '달력' },
+];
 
 /* 예전 형식으로 저장된 업무를 새 형식에 맞춤 */
 function normalize(table, t){
-  return { ...t,
-    status: STATUSES.includes(t.status) ? t.status : '내 업무',
+  const map = { '내 업무': '요청', '대기': '요청', '회신대기': '진행중', '회신완료': '보고완료' };
+  const status = STATUSES.includes(t.status) ? t.status : (map[t.status] || '요청');
+  return { ...t, status,
+    progress: t.progress != null ? Number(t.progress) : (status === '완료' ? 100 : 0),
+    priority: PRIORITIES.includes(t.priority) ? t.priority : '보통',
     start_date: t.start_date || (t.created_at ? t.created_at.slice(0, 10) : null),
-    recipient: t.recipient || null,
     comments: Array.isArray(t.comments) ? t.comments : [],
   };
 }
+const log = (text, kind = 'log', progress) => ({ by: me, text, at: nowIso(), kind, ...(progress != null ? { progress } : {}) });
 
 /* ---------- 저장 동작 ---------- */
-async function setStatus(id, status, logComment){
-  const t = T().find(x => x.id === id); if (!t) return;
-  if (t.status === status && !logComment) return;
-  const n = { ...t, status, completed_at: status === '완료' ? (t.completed_at || nowIso()) : null, comments: [...(t.comments || [])] };
-  if (logComment) n.comments.push(logComment);
+async function setStatus(id, status){
+  const t = T().find(x => x.id === id); if (!t || t.status === status) return;
+  const n = { ...t, status, comments: [...(t.comments || []), log(`상태 변경: ${t.status} → ${status}`)] };
+  if (status === '완료') n.progress = 100;
+  n.completed_at = status === '완료' ? (t.completed_at || nowIso()) : null;
   await saveRow('tasks', n);
 }
-async function requestTask(id){
-  const t = T().find(x => x.id === id); if (!t) return;
-  if (!t.recipient) { openTask(id, {}, { focus: 'recipient', note: '요청하려면 수신자를 먼저 정해야 합니다' }); return; }
-  await setStatus(id, '회신대기', { by: me, text: `${t.recipient}님에게 요청`, at: nowIso(), kind: 'log' });
-  toast(`${t.recipient}님에게 요청했습니다`);
-}
 async function completeTask(id){
-  await setStatus(id, '완료', { by: me, text: '완료 처리', at: nowIso(), kind: 'log' });
+  const t = T().find(x => x.id === id); if (!t) return;
+  await saveRow('tasks', { ...t, status: '완료', progress: 100, completed_at: nowIso(), comments: [...(t.comments || []), log('완료 처리')] });
   toast('완료 처리했습니다. 보관함으로 옮겨졌습니다');
 }
-function openReply(id){
+/* 담당자가 진행 상황을 보고 */
+function openReport(id){
   const t = T().find(x => x.id === id); if (!t) return;
-  openModal(`${modalHead('회신하기')}
+  openModal(`${modalHead('진행 보고', stHtml(t.status))}
     <div class="mb">
-      <div><span class="title">${esc(t.title)}</span><div class="hint">${esc(t.assignee || '')}님의 요청 · 마감 ${fmtDate(t.due_date) || '-'}</div></div>
-      <div class="f"><label>회신 내용</label><textarea id="rText" placeholder="처리 결과, 답변, 첨부 링크 등을 적어 주세요"></textarea></div>
-      <div class="hint">회신하면 상태가 <b>회신완료</b>로 바뀌고, 요청한 ${esc(t.assignee || '담당자')}님이 확인 후 완료 처리합니다.</div>
+      <div><span class="title">${esc(t.title)}</span><div class="hint">${esc(t.created_by || '')}님 요청 · 마감 ${fmtDate(t.due_date) || '-'} · 현재 ${prog(t)}%</div></div>
+      <div class="f"><label>진행률</label>
+        <div class="range"><input type="range" id="rProg" min="0" max="100" step="5" value="${prog(t)}"><span class="pct" id="rPct">${prog(t)}%</span></div>
+        <div class="quick">${[25, 50, 75, 100].map(p => `<button type="button" data-q="${p}">${p}%</button>`).join('')}</div></div>
+      <div class="f"><label>보고 내용</label><textarea id="rText" placeholder="어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요"></textarea></div>
+      <div class="hint">100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.</div>
     </div>
-    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">회신 보내기</button></div>`);
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">보고하기</button></div>`);
+  const rp = $('#rProg'), pct = $('#rPct');
+  rp.oninput = () => pct.textContent = rp.value + '%';
+  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { rp.value = b.dataset.q; pct.textContent = rp.value + '%'; });
   $('#rText').focus();
   $('#rSend').onclick = async () => {
-    const text = $('#rText').value.trim();
+    const p = Number(rp.value), text = $('#rText').value.trim();
+    const status = p >= 100 ? '보고완료' : (t.status === '보류' ? '보류' : '진행중');
     closeModal();
-    await setStatus(id, '회신완료', { by: me, text: text || '회신 완료', at: nowIso(), kind: 'reply' });
-    toast('회신했습니다');
+    await saveRow('tasks', { ...t, progress: p, status, comments: [...(t.comments || []), log(text || `진행률 ${p}% 보고`, 'report', p)] });
+    toast(p >= 100 ? '보고완료로 표시했습니다' : '진행 상황을 보고했습니다');
+  };
+}
+/* 요청자가 보완 요청 */
+function openRevise(id){
+  const t = T().find(x => x.id === id); if (!t) return;
+  openModal(`${modalHead('보완 요청')}
+    <div class="mb">
+      <div><span class="title">${esc(t.title)}</span><div class="hint">담당 ${esc(t.assignee || '')}</div></div>
+      <div class="f"><label>보완할 내용</label><textarea id="vText" placeholder="무엇을 더 해야 하는지 적어 주세요"></textarea></div>
+      <div class="hint">상태가 다시 <b>진행중</b>이 되고 담당자의 받은 업무에 표시됩니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="vSend">보완 요청</button></div>`);
+  $('#vText').focus();
+  $('#vSend').onclick = async () => {
+    const text = $('#vText').value.trim(); if (!text) { $('#vText').focus(); toast('보완할 내용을 적어 주세요', true); return; }
+    closeModal();
+    await saveRow('tasks', { ...t, status: '진행중', progress: Math.min(prog(t), 90), comments: [...(t.comments || []), log(text, 'revise')] });
+    toast('보완을 요청했습니다');
   };
 }
 
 /* ---------- 화면 ---------- */
 function render(){
-  const tabs = VIEWS.map(v => v ? { key: v[0], label: v[1], badge: v[0] === 'inbox' ? inboxCount() : 0 } : null);
-  $('#app').innerHTML = headerHtml({ icon: '📝', title: '내 업무함', tabs, active: view, newLabel: '새 업무 등록' })
-    + `<main class="wrap">${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
-  bindHeader(k => { view = k; LS.set('tasks_view', k); render(); }, () => openTask(null), m => `남은 업무 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
+  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무요청/보고', tabs: VIEWS(), active: view, newLabel: '업무 요청' })
+    + `<main class="wrap">${view === 'all' ? statsHtml() : ''}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
+  bindHeader(k => { view = k; LS.set('tasks_view', k); render(); }, () => openTask(null), m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   const fa = $('#fa'); if (fa) fa.onchange = () => { filter.person = fa.value; renderView(); };
   const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; renderView(); };
+  const fh = $('#fh'); if (fh) fh.onchange = () => { filter.hideDone = fh.checked; renderView(); };
   bindView();
+}
+function statsHtml(){
+  const all = T(), open = all.filter(t => !isDone(t) && t.status !== '보류');
+  const over = all.filter(isOver), today = open.filter(t => t.due_date === todayStr());
+  const week = new Date(); week.setDate(week.getDate() - 7);
+  const done7 = all.filter(t => isDone(t) && t.completed_at && new Date(t.completed_at) >= week).length;
+  const avg = open.length ? Math.round(open.reduce((a, t) => a + prog(t), 0) / open.length) : 0;
+  return `<div class="stats">
+    <div class="stat"><div class="l">진행 중인 업무</div><div class="v">${open.length}</div><div class="s">평균 진행률 ${avg}%</div></div>
+    <div class="stat"><div class="l">마감 지남</div><div class="v ${over.length ? 'red' : ''}">${over.length}</div><div class="s">${over.length ? '확인이 필요합니다' : '없음'}</div></div>
+    <div class="stat"><div class="l">오늘 마감</div><div class="v ${today.length ? 'orange' : ''}">${today.length}</div><div class="s">${fmtDate(todayStr())}</div></div>
+    <div class="stat"><div class="l">확인 기다리는 보고</div><div class="v ${all.filter(t => t.status === '보고완료').length ? 'purple' : ''}">${all.filter(t => t.status === '보고완료').length}</div><div class="s">요청자가 완료 처리할 것</div></div>
+    <div class="stat"><div class="l">최근 7일 완료</div><div class="v">${done7}</div><div class="s">전체 완료 ${all.filter(isDone).length}건</div></div>
+  </div>`;
 }
 function baseList(){
   switch (view) {
-    case 'mine':    return T().filter(t => t.assignee === me && !isDone(t));
-    case 'inbox':   return T().filter(t => t.recipient === me && t.status === '회신대기');
-    case 'archive': return T().filter(isDone);
-    default:        return T();
+    case 'received': return T().filter(t => t.assignee === me);
+    case 'sent':     return T().filter(t => t.created_by === me);
+    case 'archive':  return T().filter(isDone);
+    default:         return T();
   }
 }
 function filtered(){
   const q = filter.q.trim().toLowerCase();
   return baseList().filter(t =>
-    (!q || [t.title, t.memo, t.assignee, t.recipient].some(v => (v || '').toLowerCase().includes(q))) &&
-    (!filter.person || t.assignee === filter.person || t.recipient === filter.person) &&
-    (!filter.status || t.status === filter.status));
+    (!q || [t.title, t.memo, t.assignee, t.created_by].some(v => (v || '').toLowerCase().includes(q))) &&
+    (!filter.person || t.assignee === filter.person || t.created_by === filter.person) &&
+    (!filter.status || t.status === filter.status) &&
+    (!filter.hideDone || !isDone(t) || view === 'archive' || view === 'kanban'));
 }
 function viewHtml(){
   const list = filtered();
-  return ({ mine: tableHtml, inbox: tableHtml, all: tableHtml, archive: tableHtml, assignee: assigneeHtml, kanban: kanbanHtml, calendar: calHtml })[view](list);
+  return ({ received: tableHtml, sent: tableHtml, all: tableHtml, archive: tableHtml, assignee: assigneeHtml, kanban: kanbanHtml, calendar: calHtml })[view](list);
 }
 function countText(){ return `${filtered().length}건${view !== 'archive' ? ` · 지연 ${baseList().filter(isOver).length}건` : ''}`; }
 function toolbarHtml(){
-  const showPeople = !['mine', 'inbox'].includes(view);
-  const showStatus = ['all', 'assignee'].includes(view);
   return `<div class="toolbar">
-    <input type="search" id="fq" placeholder="검색 (업무내용, 비고, 이름)" value="${esc(filter.q)}">
-    ${showPeople ? `<select id="fa"><option value="">사람: 전체</option>${memberOptions(filter.person)}</select>` : ''}
-    ${showStatus ? `<select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
+    <input type="search" id="fq" placeholder="검색 (업무, 비고, 이름)" value="${esc(filter.q)}">
+    ${!['received', 'sent'].includes(view) ? `<select id="fa"><option value="">사람: 전체</option>${memberOptions(filter.person)}</select>` : ''}
+    ${!['kanban', 'archive'].includes(view) ? `<select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+    <label class="hint" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fh" ${filter.hideDone ? 'checked' : ''}> 완료 숨기기</label>` : ''}
     <span class="count">${countText()}</span>
   </div>`;
 }
@@ -131,45 +209,45 @@ function renderView(){
   const c = document.querySelector('.toolbar .count'); if (c) c.innerHTML = countText();
   bindView();
 }
-const sortTasks = list => sortBy(list, sort, { status: s => STATUSES.indexOf(s) });
+const sortTasks = list => sortBy(list, sort, { status: s => STATUSES.indexOf(s), priority: p => PRIORITIES.indexOf(p), progress: p => Number(p) || 0 });
 
 /* 표 */
 const EMPTY = {
-  mine: '내가 담당자인 업무가 없습니다.<br>오른쪽 위 <b>+ 새 업무 등록</b>으로 추가하세요.',
-  inbox: '나에게 요청되어 회신을 기다리는 업무가 없습니다.',
-  all: '등록된 업무가 없습니다.',
+  received: '나에게 요청된 업무가 없습니다.',
+  sent: '내가 요청한 업무가 없습니다.<br>오른쪽 위 <b>+ 업무 요청</b>으로 팀원에게 업무를 요청하세요.',
+  all: '등록된 업무가 없습니다.<br>오른쪽 위 <b>+ 업무 요청</b>으로 추가하세요.',
   archive: '완료된 업무가 아직 없습니다.',
 };
 function tableHtml(list){
   if (!list.length) return `<div class="empty">${filter.q || filter.person || filter.status ? '조건에 맞는 업무가 없습니다.' : EMPTY[view]}</div>`;
-  const cols = [['title', '업무내용'], ['status', '상태'], ['start_date', '시작일자'], ['due_date', '마감기한']];
-  if (view !== 'mine') cols.push(['assignee', '담당자']);
-  if (view !== 'inbox') cols.push(['recipient', '수신자']);
-  const acts = view === 'mine' ? '요청하기 / 완료처리' : view === 'inbox' ? '회신하기' : view === 'all' ? '처리' : '';
-  const th = cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('') + (acts ? `<th>${acts}</th>` : '') + '<th>비고</th>';
+  const cols = [['title', '업무']];
+  if (view !== 'received') cols.push(['assignee', '담당자']);
+  if (view !== 'sent') cols.push(['created_by', '요청자']);
+  cols.push(['due_date', '마감일'], ['status', '상태'], ['progress', '진행률'], ['priority', '우선순위']);
+  const th = cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
   const rows = sortTasks(list).map(t => {
     const cells = {
       title: `<td><span class="title">${esc(t.title)}</span>${cmtHtml(t)}</td>`,
-      status: `<td>${stHtml(t.status)}</td>`,
-      start_date: `<td><span class="date ${t.start_date ? '' : 'muted'}">${fmtDate(t.start_date) || '-'}</span></td>`,
-      due_date: `<td>${dueHtml(t.due_date, isDone(t))}</td>`,
       assignee: `<td>${who(t.assignee)}</td>`,
-      recipient: `<td>${who(t.recipient)}</td>`,
+      created_by: `<td>${who(t.created_by)}</td>`,
+      due_date: `<td>${dueHtml(t.due_date, isDone(t))}</td>`,
+      status: `<td>${stHtml(t.status)}</td>`,
+      progress: `<td>${progHtml(t)}</td>`,
+      priority: `<td>${prHtml(t.priority) || '<span class="pr">보통</span>'}</td>`,
     };
-    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}">${cols.map(([k]) => cells[k]).join('')}
-      ${acts ? `<td class="act">${actionButtons(t)}</td>` : ''}<td class="memo" title="${esc(t.memo || '')}">${esc(t.memo || '')}</td></tr>`;
+    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}">${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
   }).join('');
-  return `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
-/* 노션처럼 행 안에 넣는 동작 버튼: 내가 담당자면 요청하기·완료처리, 내가 수신자면 회신하기 */
+/* 행 안의 처리 버튼: 담당자는 진행 보고, 요청자는 완료처리·보완 요청 */
 function actionButtons(t){
   if (isDone(t)) return '';
   let h = '';
-  if (t.assignee === me) {
-    h += `<button class="btn sm" data-req="${t.id}" ${t.status === '회신대기' ? 'disabled' : ''}>${t.status === '회신대기' ? '요청됨' : t.status === '회신완료' ? '다시 요청' : '요청하기'}</button>`;
-    h += `<button class="btn sm" data-fin="${t.id}">완료처리</button>`;
+  if (t.assignee === me && t.status !== '보고완료') h += `<button class="btn sm primary" data-report="${t.id}">진행 보고</button>`;
+  if (t.created_by === me || isAdmin()) {
+    if (t.status === '보고완료') h += `<button class="btn sm primary" data-fin="${t.id}">완료처리</button><button class="btn sm" data-revise="${t.id}">보완 요청</button>`;
+    else if (t.assignee !== me) h += `<button class="btn sm" data-fin="${t.id}">완료처리</button>`;
   }
-  if (t.recipient === me && t.status === '회신대기') h += `<button class="btn sm" data-reply="${t.id}">회신하기</button>`;
   return h;
 }
 
@@ -180,16 +258,14 @@ function assigneeHtml(list){
     const mine = sortTasks(list.filter(t => (t.assignee || null) === name));
     if (!name && !mine.length) return '';
     const open = mine.filter(t => !isDone(t)), over = mine.filter(isOver);
-    const waiting = T().filter(t => t.recipient === name && t.status === '회신대기').length;
+    const done = T().filter(t => (t.assignee || null) === name && isDone(t)).length;
+    const avg = open.length ? Math.round(open.reduce((a, t) => a + prog(t), 0) / open.length) : 0;
     const key = name || '__none';
     const shown = expanded[key] ? mine : mine.slice(0, 8);
     return `<div class="card">
-      <h3>${name ? `${avatar(name)}${esc(name)}` : '담당자 없음'}
-        <span class="stat">남은 ${open.length}건${over.length ? ` · <b>지연 ${over.length}건</b>` : ''}${waiting ? ` · 회신할 ${waiting}건` : ''} · 완료 ${mine.length - open.length}건</span></h3>
-      ${shown.map(t => `<div class="item ${isDone(t) ? 'done' : ''}" data-id="${t.id}">
-          <input type="checkbox" data-check="${t.id}" ${isDone(t) ? 'checked' : ''} title="완료 처리">
-          <span class="t">${esc(t.title)}</span>${t.recipient ? `<span class="hint">→ ${esc(t.recipient)}</span>` : ''}${stHtml(t.status)}${dueHtml(t.due_date, isDone(t))}
-        </div>`).join('') || '<div class="item" style="color:var(--fg3);cursor:default">업무 없음</div>'}
+      <h3>${name ? `${avatar(name)}${esc(name)}` : '담당자 없음'}<span class="stat">진행 중 ${open.length}건${over.length ? ` · <b>지연 ${over.length}건</b>` : ''} · 완료 ${done}건</span></h3>
+      ${open.length ? `<div class="avg">평균 진행률 <span class="bar"><i style="width:${avg}%"></i></span><b>${avg}%</b></div>` : ''}
+      ${shown.map(t => `<div class="item ${isDone(t) ? 'done' : ''}" data-id="${t.id}"><span class="t">${esc(t.title)}</span>${prHtml(t.priority)}${stHtml(t.status)}<span class="bar ${isOver(t) ? 'over' : ''}"><i style="width:${prog(t)}%"></i></span><span class="pct">${prog(t)}%</span>${dueHtml(t.due_date, isDone(t))}</div>`).join('') || '<div class="item" style="color:var(--fg3);cursor:default">업무 없음</div>'}
       ${mine.length > shown.length ? `<div class="more" data-more="${key}">+ ${mine.length - shown.length}건 더 보기</div>` : ''}
     </div>`;
   }).join('')}</div>`;
@@ -197,12 +273,13 @@ function assigneeHtml(list){
 
 /* 칸반 */
 function kanbanHtml(list){
-  return `<div class="kanban" style="grid-template-columns:repeat(4,minmax(0,1fr))">${STATUSES.map(s => {
+  return `<div class="kanban" style="grid-template-columns:repeat(${STATUSES.length},minmax(0,1fr))">${STATUSES.map(s => {
     const items = sortTasks(list.filter(t => t.status === s));
     return `<div class="col" data-col="${s}"><h3>${stHtml(s)}<span class="n">${items.length}</span></h3>
       ${items.map(t => `<div class="kc" draggable="true" data-id="${t.id}">
         <div class="t">${esc(t.title)}${cmtHtml(t)}</div>
-        <div class="meta">${who(t.assignee)}${t.recipient ? `→ ${who(t.recipient)}` : ''}${dueHtml(t.due_date, isDone(t))}</div>
+        <div class="meta">${who(t.assignee)}${dueHtml(t.due_date, isDone(t))}${prHtml(t.priority)}</div>
+        <div class="meta" style="margin-top:4px">${progHtml(t)}</div>
         <div class="mv">${STATUSES.filter(x => x !== s).map(x => `<button data-move="${t.id}" data-to="${x}">→ ${x}</button>`).join('')}</div>
       </div>`).join('')}</div>`;
   }).join('')}</div>`;
@@ -214,19 +291,18 @@ function calHtml(list){
     date: t => t.due_date,
     label: t => `${t.assignee ? `<span class="who">${esc(t.assignee)} · </span>` : ''}${esc(t.title)}`,
     cls: t => isDone(t) ? 'done' : isOver(t) ? 'over' : '',
-    hint: '마감기한 기준 · 날짜를 누르면 그 날짜로 새 업무를 만듭니다',
+    hint: '마감일 기준 · 날짜를 누르면 그 날짜 마감으로 새 업무를 요청합니다',
   });
 }
 
 function bindView(){
   const v = $('#view');
-  bindSort(sort, renderView, { title: 'asc' });
+  bindSort(sort, renderView, { title: 'asc', assignee: 'asc', created_by: 'asc', due_date: 'asc', status: 'asc', priority: 'asc' });
   v.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button')) return; openTask(tr.dataset.id); });
-  v.querySelectorAll('[data-req]').forEach(b => b.onclick = e => { e.stopPropagation(); requestTask(b.dataset.req); });
+  v.querySelectorAll('[data-report]').forEach(b => b.onclick = e => { e.stopPropagation(); openReport(b.dataset.report); });
   v.querySelectorAll('[data-fin]').forEach(b => b.onclick = e => { e.stopPropagation(); completeTask(b.dataset.fin); });
-  v.querySelectorAll('[data-reply]').forEach(b => b.onclick = e => { e.stopPropagation(); openReply(b.dataset.reply); });
-  v.querySelectorAll('.item[data-id]').forEach(el => el.onclick = e => { if (e.target.type === 'checkbox') return; openTask(el.dataset.id); });
-  v.querySelectorAll('input[data-check]').forEach(c => c.onchange = () => c.checked ? completeTask(c.dataset.check) : setStatus(c.dataset.check, '내 업무'));
+  v.querySelectorAll('[data-revise]').forEach(b => b.onclick = e => { e.stopPropagation(); openRevise(b.dataset.revise); });
+  v.querySelectorAll('.item[data-id]').forEach(el => el.onclick = () => openTask(el.dataset.id));
   v.querySelectorAll('[data-more]').forEach(el => el.onclick = () => { expanded[el.dataset.more] = true; renderView(); });
   v.querySelectorAll('.kc').forEach(c => {
     c.onclick = e => { if (e.target.tagName === 'BUTTON') return; openTask(c.dataset.id); };
@@ -242,65 +318,83 @@ function bindView(){
   bindCalendar(cal, renderView, day => openTask(null, { due_date: day }), id => openTask(id));
 }
 
-/* ---------- 업무 등록·수정 창 ---------- */
-function openTask(id, preset = {}, opts = {}){
+/* ---------- 업무 요청·수정 창 ---------- */
+function openTask(id, preset = {}){
   const t = id ? T().find(x => x.id === id) : null;
-  const d = t || { title: '', assignee: me, recipient: '', start_date: todayStr(), due_date: '', status: '내 업무', memo: '', comments: [], ...preset };
-  openModal(`${modalHead(t ? '업무 내용' : '새 업무 등록', t ? stHtml(t.status) : '')}
+  const d = t || { title: '', assignee: '', priority: '보통', start_date: todayStr(), due_date: '', status: '요청', progress: 0, memo: '', comments: [], ...preset };
+  const logs = t ? (t.comments || []) : [];
+  openModal(`${modalHead(t ? '업무 내용' : '업무 요청', t ? stHtml(t.status) : '')}
     <div class="mb">
-      <div class="f"><label>업무내용 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="무엇을 해야 하나요?" maxlength="200"></div>
+      <div class="f"><label>업무 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="무엇을 해야 하나요?" maxlength="200"></div>
       <div class="f2">
-        <div class="f"><label>담당자 (업무를 책임지는 사람)</label><select id="mAssignee"><option value="">없음</option>${memberOptions(d.assignee)}</select></div>
-        <div class="f"><label>수신자 (요청을 받을 사람)</label><select id="mRecipient"><option value="">없음</option>${memberOptions(d.recipient)}</select></div>
+        <div class="f"><label>담당자 (누가 할 일인가요)</label><select id="mAssignee"><option value="">미정</option>${memberOptions(d.assignee)}</select></div>
+        <div class="f"><label>우선순위</label><select id="mPriority">${PRIORITIES.map(p => `<option ${d.priority === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
       </div>
       <div class="f2">
-        <div class="f"><label>시작일자</label><input type="date" id="mStart" value="${esc(d.start_date || '')}"></div>
-        <div class="f"><label>마감기한</label><input type="date" id="mDue" value="${esc(d.due_date || '')}"></div>
+        <div class="f"><label>시작일</label><input type="date" id="mStart" value="${esc(d.start_date || '')}"></div>
+        <div class="f"><label>마감일</label><input type="date" id="mDue" value="${esc(d.due_date || '')}"></div>
       </div>
-      <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
-        <div class="hint">${opts.note ? `<span class="warn">${esc(opts.note)}</span>` : '수신자를 정하고 저장하면 상태가 <b>회신대기</b>가 되어 상대방의 받은업무에 나타납니다.'}</div></div>
-      <div class="f"><label>비고</label><textarea id="mMemo" placeholder="자세한 내용, 참고 링크 등">${esc(d.memo || '')}</textarea></div>
-      ${t ? commentsHtml(t.comments || []) + `<div class="hint">등록: ${esc(t.created_by || '')} ${fmtDateTime(t.created_at)}${t.completed_at ? ` · 완료: ${fmtDateTime(t.completed_at)}` : ''}</div>` : ''}
+      ${t ? `<div class="f2">
+        <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="f"><label>진행률</label><div class="range"><input type="range" id="mProg" min="0" max="100" step="5" value="${prog(d)}"><span class="pct" id="mPct">${prog(d)}%</span></div></div>
+      </div>` : ''}
+      <div class="f"><label>요청 내용 (자세한 설명, 참고 링크 등)</label><textarea id="mMemo">${esc(d.memo || '')}</textarea></div>
+      ${t ? `<div class="comments"><h4>보고·기록 ${logs.length ? `(${logs.length})` : ''}</h4>
+        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${c.kind === 'report' ? tag('보고', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'revise' ? tag('보완 요청', '#fbeccc', '#9a6700') + ' ' : ''}${c.progress != null ? `<span class="pg">${c.progress}%</span>` : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span></div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
+        <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>
+      </div>
+      <div class="hint">요청: ${esc(t.created_by || '')} ${fmtDateTime(t.created_at)}${t.completed_at ? ` · 완료: ${fmtDateTime(t.completed_at)}` : ''}</div>` : ''}
     </div>
     <div class="mf">
       ${t ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
+      ${t && t.assignee === me && !isDone(t) ? `<button class="btn" id="mReport">진행 보고</button>` : ''}
       <button class="btn" data-close>취소</button>
-      <button class="btn primary" id="mSave">${t ? '저장' : '등록'}</button>
+      <button class="btn primary" id="mSave">${t ? '저장' : '요청하기'}</button>
     </div>`);
-  (opts.focus === 'recipient' ? $('#mRecipient') : $('#mTitle')).focus();
-  $('#mRecipient').onchange = () => { const s = $('#mStatus'); if ($('#mRecipient').value && s.value === '내 업무') s.value = '회신대기'; if (!$('#mRecipient').value && s.value === '회신대기') s.value = '내 업무'; };
+  $('#mTitle').focus();
+  const mProg = $('#mProg'), mPct = $('#mPct'), mStatus = $('#mStatus');
+  if (mProg) {
+    mProg.oninput = () => { mPct.textContent = mProg.value + '%'; const p = Number(mProg.value); if (p >= 100 && mStatus.value !== '완료') mStatus.value = '보고완료'; else if (p > 0 && p < 100 && (mStatus.value === '요청' || mStatus.value === '완료' || mStatus.value === '보고완료')) mStatus.value = '진행중'; };
+    mStatus.onchange = () => { if (mStatus.value === '완료') { mProg.value = 100; mPct.textContent = '100%'; } };
+  }
   const save = async (extra) => {
-    const status = $('#mStatus').value;
+    const status = mStatus ? mStatus.value : '요청';
     const n = {
       id: t ? t.id : uid(),
       title: $('#mTitle').value.trim(),
       assignee: $('#mAssignee').value || null,
-      recipient: $('#mRecipient').value || null,
+      priority: $('#mPriority').value,
       start_date: $('#mStart').value || null,
       due_date: $('#mDue').value || null,
       status,
+      progress: mProg ? Number(mProg.value) : 0,
       memo: $('#mMemo').value.trim() || null,
       comments: t ? [...(t.comments || [])] : [],
       created_by: t ? t.created_by : me,
       created_at: t ? t.created_at : nowIso(),
       completed_at: status === '완료' ? (t && t.completed_at) || nowIso() : null,
     };
-    if (!n.title) { $('#mTitle').focus(); toast('업무내용을 입력하세요', true); return; }
-    if (n.status === '회신대기' && !n.recipient) { $('#mRecipient').focus(); toast('회신대기 상태는 수신자가 필요합니다', true); return; }
+    if (status === '완료') n.progress = 100;
+    if (!n.title) { $('#mTitle').focus(); toast('업무 내용을 입력하세요', true); return; }
+    if (!t && !n.assignee) { $('#mAssignee').focus(); toast('담당자를 정해 주세요', true); return; }
+    if (t && n.assignee !== t.assignee) n.comments.push(log(`담당자 변경: ${t.assignee || '미정'} → ${n.assignee || '미정'}`));
+    if (t && n.status !== t.status) n.comments.push(log(`상태 변경: ${t.status} → ${n.status}`));
+    if (t && n.progress !== prog(t) && n.status === t.status) n.comments.push(log(`진행률 ${prog(t)}% → ${n.progress}%`, 'log', n.progress));
     if (extra) n.comments.push(extra);
     closeModal();
     await saveRow('tasks', n);
-    toast(t ? '저장했습니다' : '업무를 등록했습니다' + (n.status === '회신대기' ? ` · ${n.recipient}님에게 요청됨` : ''));
+    toast(t ? '저장했습니다' : `${n.assignee}님에게 업무를 요청했습니다`);
   };
   $('#mSave').onclick = () => save();
   $('#mTitle').onkeydown = e => { if (e.key === 'Enter') save(); };
   if (t) {
-    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text) { $('#cText').focus(); return; } save({ by: me, text, at: nowIso(), kind: 'comment' }); };
+    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text) { $('#cText').focus(); return; } save(log(text, 'comment')); };
     $('#mDelete').onclick = async () => { if (confirm(`"${t.title}" 업무를 삭제할까요?`)) { closeModal(); await removeRow('tasks', t.id); toast('삭제했습니다'); } };
+    const rb = $('#mReport'); if (rb) rb.onclick = () => { closeModal(); openReport(t.id); };
   }
 }
 
-boot({ icon: '📝', title: '내 업무함', tables: ['tasks'], render, normalize });
+boot({ icon: '📝', title: '업무요청/보고', tables: ['tasks'], render, normalize });
 </script>
 </body>
 </html>
