@@ -286,7 +286,7 @@ function openModal(html, opts = {}){
   const dirty = () => snapshot() !== initial;
   const tryClose = () => { if (!dirty() || confirm('입력한 내용이 사라집니다. 창을 닫을까요?')) closeModal(); };
   if (!opts.locked) {   // locked: Esc·✕ 로도 닫을 수 없음(처음 비밀번호 정하기)
-    document.onkeydown = e => { if (e.key === 'Escape' && !e.target.closest('select')) tryClose(); };
+    document.onkeydown = e => { if (e.key === 'Escape' && !(e.target && e.target.closest && e.target.closest('select'))) tryClose(); };
     document.querySelectorAll('[data-close]').forEach(b => b.onclick = tryClose);
   } else {
     document.onkeydown = null;
