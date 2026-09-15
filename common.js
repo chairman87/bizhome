@@ -110,18 +110,26 @@ async function boot(app){
 let reloadTimer;
 function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 150); }
 async function reload(){
-  try {
-    for (const t of [...new Set([...APP.tables, 'members'])]) {
+  const missing = [];
+  for (const t of [...new Set([...APP.tables, 'members'])]) {
+    try {
       let rows = await store.load(t);
       if (APP.normalize && t !== 'members') rows = rows.map(r => APP.normalize(t, r));
       DATA[t] = rows;
+      if (t === 'members') connError = '';
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (t === 'members') connError = msg;                       // 팀원 표를 못 읽으면 진짜 연결 오류
+      else if (/does not exist|not find|schema cache/i.test(msg)) { missing.push(t); DATA[t] = undefined; }   // 표가 아직 없음(설정 SQL 미실행)
+      else { connError = msg; }
     }
-    members = DATA.members;
-    connError = '';
-    // 저장소에 비밀번호 칸이 없으면(설정 SQL 미실행) 비밀번호가 저장되지 않으므로 경고
-    schemaWarn = (store === SupabaseStore && members.length && !('password' in members[0]))
-      ? '저장소에 비밀번호 칸이 없어 비밀번호가 저장되지 않습니다. Supabase SQL Editor 에서 다음 한 줄을 실행하세요: alter table members add column if not exists password text;' : '';
-  } catch (e) { connError = e.message || String(e); }
+  }
+  members = DATA.members || [];
+  // 설정 SQL 이 덜 실행된 경우 관리자에게 안내
+  const warns = [];
+  if (store === SupabaseStore && members.length && !('password' in members[0])) warns.push('비밀번호 칸이 없어 비밀번호가 저장되지 않습니다 → alter table members add column if not exists password text;');
+  if (missing.length) warns.push(`저장소에 "${missing.join(', ')}" 표가 없어 이 기능이 동작하지 않습니다 → supabase-setup.sql 의 해당 부분을 Supabase SQL Editor 에서 실행하세요.`);
+  schemaWarn = warns.join(' / ');
   renderApp();
 }
 let schemaWarn = '';
