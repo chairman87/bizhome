@@ -128,6 +128,7 @@ async function reload(){
   // 설정 SQL 이 덜 실행된 경우 관리자에게 안내
   const warns = [];
   if (store === SupabaseStore && members.length && !('password' in members[0])) warns.push('비밀번호 칸이 없어 비밀번호가 저장되지 않습니다 → alter table members add column if not exists password text;');
+  if (store === SupabaseStore && members.length && !('hire_date' in members[0])) warns.push('입사일 칸이 없어 연차 자동 계산이 저장되지 않습니다 → sql-hire.sql 을 Supabase SQL Editor 에서 실행하세요.');
   if (missing.length) warns.push(`저장소에 "${missing.join(', ')}" 표가 없어 이 기능이 동작하지 않습니다 → supabase-setup.sql 의 해당 부분을 Supabase SQL Editor 에서 실행하세요.`);
   schemaWarn = warns.join(' / ');
   renderApp();
