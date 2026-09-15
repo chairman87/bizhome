@@ -122,7 +122,7 @@ async function reload(){
   renderApp();
 }
 function renderApp(){
-  if (!me || (members.length && !members.some(m => m.name === me))) { me = ''; renderLogin(); return; }
+  if (!me || !members.some(m => m.name === me)) { me = ''; renderLogin(); return; }
   APP.render();
 }
 /* 한 줄 저장(화면 먼저 바꾸고 저장소에 씀). 실패하면 알리고 다시 읽음 */
