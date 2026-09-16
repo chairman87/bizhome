@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회사 서류함</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609161357">
+<script src="common.js?v=202609161357"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .doc{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;display:grid;gap:8px;cursor:pointer}
+  .doc:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .doc .hd{display:flex;align-items:center;gap:8px}
+  .doc .ty{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .doc .ti{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc .co{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .doc .fl{display:grid;gap:4px}
+  .doc .fi{display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:6px;padding:6px 8px;font-size:13px}
+  .doc .fi .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc .fi .sz{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .doc .fi a.btn{padding:2px 8px;font-size:12px;text-decoration:none;white-space:nowrap}
+  .doc .ft{display:flex;gap:10px;font-size:12px;color:var(--fg2);flex-wrap:wrap}
+  .doc .ft .exp.soon{color:var(--orange);font-weight:600}
+  .doc .ft .exp.over{color:var(--red);font-weight:600}
+  .doc .memo{font-size:12px;color:var(--fg2);white-space:pre-wrap}
+  .doc.lock{border-style:dashed}
+  .grp{margin:18px 0 8px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .grp .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .co-tag{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .co-tag.a{background:#dcfce7;color:#166534}.co-tag.b{background:#fce7f3;color:#9d174d}.co-tag.c{background:var(--bg3);color:var(--fg2)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   회사 서류함: 사업자등록증, 통장 사본, 인감, 계약서 등 회사 공식 문서 보관
+   한 줄 = { company(회사), doc_type(종류), title, files[{name,url,path,size,type}], issued_date(발급일), expire_date(유효기간),
+             memo, admin_only(관리자만 보기), created_by, created_at, updated_by, updated_at }
+   파일은 Supabase Storage 'files' 보관함 docs/ 폴더에 저장. 내려받기는 ?download= 주소로 바로 저장됨
+================================================================ */
+const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티', '공통'];
+const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b', '공통': 'c' };
+const DEFAULT_TYPES = ['사업자등록증', '통장 사본', '법인인감·사용인감', '임대차 계약서', '계약서', '등기부등본', '로고·CI', '기타'];
+const D = () => (DATA.docs || []).filter(d => isAdmin() || !d.admin_only);
+const types = () => [...new Set([...DEFAULT_TYPES, ...(DATA.docs || []).map(d => d.doc_type).filter(Boolean)])];
+const fmtSize = n => !n ? '' : n < 1024 * 1024 ? `${Math.round(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`;
+const dlUrl = f => `${f.url}?download=${encodeURIComponent(f.name || 'file')}`;   // 바로 내려받기 주소
+const expCls = d => { if (!d.expire_date) return ''; const n = dayDiff(d.expire_date); return n < 0 ? 'over' : n <= 30 ? 'soon' : ''; };
+const expText = d => { if (!d.expire_date) return ''; const n = dayDiff(d.expire_date); return n < 0 ? `만료 지남 (${fmtDate(d.expire_date)})` : n === 0 ? '오늘 만료' : n <= 30 ? `${n}일 뒤 만료 (${fmtDate(d.expire_date)})` : `유효기간 ${fmtDate(d.expire_date)}`; };
+
+let view = LS.get('docs_view') || 'all';
+let q = '';
+
+function normalize(table, d){ return { ...d, files: Array.isArray(d.files) ? d.files : [], admin_only: !!d.admin_only, company: COMPANIES.includes(d.company) ? d.company : '공통' }; }
+
+const VIEWS = () => [{ key: 'all', label: '전체' }, ...COMPANIES.map(c => ({ key: c, label: c, badge: 0 })), null, { key: 'expire', label: '유효기간 확인', badge: D().filter(d => expCls(d)).length }];
+
+function render(){
+  const list = D().filter(d => (view === 'all' || (view === 'expire' ? expCls(d) : d.company === view)) && (!q || [d.title, d.doc_type, d.memo, d.company, ...(d.files.map(f => f.name))].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
+  $('#app').innerHTML = headerHtml({ icon: '📁', title: '회사 서류함', tabs: VIEWS(), active: view })
+    + `<main class="wrap">
+    ${!DATA.docs ? `<div class="empty">서류함 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-docs.sql)을 실행하세요.' : ''}</div>` : `
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 서류 올리기</button>
+      <input type="search" id="fq" placeholder="검색 (제목, 종류, 파일 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
+      <span class="count">${list.length}건${isAdmin() ? ` · 🔒 관리자만 ${D().filter(d => d.admin_only).length}건` : ''}</span></div>
+    <div class="hint" style="margin-bottom:8px">파일 옆 <b>내려받기</b>를 누르면 바로 저장되고, <b>열기</b>는 새 창에서 봅니다. 카드를 누르면 고칠 수 있습니다.</div>
+    ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'expire' ? '유효기간이 가까운 서류가 없습니다.' : '아직 올린 서류가 없습니다.<br>위 <b>＋ 서류 올리기</b>로 사업자등록증 등을 올려 두세요.'}</div>`}`}
+  </main>`;
+  bindHeader(k => { view = k; LS.set('docs_view', k); render(); }, null, m => `올린 서류 ${(DATA.docs || []).filter(d => d.created_by === m.name).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openDoc(null);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('.doc[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openDoc(el.dataset.id); });
+}
+/* 종류별로 묶어서 카드로 */
+function groupsHtml(list){
+  const order = types();
+  const groups = {};
+  list.forEach(d => { const k = d.doc_type || '기타'; (groups[k] = groups[k] || []).push(d); });
+  return Object.keys(groups).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)).map(k => `
+    <div class="grp">${esc(k)} <span class="n">${groups[k].length}건</span></div>
+    <div class="grid">${groups[k].sort((a, b) => COMPANIES.indexOf(a.company) - COMPANIES.indexOf(b.company) || String(a.title).localeCompare(String(b.title))).map(cardHtml).join('')}</div>`).join('');
+}
+function cardHtml(d){
+  return `<div class="doc ${d.admin_only ? 'lock' : ''}" data-id="${d.id}">
+    <div class="hd"><span class="co-tag ${CO_CLS[d.company] || 'c'}">${esc(d.company)}</span><span class="ti" title="${esc(d.title)}">${esc(d.title)}</span>${d.admin_only ? '<span title="관리자만 보기">🔒</span>' : ''}</div>
+    <div class="fl">${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : /pdf$/i.test(f.name) ? '📕' : '📄'}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<div class="hint">파일이 없습니다</div>'}</div>
+    <div class="ft">${d.issued_date ? `<span>발급 ${fmtDate(d.issued_date)}</span>` : ''}${d.expire_date ? `<span class="exp ${expCls(d)}">${expText(d)}</span>` : ''}<span>${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))}</span></div>
+    ${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+  </div>`;
+}
+
+/* 올리기·수정 창 */
+function openDoc(id){
+  const d0 = id ? (DATA.docs || []).find(x => x.id === id) : null;
+  const d = d0 || { company: COMPANIES.includes(view) ? view : COMPANIES[0], doc_type: '', title: '', files: [], issued_date: '', expire_date: '', memo: '', admin_only: false };
+  const at = attachBox('dFiles', d.files, 'docs');
+  openModal(`${modalHead(d0 ? '서류 수정' : '서류 올리기')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>회사</label><select id="dCo">${COMPANIES.map(c => `<option ${d.company === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="f"><label>종류</label><input id="dType" list="typeList" value="${esc(d.doc_type || '')}" placeholder="예: 사업자등록증"><datalist id="typeList">${types().map(t => `<option value="${esc(t)}">`).join('')}</datalist></div>
+      </div>
+      <div class="f"><label>제목 *</label><input id="dTitle" value="${esc(d.title)}" placeholder="예: 사업자등록증 (2026년 발급)" maxlength="150"></div>
+      <div class="f"><label>파일 *</label>${at.html}</div>
+      <div class="f2">
+        <div class="f"><label>발급일</label><input type="date" id="dIssued" value="${esc(d.issued_date || '')}"></div>
+        <div class="f"><label>유효기간 (있으면)</label><input type="date" id="dExpire" value="${esc(d.expire_date || '')}"></div>
+      </div>
+      <div class="f"><label>메모</label><textarea id="dMemo" placeholder="어디에 쓰는 서류인지, 주의할 점 등">${esc(d.memo || '')}</textarea></div>
+      ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="dAdmin" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기 (인감, 통장 사본 등 민감한 서류)</label>` : ''}
+    </div>
+    <div class="mf">
+      ${d0 && (d0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="dDelete">삭제</button>' : ''}
+      <button class="btn" data-close>취소</button><button class="btn primary" id="dSave">${d0 ? '저장' : '올리기'}</button>
+    </div>`, { wide: true });
+  at.bind();
+  $('#dTitle').focus();
+  $('#dType').onchange = () => { if (!$('#dTitle').value.trim()) $('#dTitle').value = $('#dType').value; };
+  $('#dSave').onclick = async () => {
+    const title = $('#dTitle').value.trim() || $('#dType').value.trim();
+    if (!title) { $('#dTitle').focus(); toast('제목을 입력하세요', true); return; }
+    if (!at.files.length) { toast('파일을 올려 주세요', true); return; }
+    const row = { id: d0 ? d0.id : uid(), company: $('#dCo').value, doc_type: $('#dType').value.trim() || '기타', title, files: at.files,
+      issued_date: $('#dIssued').value || null, expire_date: $('#dExpire').value || null, memo: $('#dMemo').value.trim() || null,
+      admin_only: $('#dAdmin') ? $('#dAdmin').checked : (d0 ? d0.admin_only : false),
+      created_by: d0 ? d0.created_by : me, created_at: d0 ? d0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('docs', row); toast(d0 ? '저장했습니다' : '서류를 올렸습니다');
+  };
+  const del = $('#dDelete'); if (del) del.onclick = async () => {
+    if (!confirm(`"${d0.title}" 서류와 첨부 파일을 삭제할까요?`)) return;
+    closeModal(); for (const f of d0.files) if (f.path) deleteFile(f.path);
+    await removeRow('docs', d0.id); toast('삭제했습니다');
+  };
+}
+
+boot({ icon: '📁', title: '회사 서류함', tables: ['docs'], render, normalize });
+</script>
+</body>
+</html>
