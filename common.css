@@ -215,6 +215,9 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
   .f2,.f3{grid-template-columns:1fr}
 }
 
+.top .brand{color:inherit;text-decoration:none;cursor:pointer}
+.top .brand:hover{opacity:.75}
+
 /* 첨부 파일 (캡처 이미지 등) */
 .files{display:flex;flex-wrap:wrap;gap:8px}
 .file{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;width:150px}

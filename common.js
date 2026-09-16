@@ -438,7 +438,7 @@ function openMembers(counter){
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
     ${home ? `<a class="home" href="index.html">🏠 ${esc(BRAND.name)}</a>` : ''}
-    <div class="brand">${esc(icon || '')} ${esc(title)}</div>
+    <a class="brand" href="${esc(location.pathname.split('/').pop() || 'index.html')}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}
