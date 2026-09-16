@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>결제</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609161357">
+<script src="common.js?v=202609161357"></script>
+<style>
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:22px;font-weight:700;margin-top:2px}
+  .stat .v.red{color:var(--red)}
+  .stat .v.orange{color:var(--orange)}
+  .stat .v.green{color:var(--green)}
+  .stat .s{font-size:11px;color:var(--fg3)}
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .amt{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;font-weight:600}
+  .amt.in{color:var(--green)}
+  .amt.out{color:var(--fg)}
+  td.acct{font-size:12px;color:var(--fg2);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .flow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--fg2)}
+  .flow .step{padding:3px 10px;border-radius:999px;background:var(--bg3)}
+  .flow .step.on{background:#dbeafe;color:#1d4ed8;font-weight:600}
+  .flow .step.done{background:#dcfce7;color:#15803d}
+  .flow .step.no{background:#fee2e2;color:#b91c1c}
+  .acctbox{display:flex;gap:8px;align-items:center;background:#f8fafc;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:14px}
+  .acctbox b{font-size:16px;letter-spacing:.3px}
+  .acctbox .sp{flex:1}
+  .sum table{min-width:0;width:100%}
+  .sum td.amt,.sum th.r{text-align:right}
+  .sum tr.total td{font-weight:700;background:var(--bg2)}
+  .cat{font-size:12px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .cat.in{background:#dcfce7;color:#166534}
+  .nav-m{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .nav-m b{font-size:16px;min-width:110px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   결제 (지출·수입 관리)
+   흐름: 팀원이 지출 건 등록(내역·금액·받는 계좌·증빙 첨부)
+         → 관리자(대표)가 [결재] 또는 [반려]
+         → 담당 팀원이 은행 앱에서 이체한 뒤 [이체 완료] 표시
+   한 줄 = { title, date, category, kind(비용/수입), amount, payee(받는 곳), account(계좌), due_date(이체 희망일),
+             memo, files, invoice(세금계산서 필요), status(결재대기/결재완료/이체완료/반려),
+             approved_by/at, paid_by/at, reject_reason, comments, created_by, created_at }
+================================================================ */
+const ST = { '결재대기': ['#fbeccc', '#9a6700'], '결재완료': ['#dbeafe', '#1d4ed8'], '이체완료': ['#dcfce7', '#15803d'], '반려': ['#fee2e2', '#b91c1c'] };
+const STATUSES = Object.keys(ST);
+const KINDS = ['비용', '수입'];
+const DEFAULT_CATS = ['광고비', '인건비', '외주비', '구독료', '소모품', '식대·회식', '교통비', '세금·공과금', '매출', '기타'];
+const P = () => DATA.payments || [];
+const stHtml = s => tag(s, ...(ST[s] || ST['결재대기']), true);
+const won = n => (n == null || n === '' || isNaN(Number(n))) ? '-' : Number(n).toLocaleString('ko-KR') + '원';
+const num = s => { const n = Number(String(s || '').replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; };
+const cats = () => [...new Set([...DEFAULT_CATS, ...P().map(p => p.category).filter(Boolean)])];
+const isIn = p => p.kind === '수입';
+
+let view = LS.get('pay_view') || 'all';
+let filter = { q: '', status: '', kind: '', cat: '', person: '' };
+let sort = { key: 'date', dir: 'desc' };
+let month = todayStr().slice(0, 7);
+
+function normalize(table, p){
+  return { ...p, kind: KINDS.includes(p.kind) ? p.kind : '비용', status: STATUSES.includes(p.status) ? p.status : '결재대기',
+    amount: p.amount != null ? Number(p.amount) : 0, comments: Array.isArray(p.comments) ? p.comments : [], files: Array.isArray(p.files) ? p.files : [] };
+}
+const log = (text, kind = 'log', files) => ({ by: me, text, at: nowIso(), kind, ...(files && files.length ? { files } : {}) });
+
+const waitApprove = () => P().filter(p => p.status === '결재대기').length;
+const waitPay = () => P().filter(p => p.status === '결재완료').length;
+const VIEWS = () => [
+  { key: 'all', label: '전체' }, { key: 'approve', label: '결재 대기', badge: isAdmin() ? waitApprove() : 0 }, { key: 'pay', label: '이체 대기', badge: waitPay() },
+  { key: 'done', label: '완료' }, { key: 'mine', label: '내가 올린 것' }, null, { key: 'month', label: '월별 합계' },
+];
+
+/* ---------- 저장 동작 ---------- */
+async function approve(id){
+  const p = P().find(x => x.id === id); if (!p) return;
+  if (!isAdmin()) { toast('관리자만 결재할 수 있습니다', true); return; }
+  await saveRow('payments', { ...p, status: '결재완료', approved_by: me, approved_at: nowIso(), reject_reason: null, comments: [...p.comments, log('결재 완료', 'approve')] });
+  toast('결재했습니다. 이체 대기로 넘어갑니다');
+}
+function openReject(id){
+  const p = P().find(x => x.id === id); if (!p) return;
+  if (!isAdmin()) { toast('관리자만 반려할 수 있습니다', true); return; }
+  openModal(`${modalHead('반려')}
+    <div class="mb"><div><span class="title">${esc(p.title)}</span><div class="hint">${won(p.amount)} · ${esc(p.created_by || '')} 등록</div></div>
+      <div class="f"><label>반려 사유</label><textarea id="rjText" placeholder="왜 반려하는지 적어 주세요"></textarea></div></div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn danger" id="rjSend">반려</button></div>`);
+  $('#rjText').focus();
+  $('#rjSend').onclick = async () => {
+    const text = $('#rjText').value.trim(); if (!text) { $('#rjText').focus(); toast('사유를 적어 주세요', true); return; }
+    closeModal();
+    await saveRow('payments', { ...p, status: '반려', reject_reason: text, approved_by: me, approved_at: nowIso(), comments: [...p.comments, log(text, 'reject')] });
+    toast('반려했습니다');
+  };
+}
+/* 이체 완료: 은행 앱에서 보낸 뒤 표시 (이체 확인 캡처 첨부 가능) */
+function openPaid(id){
+  const p = P().find(x => x.id === id); if (!p) return;
+  const at = attachBox('pdFiles', [], 'payments');
+  openModal(`${modalHead(isIn(p) ? '입금 확인' : '이체 완료 표시')}
+    <div class="mb">
+      <div><span class="title">${esc(p.title)}</span><div class="hint">${won(p.amount)} · ${esc(p.payee || '')}</div></div>
+      ${p.account ? acctBox(p) : ''}
+      <div class="f"><label>메모 (선택)</label><textarea id="pdText" placeholder="${isIn(p) ? '입금 확인한 내용' : '은행 앱에서 이체한 뒤 남길 메모'}"></textarea>${at.html}</div>
+      <div class="hint">${isIn(p) ? '입금이 들어온 것을 확인했으면 눌러 주세요.' : '은행 앱에서 이체를 마친 뒤 눌러 주세요. 이체 확인 화면을 캡처해 붙여 두면 나중에 찾기 편합니다.'}</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pdSend">${isIn(p) ? '입금 확인' : '이체 완료'}</button></div>`);
+  at.bind(); bindCopy();
+  $('#pdSend').onclick = async () => {
+    closeModal();
+    await saveRow('payments', { ...p, status: '이체완료', paid_by: me, paid_at: nowIso(), comments: [...p.comments, log($('#pdText').value.trim() || (isIn(p) ? '입금 확인' : '이체 완료'), 'paid', at.files)] });
+    toast(isIn(p) ? '입금 확인으로 표시했습니다' : '이체 완료로 표시했습니다');
+  };
+}
+async function reopen(id){
+  const p = P().find(x => x.id === id); if (!p) return;
+  if (!confirm('다시 결재 대기 상태로 되돌릴까요?')) return;
+  await saveRow('payments', { ...p, status: '결재대기', approved_by: null, approved_at: null, paid_by: null, paid_at: null, reject_reason: null, comments: [...p.comments, log('결재 대기로 되돌림')] });
+}
+const acctBox = p => `<div class="acctbox"><span>🏦</span><b id="acctText">${esc(p.account)}</b><span class="sp"></span><button type="button" class="btn sm" data-copy="${esc(p.account)}">복사</button></div>`;
+function bindCopy(){ document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('계좌를 복사했습니다'); } catch { toast('복사가 안 됩니다. 직접 선택해 복사하세요', true); } }); }
+
+/* ---------- 화면 ---------- */
+function render(){
+  const actions = `<div class="actions"><button class="btn primary" id="newBtn2">＋ 지출 등록</button><button class="btn" id="inBtn" title="들어올 돈(매출 입금 등)을 기록">＋ 수입 등록</button>
+    <span class="flow"><span class="step">1 등록</span>→<span class="step">2 대표 결재</span>→<span class="step">3 은행 앱 이체</span>→<span class="step">4 이체 완료 표시</span></span></div>`;
+  $('#app').innerHTML = headerHtml({ icon: '💳', title: '결제', tabs: VIEWS(), active: view })
+    + `<main class="wrap">${!DATA.payments ? `<div class="empty">결제 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-payments.sql)을 실행하세요.' : ''}</div>` : actions + (view === 'month' ? monthHtml() : (view === 'all' ? statsHtml() : '') + toolbarHtml() + `<div id="view">${tableHtml(filtered())}</div>`)}</main>`;
+  bindHeader(k => { view = k; LS.set('pay_view', k); render(); }, null, m => `올린 건 ${P().filter(p => p.created_by === m.name).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openPay(null, { kind: '비용' });
+  const ib = $('#inBtn'); if (ib) ib.onclick = () => openPay(null, { kind: '수입' });
+  const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
+  ['status', 'kind', 'cat', 'person'].forEach(k => { const el = $('#f_' + k); if (el) el.onchange = () => { filter[k] = el.value; renderView(); }; });
+  const mp = $('#mPrev'); if (mp) {
+    const shift = n => { const [y, m] = month.split('-').map(Number); month = ymd(new Date(y, m - 1 + n, 1)).slice(0, 7); render(); };
+    mp.onclick = () => shift(-1); $('#mNext').onclick = () => shift(1); $('#mToday').onclick = () => { month = todayStr().slice(0, 7); render(); };
+  }
+  bindView();
+}
+function statsHtml(){
+  const m = P().filter(p => (p.date || '').startsWith(todayStr().slice(0, 7)));
+  const out = m.filter(p => !isIn(p) && p.status !== '반려').reduce((a, p) => a + p.amount, 0), inn = m.filter(p => isIn(p) && p.status !== '반려').reduce((a, p) => a + p.amount, 0);
+  const wa = P().filter(p => p.status === '결재대기'), wp = P().filter(p => p.status === '결재완료');
+  return `<div class="stats">
+    <div class="stat"><div class="l">결재 대기</div><div class="v ${wa.length ? 'orange' : ''}">${wa.length}</div><div class="s">${won(wa.reduce((a, p) => a + p.amount, 0))}</div></div>
+    <div class="stat"><div class="l">이체 대기 (결재 끝남)</div><div class="v ${wp.length ? 'red' : ''}">${wp.length}</div><div class="s">${won(wp.reduce((a, p) => a + p.amount, 0))}</div></div>
+    <div class="stat"><div class="l">이번 달 지출</div><div class="v">${won(out)}</div><div class="s">${m.filter(p => !isIn(p)).length}건</div></div>
+    <div class="stat"><div class="l">이번 달 수입</div><div class="v green">${won(inn)}</div><div class="s">순액 ${won(inn - out)}</div></div>
+  </div>`;
+}
+function baseList(){
+  switch (view) {
+    case 'approve': return P().filter(p => p.status === '결재대기');
+    case 'pay':     return P().filter(p => p.status === '결재완료');
+    case 'done':    return P().filter(p => p.status === '이체완료' || p.status === '반려');
+    case 'mine':    return P().filter(p => p.created_by === me);
+    default:        return P();
+  }
+}
+function filtered(){
+  const q = filter.q.trim().toLowerCase();
+  return baseList().filter(p => (!q || [p.title, p.payee, p.account, p.memo, p.category, p.created_by].some(v => (v || '').toLowerCase().includes(q)))
+    && (!filter.status || p.status === filter.status) && (!filter.kind || p.kind === filter.kind) && (!filter.cat || p.category === filter.cat) && (!filter.person || p.created_by === filter.person));
+}
+function toolbarHtml(){
+  return `<div class="toolbar">
+    <input type="search" id="fq" placeholder="검색 (내역, 받는 곳, 계좌)" value="${esc(filter.q)}">
+    <select id="f_kind"><option value="">구분: 전체</option>${KINDS.map(k => `<option ${filter.kind === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
+    <select id="f_cat"><option value="">카테고리: 전체</option>${cats().map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    ${view === 'all' ? `<select id="f_status"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
+    ${view !== 'mine' ? `<select id="f_person"><option value="">올린 사람: 전체</option>${memberOptions(filter.person)}</select>` : ''}
+    <span class="count">${countText()}</span></div>`;
+}
+const countText = () => { const l = filtered(); return `${l.length}건 · ${won(l.filter(p => p.status !== '반려').reduce((a, p) => a + (isIn(p) ? 0 : p.amount), 0))}`; };
+function renderView(){ $('#view').innerHTML = tableHtml(filtered()); const c = document.querySelector('.toolbar .count'); if (c) c.textContent = countText(); bindView(); }
+
+function tableHtml(list){
+  if (!list.length) return `<div class="empty">${filter.q || filter.status || filter.kind || filter.cat || filter.person ? '조건에 맞는 건이 없습니다.' : view === 'approve' ? '결재할 건이 없습니다.' : view === 'pay' ? '이체할 건이 없습니다.' : '등록된 건이 없습니다.<br>위 <b>＋ 지출 등록</b>으로 추가하세요.'}</div>`;
+  const cols = [['date', '일자'], ['title', '내역'], ['category', '카테고리'], ['amount', '금액'], ['payee', '받는 곳 · 계좌'], ['created_by', '올린 사람'], ['status', '상태']];
+  const th = cols.map(([k, l]) => `<th data-sort="${k}" ${k === 'amount' ? 'class="r"' : ''}>${l}${sortArrow(sort, k)}</th>`).join('') + '<th>처리</th>';
+  const rows = sortBy(list, sort, { status: s => STATUSES.indexOf(s), amount: a => Number(a) || 0 }).map(p => `<tr class="row" data-id="${p.id}">
+    <td><span class="date">${fmtDate(p.date) || '-'}</span></td>
+    <td><span class="title">${esc(p.title)}</span>${p.invoice ? ' <span class="hint" title="세금계산서 필요">🧾</span>' : ''}${p.files.length ? ` <span class="cmt">📎 ${p.files.length}</span>` : ''}${p.comments.filter(c => c.kind === 'comment').length ? ` <span class="cmt">💬 ${p.comments.filter(c => c.kind === 'comment').length}</span>` : ''}</td>
+    <td><span class="cat ${isIn(p) ? 'in' : ''}">${esc(p.category || (isIn(p) ? '수입' : '기타'))}</span></td>
+    <td class="amt ${isIn(p) ? 'in' : 'out'}">${isIn(p) ? '+' : ''}${won(p.amount)}</td>
+    <td class="acct" title="${esc((p.payee || '') + ' ' + (p.account || ''))}">${esc(p.payee || '')}${p.account ? ` <span class="hint">${esc(p.account)}</span>` : ''}</td>
+    <td>${who(p.created_by)}</td>
+    <td>${stHtml(p.status)}${p.status === '이체완료' && p.paid_by ? `<div class="hint">${esc(p.paid_by)} ${fmtDate((p.paid_at || '').slice(0, 10))}</div>` : p.status === '결재완료' && p.due_date ? `<div class="hint">희망 ${fmtDate(p.due_date)}</div>` : ''}</td>
+    <td class="act">${actionButtons(p)}</td></tr>`).join('');
+  return `<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function actionButtons(p){
+  let h = '';
+  if (p.status === '결재대기' && isAdmin()) h += `<button class="btn sm primary" data-approve="${p.id}">결재</button><button class="btn sm" data-reject="${p.id}">반려</button>`;
+  if (p.status === '결재완료') h += `<button class="btn sm primary" style="background:var(--green);border-color:var(--green)" data-paid="${p.id}">${isIn(p) ? '입금 확인' : '이체 완료'}</button>`;
+  if (p.status === '반려' && (p.created_by === me || isAdmin())) h += `<button class="btn sm" data-reopen="${p.id}">다시 올리기</button>`;
+  return h;
+}
+function bindView(){
+  bindSort(sort, renderView, { title: 'asc', category: 'asc', payee: 'asc', created_by: 'asc' });
+  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openPay(tr.dataset.id); });
+  document.querySelectorAll('[data-approve]').forEach(b => b.onclick = e => { e.stopPropagation(); approve(b.dataset.approve); });
+  document.querySelectorAll('[data-reject]').forEach(b => b.onclick = e => { e.stopPropagation(); openReject(b.dataset.reject); });
+  document.querySelectorAll('[data-paid]').forEach(b => b.onclick = e => { e.stopPropagation(); openPaid(b.dataset.paid); });
+  document.querySelectorAll('[data-reopen]').forEach(b => b.onclick = e => { e.stopPropagation(); reopen(b.dataset.reopen); });
+}
+
+/* 월별 합계: 카테고리별 지출·수입, 순액 */
+function monthHtml(){
+  const list = P().filter(p => (p.date || '').startsWith(month) && p.status !== '반려');
+  const byCat = {};
+  list.forEach(p => { const k = p.category || (isIn(p) ? '수입' : '기타'); byCat[k] = byCat[k] || { out: 0, inn: 0, n: 0 }; byCat[k][isIn(p) ? 'inn' : 'out'] += p.amount; byCat[k].n++; });
+  const out = list.filter(p => !isIn(p)).reduce((a, p) => a + p.amount, 0), inn = list.filter(isIn).reduce((a, p) => a + p.amount, 0);
+  const unpaid = list.filter(p => !isIn(p) && p.status !== '이체완료').reduce((a, p) => a + p.amount, 0);
+  const [y, m] = month.split('-');
+  return `<div class="nav-m"><button class="btn sm" id="mPrev">◀</button><b>${y}년 ${Number(m)}월</b><button class="btn sm" id="mNext">▶</button><button class="btn sm" id="mToday">이번 달</button></div>
+    <div class="stats">
+      <div class="stat"><div class="l">지출</div><div class="v">${won(out)}</div><div class="s">${list.filter(p => !isIn(p)).length}건 · 아직 이체 전 ${won(unpaid)}</div></div>
+      <div class="stat"><div class="l">수입</div><div class="v green">${won(inn)}</div><div class="s">${list.filter(isIn).length}건</div></div>
+      <div class="stat"><div class="l">순액 (수입 − 지출)</div><div class="v ${inn - out < 0 ? 'red' : 'green'}">${won(inn - out)}</div><div class="s">반려 건 제외</div></div>
+    </div>
+    <div class="tablewrap sum"><table><thead><tr><th>카테고리</th><th class="r">건수</th><th class="r">지출</th><th class="r">수입</th></tr></thead><tbody>
+      ${Object.entries(byCat).sort((a, b) => (b[1].out + b[1].inn) - (a[1].out + a[1].inn)).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="amt">${v.n}</td><td class="amt">${v.out ? won(v.out) : ''}</td><td class="amt in">${v.inn ? won(v.inn) : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="hint" style="text-align:center;padding:16px">이 달에 등록된 건이 없습니다</td></tr>'}
+      ${list.length ? `<tr class="total"><td>합계</td><td class="amt">${list.length}</td><td class="amt">${won(out)}</td><td class="amt in">${won(inn)}</td></tr>` : ''}
+    </tbody></table></div>`;
+}
+
+/* ---------- 등록·상세 창 ---------- */
+function openPay(id, preset = {}){
+  const p = id ? P().find(x => x.id === id) : null;
+  const d = p || { title: '', date: todayStr(), category: '', kind: '비용', amount: '', payee: '', account: '', due_date: '', memo: '', invoice: false, files: [], comments: [], status: '결재대기', ...preset };
+  const inn = d.kind === '수입';
+  const locked = p && p.status !== '결재대기' && !isAdmin();   // 결재가 시작된 건은 관리자만 고칠 수 있음
+  const mAt = attachBox('mFiles', d.files, 'payments'), cAt = attachBox('cFiles', [], 'payments');
+  const logs = p ? p.comments : [];
+  const KIND_LOG = { approve: ['결재', '#dbeafe', '#1d4ed8'], reject: ['반려', '#fee2e2', '#b91c1c'], paid: [inn ? '입금 확인' : '이체 완료', '#dcfce7', '#15803d'] };
+  openModal(`${modalHead(p ? (inn ? '수입 내용' : '지출 내용') : (inn ? '수입 등록' : '지출 등록'), p ? stHtml(p.status) : '')}
+    <div class="mb">
+      ${p ? `<div class="flow"><span class="step done">등록 ${esc(p.created_by || '')}</span>→<span class="step ${p.status === '결재대기' ? 'on' : p.status === '반려' ? 'no' : 'done'}">${p.status === '반려' ? '반려' : '결재'}${p.approved_by ? ' ' + esc(p.approved_by) : ''}</span>→<span class="step ${p.status === '결재완료' ? 'on' : p.status === '이체완료' ? 'done' : ''}">${inn ? '입금 확인' : '이체'}${p.paid_by ? ' ' + esc(p.paid_by) : ''}</span></div>
+        ${p.status === '반려' && p.reject_reason ? `<div class="hint warn">반려 사유: ${esc(p.reject_reason)}</div>` : ''}` : ''}
+      <div class="f"><label>내역 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="${inn ? '예: 쿠팡 9월 정산 입금' : '예: [대행팀] 9월 메타 광고비 충전'}" maxlength="200" ${locked ? 'disabled' : ''}></div>
+      <div class="f2">
+        <div class="f"><label>금액 (원) *</label><input id="mAmount" inputmode="numeric" value="${d.amount ? Number(d.amount).toLocaleString('ko-KR') : ''}" placeholder="예: 1,500,000" ${locked ? 'disabled' : ''}></div>
+        <div class="f"><label>일자</label><input type="date" id="mDate" value="${esc(d.date || '')}" ${locked ? 'disabled' : ''}></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>구분</label><select id="mKind" ${locked ? 'disabled' : ''}>${KINDS.map(k => `<option ${d.kind === k ? 'selected' : ''}>${k}</option>`).join('')}</select></div>
+        <div class="f"><label>카테고리</label><input id="mCat" list="catList" value="${esc(d.category || '')}" placeholder="예: 광고비" ${locked ? 'disabled' : ''}><datalist id="catList">${cats().map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>${inn ? '보내는 곳' : '받는 곳 (업체·사람)'}</label><input id="mPayee" value="${esc(d.payee || '')}" placeholder="예: 하이온넷" ${locked ? 'disabled' : ''}></div>
+        <div class="f"><label>${inn ? '입금 예정일' : '이체 희망일'}</label><input type="date" id="mDue" value="${esc(d.due_date || '')}" ${locked ? 'disabled' : ''}></div>
+      </div>
+      <div class="f"><label>${inn ? '입금될 계좌' : '이체할 계좌 (은행 · 계좌번호 · 예금주)'}</label><input id="mAccount" value="${esc(d.account || '')}" placeholder="예: 국민 123456-04-123456 (주)하이온넷" ${locked ? 'disabled' : ''}></div>
+      ${p && p.account ? acctBox(p) : ''}
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="mInvoice" ${d.invoice ? 'checked' : ''} ${locked ? 'disabled' : ''}> 세금계산서 ${inn ? '발행' : '수취'} 필요</label>
+      <div class="f"><label>메모 · 증빙 (견적서, 청구서 캡처 등)</label><textarea id="mMemo" ${locked ? 'disabled' : ''}>${esc(d.memo || '')}</textarea>${mAt.html}</div>
+      ${p ? `<div class="comments"><h4>기록 ${logs.length ? `(${logs.length})` : ''}</h4>
+        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${KIND_LOG[c.kind] ? tag(...KIND_LOG[c.kind]) + ' ' : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
+        <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>${cAt.html}
+      </div>
+      <div class="hint">등록: ${esc(p.created_by || '')} ${fmtDateTime(p.created_at)}${p.approved_at ? ` · ${p.status === '반려' ? '반려' : '결재'}: ${esc(p.approved_by || '')} ${fmtDateTime(p.approved_at)}` : ''}${p.paid_at ? ` · ${inn ? '입금 확인' : '이체'}: ${esc(p.paid_by || '')} ${fmtDateTime(p.paid_at)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${p && (p.created_by === me || isAdmin()) ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
+      ${p && p.status === '결재대기' && isAdmin() ? `<button class="btn" id="mReject">반려</button><button class="btn" id="mApprove">결재</button>` : ''}
+      ${p && p.status === '결재완료' ? `<button class="btn" id="mPaid">${inn ? '입금 확인' : '이체 완료'}</button>` : ''}
+      ${p && p.status !== '결재대기' && isAdmin() ? `<button class="btn" id="mReopen" title="결재 대기로 되돌리기">되돌리기</button>` : ''}
+      <button class="btn" data-close>${locked ? '닫기' : '취소'}</button>
+      ${locked ? '' : `<button class="btn primary" id="mSave">${p ? '저장' : (inn ? '등록' : '결재 올리기')}</button>`}
+    </div>`, { wide: true });
+  mAt.bind(); if (p) cAt.bind(); bindCopy();
+  if (!locked) $('#mTitle').focus();
+  const ma = $('#mAmount'); ma.oninput = () => { const n = num(ma.value); ma.value = n ? n.toLocaleString('ko-KR') : ''; };
+  $('#mKind').onchange = () => { const k = $('#mKind').value; const cur = $('#mCat').value; if (k === '수입' && !cur) $('#mCat').value = '매출'; if (k === '비용' && cur === '매출') $('#mCat').value = ''; };
+  const save = async (extra) => {
+    const n = { ...(p || {}),
+      id: p ? p.id : uid(), title: $('#mTitle').value.trim(), amount: num($('#mAmount').value), date: $('#mDate').value || null,
+      kind: $('#mKind').value, category: $('#mCat').value.trim() || null, payee: $('#mPayee').value.trim() || null, account: $('#mAccount').value.trim() || null,
+      due_date: $('#mDue').value || null, invoice: $('#mInvoice').checked, memo: $('#mMemo').value.trim() || null, files: mAt.files,
+      status: p ? p.status : '결재대기', comments: p ? [...p.comments] : [], created_by: p ? p.created_by : me, created_at: p ? p.created_at : nowIso(),
+    };
+    if (locked) { Object.assign(n, { title: p.title, amount: p.amount, date: p.date, kind: p.kind, category: p.category, payee: p.payee, account: p.account, due_date: p.due_date, invoice: p.invoice, memo: p.memo, files: p.files }); }
+    if (!n.title) { $('#mTitle').focus(); toast('내역을 입력하세요', true); return; }
+    if (!n.amount) { $('#mAmount').focus(); toast('금액을 입력하세요', true); return; }
+    if (p && n.amount !== p.amount) n.comments.push(log(`금액 변경: ${won(p.amount)} → ${won(n.amount)}`));
+    if (extra) n.comments.push(extra);
+    closeModal();
+    await saveRow('payments', n);
+    toast(p ? '저장했습니다' : n.kind === '수입' ? '수입을 등록했습니다' : '결재를 올렸습니다. 대표님이 결재하면 이체 대기로 넘어갑니다');
+  };
+  const sb = $('#mSave'); if (sb) sb.onclick = () => save();
+  if (p) {
+    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text && !cAt.files.length) { $('#cText').focus(); return; } if (locked) { closeModal(); saveRow('payments', { ...p, comments: [...p.comments, log(text || '첨부 파일', 'comment', cAt.files)] }); } else save(log(text || '첨부 파일', 'comment', cAt.files)); };
+    const md = $('#mDelete'); if (md) md.onclick = async () => { if (confirm(`"${p.title}" 건을 삭제할까요?`)) { closeModal(); await removeRow('payments', p.id); toast('삭제했습니다'); } };
+    const ap = $('#mApprove'); if (ap) ap.onclick = () => { closeModal(); approve(p.id); };
+    const rj = $('#mReject'); if (rj) rj.onclick = () => { closeModal(); openReject(p.id); };
+    const pd = $('#mPaid'); if (pd) pd.onclick = () => { closeModal(); openPaid(p.id); };
+    const ro = $('#mReopen'); if (ro) ro.onclick = () => { closeModal(); reopen(p.id); };
+  }
+}
+
+boot({ icon: '💳', title: '결제', tables: ['payments'], render, normalize });
+</script>
+</body>
+</html>

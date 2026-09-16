@@ -88,6 +88,7 @@ const SCREENS = [
   ['leave.html', '연차/휴가 등록'],
   ['notices.html', '공지사항'],
   ['accounts.html', '계정·구독 관리'],
+  ['payments.html', '결제 (지출·수입)'],
   ['ads.html', '광고 영상 리스트'],
   ['projects.html', '프로젝트 관리'],
   ['members', '팀원 관리'],
@@ -133,13 +134,14 @@ function render(){
   if (!M().length && isAdmin() && !seeding) { seedDefault(); }
   const admin = isAdmin();
   if (!admin) editing = false;
-  const tasks = DATA.tasks || [], leaves = DATA.leaves || [], notices = DATA.notices || [], accounts = (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only);
+  const tasks = DATA.tasks || [], leaves = DATA.leaves || [], notices = DATA.notices || [], accounts = (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only), payments = DATA.payments || [];
   const badges = {
     // 남이 나에게 새로 요청한 것 + 내가 요청한 것 중 확인 기다리는 보고 (내가 직접 등록한 내 업무는 제외)
     'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료')).length,
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'accounts.html': accounts.filter(a => a.end_date && dayDiff(a.end_date) <= 30).length,   // 30일 내 만료(지난 것 포함)
+    'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
@@ -314,7 +316,7 @@ function openNotice(id){
     <div class="mf">${isAdmin() ? '<a class="btn left" href="notices.html">수정·삭제는 공지사항 화면에서</a>' : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'accounts'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'accounts', 'payments'], render });
 </script>
 </body>
 </html>
