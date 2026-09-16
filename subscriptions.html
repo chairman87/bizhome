@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구독관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161735">
-<script src="common.js?v=202609161735"></script>
+<link rel="stylesheet" href="common.css?v=202609161739">
+<script src="common.js?v=202609161739"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -21,7 +21,17 @@
   .exp{white-space:nowrap}
   .exp.soon{color:var(--orange);font-weight:600}
   .exp.over{color:var(--red);font-weight:600}
-  .cat{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .cat{display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid transparent;background:#f1f5f9;color:#334155}
+  .cat.c0{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+  .cat.c1{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+  .cat.c2{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .cat.c3{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+  .cat.c4{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
+  .cat.c5{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  .cat.c6{background:#ccfbf1;color:#115e59;border-color:#99f6e4}
+  .cat.c7{background:#fce7f3;color:#9d174d;border-color:#fbcfe8}
+  .cat.c8{background:#e0e7ff;color:#3730a3;border-color:#c7d2fe}
+  .cat.c9{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
   .co{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
   .co.a{background:#dcfce7;color:#166534}.co.b{background:#fce7f3;color:#9d174d}.co.c{background:var(--bg3);color:var(--fg2)}
   tr.off td{color:var(--fg3)}
@@ -70,6 +80,9 @@ const feeHtml = s => Number(s.fee) > 0 ? `${money(s.fee, s.currency)}<span class
 const daysTo = d => d ? dayDiff(d) : null;
 function expHtml(d){ if (!d) return '<span class="hint">-</span>'; const n = daysTo(d); const cls = n < 0 ? 'over' : n <= 30 ? 'soon' : ''; return `<span class="exp ${cls}">${fmtDate(d)}${n < 0 ? ` (${-n}일 지남)` : n <= 30 ? ` (D-${n})` : ''}</span>`; }
 const isOn = s => s.status !== '해지';
+/* 구분별 색 (목록에 없으면 이름 글자로 정함) */
+const CAT_COLOR = { 'AI': 'c0', '소프트웨어': 'c1', '영상편집': 'c3', '마케팅': 'c7', '통신': 'c4', '임대·관리비': 'c2', '보험': 'c6', '세금·공과금': 'c5', '인건비·용역': 'c8', '기타': 'c9' };
+const catCls = c => { if (!c) return 'c9'; if (CAT_COLOR[c]) return CAT_COLOR[c]; let h = 0; for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
 let shown = {};   // 비밀번호 보이기 상태
 const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener">${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, '').slice(0, 28))}</a>` : '';
 const pwHtml = s => `<span class="pw"><span class="mono">${s.password ? (shown[s.id] ? esc(s.password) : '••••••••') : '<span class="hint">-</span>'}</span>${s.password ? `<button class="ib" data-eye="${s.id}">${shown[s.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(s.password)}">복사</button>` : ''}</span>`;
@@ -126,12 +139,12 @@ function tableHtml(){
     ? listOf().slice().sort((a, b) => { const dir = sort.dir === 'asc' ? 1 : -1; const d = ((CATS.indexOf(a.category) + 1 || 99) - (CATS.indexOf(b.category) + 1 || 99)) * dir; return d || String(a.category || '').localeCompare(String(b.category || ''), 'ko') * dir || String(a.name || '').localeCompare(String(b.name || ''), 'ko'); })
     : sortBy(listOf(), sort, { fee: f => Number(f) || 0, billing_day: d => Number(d) || 99, end_date: d => d || '9999' });
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 구독·정기 지출이 없습니다.<br>위 <b>＋ 구독·정기 지출 추가</b>로 넣어 두면 매월 나가는 돈이 한눈에 보입니다.'}</div>`;
-  const cols = [['name', '항목'], ['category', '구분'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['login_id', '아이디'], ['password', '비밀번호'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['users', '사용자']];
+  const cols = [['category', '구분'], ['name', '항목'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['login_id', '아이디'], ['password', '비밀번호'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['users', '사용자']];
   const krw = list.filter(s => s.currency !== 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0), usd = list.filter(s => s.currency === 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0);
   return `<div class="tablewrap"><table style="min-width:1000px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}" class="${['fee', 'monthly'].includes(k) ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
     ${list.map(s => { return `<tr class="row ${isOn(s) ? '' : 'off'}" data-id="${s.id}">
-      <td><b>${esc(s.name)}</b>${s.admin_only ? ' 🔒' : ''}${!isOn(s) ? ' <span class="hint">(해지)</span>' : ''}${s.vendor ? `<div class="hint">${esc(s.vendor)}</div>` : ''}</td>
-      <td><span class="cat">${esc(s.category || '기타')}</span></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td>
+      <td><span class="cat ${catCls(s.category)}">${esc(s.category || '기타')}</span></td>
+      <td><b>${esc(s.name)}</b>${s.admin_only ? ' 🔒' : ''}${!isOn(s) ? ' <span class="hint">(해지)</span>' : ''}${s.vendor ? `<div class="hint">${esc(s.vendor)}</div>` : ''}</td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td>
       <td class="num">${feeHtml(s)}</td><td class="num">${isOn(s) && monthly(s) ? money(monthly(s), s.currency) : '<span class="hint">-</span>'}</td>
       <td>${s.billing_day ? `매${s.cycle === '년' ? '년' : '월'} ${s.billing_day}일` : '<span class="hint">-</span>'}</td>
       <td><span class="mono">${esc(s.login_id || '')}</span>${s.login_id ? ` <button class="ib" data-copy="${esc(s.login_id)}">복사</button>` : ''}${s.url ? `<div>${siteHtml(s.url)}</div>` : ''}</td>
@@ -156,8 +169,8 @@ function expireHtml(){
   const list = S().filter(s => isOn(s) && s.end_date).sort((a, b) => a.end_date.localeCompare(b.end_date));
   if (!list.length) return '<div class="empty">만료·갱신일이 입력된 항목이 없습니다.</div>';
   return `<div class="hint" style="margin-bottom:8px">만료·갱신일이 가까운 순서입니다. 연간 결제는 갱신 전에 계속 쓸지 확인하세요.</div>
-    <div class="tablewrap"><table><thead><tr><th>항목</th><th>회사</th><th class="num">금액</th><th>만료·갱신일</th><th>결제 수단</th><th>사용자</th></tr></thead><tbody>
-    ${list.map(s => `<tr class="row" data-id="${s.id}"><td><b>${esc(s.name)}</b></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td><td class="num">${feeHtml(s)}</td><td>${expHtml(s.end_date)}</td><td class="hint">${esc(s.pay_method || '')}</td><td class="small">${usersHtml(s)}</td></tr>`).join('')}
+    <div class="tablewrap"><table><thead><tr><th>구분</th><th>항목</th><th>회사</th><th class="num">금액</th><th>만료·갱신일</th><th>결제 수단</th><th>사용자</th></tr></thead><tbody>
+    ${list.map(s => `<tr class="row" data-id="${s.id}"><td><span class="cat ${catCls(s.category)}">${esc(s.category || '기타')}</span></td><td><b>${esc(s.name)}</b></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td><td class="num">${feeHtml(s)}</td><td>${expHtml(s.end_date)}</td><td class="hint">${esc(s.pay_method || '')}</td><td class="small">${usersHtml(s)}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function bindView(){
