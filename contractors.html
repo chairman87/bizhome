@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>외주 용역관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="common.css?v=202609161357">
+<script src="common.js?v=202609161357"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .nav-m{display:flex;align-items:center;gap:6px}
+  .nav-m b{font-size:18px;min-width:120px;text-align:center}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v.orange{color:var(--orange)}
+  .stat .s{font-size:11px;color:var(--fg3)}
+  table.pay td.n,table.pay th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.pay tr.total td{font-weight:700;background:var(--bg2)}
+  table.pay td .rrn{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--fg2)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+  .card2{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;display:grid;gap:6px;cursor:pointer;min-width:0}
+  .card2:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .card2 > *{min-width:0}
+  .card2 .hd{display:flex;align-items:center;gap:8px;font-weight:600}
+  .card2 .hd .role{font-size:11px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 6px;font-weight:500}
+  .card2 .hd .off{font-size:11px;color:var(--fg3);border:1px solid var(--line2);border-radius:4px;padding:0 5px;font-weight:400}
+  .card2 .row{font-size:12px;color:var(--fg2);display:flex;gap:8px;flex-wrap:wrap}
+  .card2 .row b{color:var(--fg);font-weight:500}
+  .card2 .docs{display:flex;gap:6px;flex-wrap:wrap}
+  .card2 .docs .d{font-size:11px;border-radius:999px;padding:2px 8px;background:#fee2e2;color:#b91c1c}
+  .card2 .docs .d.ok{background:#dcfce7;color:#15803d}
+  .card2 .files a{font-size:12px;margin-right:8px}
+  .calc{background:#f8fafc;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:13px}
+  .calc div{display:grid;gap:2px}
+  .calc .l{font-size:11px;color:var(--fg3)}
+  .calc b{font-size:15px;font-variant-numeric:tabular-nums}
+  .mode{display:flex;gap:12px;font-size:13px;align-items:center;height:36px}
+  .mode label{display:flex;align-items:center;gap:4px;cursor:pointer}
+  .warn-box{background:#fff8e6;border:1px solid #f5e6a3;border-radius:var(--radius);padding:8px 12px;font-size:12px;color:#7a5a00}
+  @media(max-width:640px){.calc{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   외주 용역관리 (사업소득 원천징수)
+   - 외주 인력(contractors): 성명, 주민등록번호, 계좌, 연락처, 용역내역, 신분증·통장사본 파일
+   - 월별 지급(contractor_pays): month(YYYY-MM), 성명, 지급액, 소득세(3%), 지방소득세(소득세의 10%), 차인지급액, 용역내역, 지급일, 파일
+   - 세금 계산: 소득세 = 지급액×3% 를 10원 단위 절사, 지방소득세 = 소득세×10% 를 10원 단위 절사, 차인지급액 = 지급액 − 두 세금
+   - 엑셀 추출: "YYYY년 M월 사업소득지급내역" 표 그대로 .xlsx 파일로 (세무사 전달용)
+   - 주민등록번호는 관리자에게만 전체가 보이고, 팀원에게는 뒷자리를 가림
+================================================================ */
+const START_MONTH = '2026-09';   // 이 달부터 관리
+const C = () => DATA.contractors || [];
+const PAY = () => DATA.contractor_pays || [];
+const won = n => (n == null || isNaN(Number(n))) ? '-' : Number(n).toLocaleString('ko-KR');
+const num = s => { const n = Number(String(s || '').replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; };
+const floor10 = n => Math.floor(n / 10) * 10;
+const calcTax = gross => { const tax = floor10(gross * 0.03), local = floor10(tax * 0.1); return { gross, tax, local, net: gross - tax - local }; };
+/* 차인지급액(실제 보낼 돈)을 정해 놓고 지급액을 거꾸로 구함 */
+const grossFromNet = net => { const guess = Math.round(net / 0.967); for (let g = guess + 40; g >= guess - 40; g--) { if (g > 0 && calcTax(g).net === net) return g; } return guess; };   // 큰 쪽부터 찾아야 300,000 같은 딱 떨어지는 값이 나옴
+const maskRrn = r => { r = String(r || ''); return isAdmin() ? r : r.replace(/^(\d{6}-?\d)\d*$/, '$1******'); };
+const fmtRrn = r => { const d = String(r || '').replace(/\D/g, ''); return d.length === 13 ? d.slice(0, 6) + '-' + d.slice(6) : String(r || '').trim(); };
+const monthLabel = m => { const [y, mm] = m.split('-'); return `${y}년 ${Number(mm)}월`; };
+const DOC_KINDS = ['신분증', '통장사본'];
+const hasDoc = (c, kind) => (c.files || []).some(f => f.kind === kind);
+
+let view = LS.get('ctr_view') || 'pay';
+let month = (() => { const t = todayStr().slice(0, 7); return t < START_MONTH ? START_MONTH : t; })();
+let q = '';
+let sort = { key: 'name', dir: 'asc' };
+
+function normalize(table, r){
+  if (table === 'contractors') return { ...r, files: Array.isArray(r.files) ? r.files : [], active: r.active !== false };
+  return { ...r, files: Array.isArray(r.files) ? r.files : [], gross: Number(r.gross) || 0, tax: Number(r.tax) || 0, local_tax: Number(r.local_tax) || 0, net: Number(r.net) || 0 };
+}
+const VIEWS = () => [{ key: 'pay', label: '월별 지급 내역' }, { key: 'people', label: '외주 인력', badge: C().filter(c => c.active && (!hasDoc(c, '신분증') || !hasDoc(c, '통장사본'))).length }, { key: 'history', label: '전체 지급 기록' }];
+
+function render(){
+  $('#app').innerHTML = headerHtml({ icon: '🧾', title: '외주 용역관리', tabs: VIEWS(), active: view })
+    + `<main class="wrap wrap-wide" style="max-width:1400px">${!DATA.contractors || !DATA.contractor_pays ? `<div class="empty">외주 용역 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-contractors.sql)을 실행하세요.' : ''}</div>` : view === 'pay' ? payHtml() : view === 'people' ? peopleHtml() : historyHtml()}</main>`;
+  bindHeader(k => { view = k; LS.set('ctr_view', k); render(); }, null, m => `등록한 지급 ${PAY().filter(p => p.created_by === m.name).length}건`);
+  const mp = $('#mPrev'); if (mp) {
+    const shift = n => { const [y, m] = month.split('-').map(Number); month = ymd(new Date(y, m - 1 + n, 1)).slice(0, 7); render(); };
+    mp.onclick = () => shift(-1); $('#mNext').onclick = () => shift(1); $('#mToday').onclick = () => { month = todayStr().slice(0, 7); render(); };
+  }
+  const ab = $('#addPay'); if (ab) ab.onclick = () => openPay(null);
+  const xb = $('#xlsBtn'); if (xb) xb.onclick = exportXlsx;
+  const cb = $('#addPerson'); if (cb) cb.onclick = () => openPerson(null);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('tr.row[data-pay]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button')) return; openPay(tr.dataset.pay); });
+  document.querySelectorAll('.card2[data-person]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openPerson(el.dataset.person); });
+  document.querySelectorAll('[data-copyall]').forEach(b => b.onclick = () => openCopyList());
+  bindSort(sort, render, { name: 'asc' });
+}
+
+/* ---------- 월별 지급 내역 ---------- */
+const monthPays = () => PAY().filter(p => p.month === month);
+function payHtml(){
+  const list = sortBy(monthPays(), sort, { gross: n => Number(n) || 0, net: n => Number(n) || 0 });
+  const sum = k => list.reduce((a, p) => a + (Number(p[k]) || 0), 0);
+  const unpaid = list.filter(p => !p.paid_date);
+  return `<div class="actions">
+      <div class="nav-m"><button class="btn sm" id="mPrev" ${month <= START_MONTH ? 'disabled' : ''}>◀</button><b>${monthLabel(month)}</b><button class="btn sm" id="mNext">▶</button><button class="btn sm" id="mToday">이번 달</button></div>
+      <button class="btn primary" id="addPay">＋ 지급 추가</button>
+      ${isAdmin() ? `<button class="btn" id="xlsBtn" ${list.length ? '' : 'disabled'} title="세무사 전달용 엑셀 파일로 저장">📥 엑셀 추출</button><button class="btn" data-copyall title="이체용 계좌 목록 보기">🏦 계좌 목록</button>` : ''}
+      <span class="count">${list.length}명 · 차인지급액 합계 ${won(sum('net'))}원</span></div>
+    <div class="stats">
+      <div class="stat"><div class="l">지급액 합계</div><div class="v">${won(sum('gross'))}원</div><div class="s">${list.length}명</div></div>
+      <div class="stat"><div class="l">소득세 (3%)</div><div class="v">${won(sum('tax'))}원</div><div class="s">원천징수</div></div>
+      <div class="stat"><div class="l">지방소득세 (0.3%)</div><div class="v">${won(sum('local_tax'))}원</div><div class="s">소득세의 10%</div></div>
+      <div class="stat"><div class="l">차인지급액 (실제 이체)</div><div class="v">${won(sum('net'))}원</div><div class="s">${unpaid.length ? `<span style="color:var(--orange)">아직 이체 전 ${unpaid.length}명</span>` : list.length ? '전원 이체 완료' : ''}</div></div>
+    </div>
+    ${list.length ? `<div class="tablewrap"><table class="pay"><thead><tr>
+      <th data-sort="name">성명${sortArrow(sort, 'name')}</th><th>주민등록번호</th><th class="n" data-sort="gross">지급액${sortArrow(sort, 'gross')}</th><th class="n">소득세</th><th class="n">지방소득세</th><th class="n" data-sort="net">차인지급액${sortArrow(sort, 'net')}</th><th>용역내역</th><th>이체 계좌</th><th>지급일</th><th>파일</th></tr></thead><tbody>
+      ${list.map(p => { const c = C().find(x => x.id === p.contractor_id) || {}; return `<tr class="row" data-pay="${p.id}">
+        <td><b>${esc(p.name)}</b></td><td><span class="rrn">${esc(maskRrn(fmtRrn(c.rrn)))}</span></td>
+        <td class="n">${won(p.gross)}</td><td class="n">${won(p.tax)}</td><td class="n">${won(p.local_tax)}</td><td class="n"><b>${won(p.net)}</b></td>
+        <td>${esc(p.service || '')}</td><td class="hint">${esc(c.bank || '')}</td>
+        <td>${p.paid_date ? `<span class="tag" style="background:#dcfce7;color:#15803d">${fmtDate(p.paid_date)}</span>` : '<span class="tag" style="background:#fbeccc;color:#9a6700">이체 전</span>'}</td>
+        <td>${p.files.length ? `📎 ${p.files.length}` : ''}</td></tr>`; }).join('')}
+      <tr class="total"><td colspan="2">합계 (${list.length}명)</td><td class="n">${won(sum('gross'))}</td><td class="n">${won(sum('tax'))}</td><td class="n">${won(sum('local_tax'))}</td><td class="n">${won(sum('net'))}</td><td colspan="4"></td></tr>
+    </tbody></table></div>`
+    : `<div class="empty">${monthLabel(month)} 지급 내역이 없습니다.<br><b>＋ 지급 추가</b>로 넣으세요. 외주 인력을 먼저 등록해 두면 이름만 고르면 됩니다.</div>`}
+    ${isAdmin() ? '<div class="hint" style="margin-top:8px">엑셀 추출 파일에는 주민등록번호 전체가 들어갑니다. 세무사에게만 전달하세요.</div>' : ''}`;
+}
+
+/* ---------- 외주 인력 ---------- */
+function peopleHtml(){
+  const list = C().filter(c => !q || [c.name, c.role, c.phone, c.bank, c.memo].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))).sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || a.name.localeCompare(b.name));
+  return `<div class="actions"><button class="btn primary" id="addPerson">＋ 외주 인력 등록</button>
+      <input type="search" id="fq" placeholder="검색 (이름, 용역, 연락처)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
+      <span class="count">${list.length}명 · 서류 미비 ${list.filter(c => c.active && (!hasDoc(c, '신분증') || !hasDoc(c, '통장사본'))).length}명</span></div>
+    ${list.length ? `<div class="grid">${list.map(c => `<div class="card2" data-person="${c.id}">
+      <div class="hd">${avatar(c.name)}<span>${esc(c.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}${c.active ? '' : '<span class="off">거래 종료</span>'}</div>
+      <div class="row"><span>주민번호 <b class="rrn">${esc(maskRrn(fmtRrn(c.rrn))) || '-'}</b></span>${c.phone ? `<span>연락처 <b>${esc(c.phone)}</b></span>` : ''}</div>
+      <div class="row"><span>계좌 <b>${esc(c.bank || '-')}</b></span></div>
+      <div class="docs">${DOC_KINDS.map(k => `<span class="d ${hasDoc(c, k) ? 'ok' : ''}">${hasDoc(c, k) ? '✓' : '✕'} ${k}</span>`).join('')}${(c.files || []).filter(f => !DOC_KINDS.includes(f.kind)).length ? `<span class="d ok">📎 기타 ${(c.files || []).filter(f => !DOC_KINDS.includes(f.kind)).length}</span>` : ''}</div>
+      <div class="files">${(c.files || []).map(f => `<a href="${esc(f.url)}?download=${encodeURIComponent(f.name)}" download="${esc(f.name)}" title="내려받기">${esc(f.kind || '')} ${esc(f.name)}</a>`).join('')}</div>
+      <div class="row hint">지급 ${PAY().filter(p => p.contractor_id === c.id).length}회 · 최근 ${(PAY().filter(p => p.contractor_id === c.id).map(p => p.month).sort().pop() || '-')}</div>
+    </div>`).join('')}</div>` : '<div class="empty">아직 등록된 외주 인력이 없습니다.<br><b>＋ 외주 인력 등록</b>으로 이름, 주민등록번호, 계좌, 신분증·통장사본을 넣어 두세요.</div>'}`;
+}
+
+/* ---------- 전체 지급 기록 ---------- */
+function historyHtml(){
+  const byM = {};
+  PAY().forEach(p => (byM[p.month] = byM[p.month] || []).push(p));
+  const months = Object.keys(byM).sort().reverse();
+  return `<div class="actions"><span class="count" style="margin-left:0">총 ${PAY().length}건 · ${months.length}개월</span></div>
+    ${months.length ? `<div class="tablewrap"><table class="pay"><thead><tr><th>월</th><th class="n">인원</th><th class="n">지급액</th><th class="n">소득세</th><th class="n">지방소득세</th><th class="n">차인지급액</th><th>이체 전</th></tr></thead><tbody>
+      ${months.map(m => { const l = byM[m], s = k => l.reduce((a, p) => a + (Number(p[k]) || 0), 0); return `<tr class="row" data-month="${m}" style="cursor:pointer"><td><b>${monthLabel(m)}</b></td><td class="n">${l.length}</td><td class="n">${won(s('gross'))}</td><td class="n">${won(s('tax'))}</td><td class="n">${won(s('local_tax'))}</td><td class="n"><b>${won(s('net'))}</b></td><td>${l.filter(p => !p.paid_date).length || ''}</td></tr>`; }).join('')}
+    </tbody></table></div>` : '<div class="empty">아직 지급 기록이 없습니다.</div>'}`;
+}
+document.addEventListener('click', e => { const tr = e.target.closest('tr[data-month]'); if (tr) { month = tr.dataset.month; view = 'pay'; LS.set('ctr_view', view); render(); } });
+
+/* ---------- 지급 추가·수정 창 ---------- */
+function openPay(id){
+  const p0 = id ? PAY().find(x => x.id === id) : null;
+  const p = p0 || { month, contractor_id: '', name: '', gross: 0, tax: 0, local_tax: 0, net: 0, service: '', paid_date: '', memo: '', files: [] };
+  const at = attachBox('pFiles', p.files, 'contractors');
+  const people = C().filter(c => c.active || c.id === p.contractor_id);
+  if (!people.length && !p0) { toast('외주 인력을 먼저 등록해 주세요', true); openPerson(null); return; }
+  openModal(`${modalHead(p0 ? '지급 내용' : '지급 추가')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>외주 인력 *</label><select id="pWho"><option value="">선택</option>${people.map(c => `<option value="${c.id}" ${c.id === p.contractor_id ? 'selected' : ''}>${esc(c.name)}${c.role ? ` (${esc(c.role)})` : ''}</option>`).join('')}</select></div>
+        <div class="f"><label>지급 월</label><input type="month" id="pMonth" value="${esc(p.month)}" min="${START_MONTH}"></div>
+      </div>
+      <div class="f"><label>금액 입력 방식</label><div class="mode"><label><input type="radio" name="pMode" value="gross" checked> 지급액(세전)을 입력</label><label><input type="radio" name="pMode" value="net"> 실제 보낼 돈(차인지급액)을 입력</label></div></div>
+      <div class="f"><label id="pAmtLabel">지급액 (원) *</label><input id="pAmt" inputmode="numeric" value="${p.gross ? won(p.gross) : ''}" placeholder="예: 300,000"></div>
+      <div class="calc"><div><span class="l">지급액</span><b id="cGross">0</b></div><div><span class="l">소득세 3%</span><b id="cTax">0</b></div><div><span class="l">지방소득세 0.3%</span><b id="cLocal">0</b></div><div><span class="l">차인지급액</span><b id="cNet" style="color:var(--blue)">0</b></div></div>
+      <div class="f2">
+        <div class="f"><label>용역내역</label><input id="pService" value="${esc(p.service || '')}" placeholder="예: 인플루언서" list="svcList"><datalist id="svcList">${[...new Set(['인플루언서', '영상 편집', '디자인', '촬영', ...PAY().map(x => x.service), ...C().map(c => c.role)].filter(Boolean))].map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+        <div class="f"><label>지급일 (이체한 날, 비우면 "이체 전")</label><input type="date" id="pPaid" value="${esc(p.paid_date || '')}"></div>
+      </div>
+      <div class="f"><label>메모 · 파일 (계약서, 이체 확인 등)</label><textarea id="pMemo">${esc(p.memo || '')}</textarea>${at.html}</div>
+      ${p0 ? `<div class="hint">등록: ${esc(p0.created_by || '')} ${fmtDateTime(p0.created_at)}</div>` : ''}
+    </div>
+    <div class="mf">${p0 ? '<button class="btn danger left" id="pDelete">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="pSave">${p0 ? '저장' : '추가'}</button></div>`, { wide: true });
+  at.bind();
+  const amt = $('#pAmt'), modeOf = () => document.querySelector('input[name=pMode]:checked').value;
+  const calc = () => { const v = num(amt.value); const g = modeOf() === 'net' ? grossFromNet(v) : v; const t = calcTax(g); $('#cGross').textContent = won(t.gross); $('#cTax').textContent = won(t.tax); $('#cLocal').textContent = won(t.local); $('#cNet').textContent = won(t.net); return t; };
+  amt.oninput = () => { const n = num(amt.value); amt.value = n ? won(n) : ''; calc(); };
+  document.querySelectorAll('input[name=pMode]').forEach(r => r.onchange = () => { const t = calc(); $('#pAmtLabel').textContent = modeOf() === 'net' ? '실제 보낼 돈 (원) *' : '지급액 (원) *'; amt.value = modeOf() === 'net' ? (t.net ? won(t.net) : '') : (t.gross ? won(t.gross) : ''); calc(); });
+  $('#pWho').onchange = () => { const c = C().find(x => x.id === $('#pWho').value); if (c && c.role && !$('#pService').value) $('#pService').value = c.role; };
+  if (!p.service) $('#pWho').onchange();
+  calc();
+  $('#pSave').onclick = async () => {
+    const c = C().find(x => x.id === $('#pWho').value); if (!c) { toast('외주 인력을 고르세요', true); return; }
+    const t = calc(); if (!t.gross) { amt.focus(); toast('금액을 입력하세요', true); return; }
+    const m = $('#pMonth').value || month; if (m < START_MONTH) { toast(`${monthLabel(START_MONTH)}부터 관리합니다`, true); return; }
+    const row = { id: p0 ? p0.id : uid(), month: m, contractor_id: c.id, name: c.name, gross: t.gross, tax: t.tax, local_tax: t.local, net: t.net,
+      service: $('#pService').value.trim() || null, paid_date: $('#pPaid').value || null, memo: $('#pMemo').value.trim() || null, files: at.files,
+      created_by: p0 ? p0.created_by : me, created_at: p0 ? p0.created_at : nowIso(), updated_by: me };
+    closeModal(); month = m; await saveRow('contractor_pays', row); toast(p0 ? '저장했습니다' : `${c.name}님 ${monthLabel(m)} 지급을 추가했습니다`);
+  };
+  const del = $('#pDelete'); if (del) del.onclick = async () => { if (confirm(`${p0.name}님 ${monthLabel(p0.month)} 지급 내역을 삭제할까요?`)) { closeModal(); await removeRow('contractor_pays', p0.id); toast('삭제했습니다'); } };
+}
+
+/* ---------- 외주 인력 등록·수정 창 (신분증·통장사본은 종류를 골라 올림) ---------- */
+function openPerson(id){
+  const c0 = id ? C().find(x => x.id === id) : null;
+  const c = c0 || { name: '', rrn: '', bank: '', phone: '', email: '', role: '인플루언서', files: [], memo: '', active: true };
+  const boxes = {};   // 종류별 첨부칸
+  const kindFiles = k => (c.files || []).filter(f => (f.kind || '기타') === k);
+  ['신분증', '통장사본', '기타'].forEach(k => boxes[k] = attachBox('cf_' + (k === '신분증' ? 'id' : k === '통장사본' ? 'bank' : 'etc'), kindFiles(k), 'contractors'));
+  openModal(`${modalHead(c0 ? '외주 인력 수정' : '외주 인력 등록')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>성명 *</label><input id="cName" value="${esc(c.name)}" maxlength="40" placeholder="예: 황혜빈"></div>
+        <div class="f"><label>용역내역 (기본값)</label><input id="cRole" value="${esc(c.role || '')}" placeholder="예: 인플루언서"></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>주민등록번호 ${isAdmin() ? '' : '(관리자만 전체 보임)'}</label><input id="cRrn" value="${esc(isAdmin() ? fmtRrn(c.rrn) : maskRrn(fmtRrn(c.rrn)))}" placeholder="예: 010131-4677817" inputmode="numeric" ${isAdmin() || !c0 ? '' : 'disabled'}></div>
+        <div class="f"><label>연락처</label><input id="cPhone" value="${esc(c.phone || '')}" placeholder="010-0000-0000"></div>
+      </div>
+      <div class="f"><label>이체 계좌 (은행 · 계좌번호 · 예금주)</label><input id="cBank" value="${esc(c.bank || '')}" placeholder="예: 카카오 3333-01-1234567 황혜빈"></div>
+      <div class="f"><label>신분증 사본 *</label>${boxes['신분증'].html}</div>
+      <div class="f"><label>통장 사본 *</label>${boxes['통장사본'].html}</div>
+      <div class="f"><label>기타 파일 (계약서 등)</label>${boxes['기타'].html}</div>
+      <div class="f"><label>메모</label><textarea id="cMemo">${esc(c.memo || '')}</textarea></div>
+      ${c0 ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cActive" ${c.active ? 'checked' : ''}> 현재 거래 중 (끄면 지급 추가 목록에서 빠짐)</label>` : ''}
+      <div class="warn-box">주민등록번호·계좌·신분증은 개인정보입니다. 세무 신고 목적으로만 쓰고, 거래가 끝난 사람은 삭제해 주세요.</div>
+    </div>
+    <div class="mf">${c0 && isAdmin() ? '<button class="btn danger left" id="cDelete">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="cSave">${c0 ? '저장' : '등록'}</button></div>`, { wide: true });
+  Object.values(boxes).forEach(b => b.bind());
+  $('#cName').focus();
+  $('#cRrn').oninput = () => { const d = $('#cRrn').value.replace(/\D/g, '').slice(0, 13); $('#cRrn').value = d.length > 6 ? d.slice(0, 6) + '-' + d.slice(6) : d; };
+  $('#cSave').onclick = async () => {
+    const name = $('#cName').value.trim(); if (!name) { $('#cName').focus(); toast('성명을 입력하세요', true); return; }
+    const rrnIn = $('#cRrn').disabled ? (c0 ? c0.rrn : '') : $('#cRrn').value.trim();
+    if (rrnIn && rrnIn.replace(/\D/g, '').length !== 13) { $('#cRrn').focus(); toast('주민등록번호는 13자리입니다', true); return; }
+    const files = [...boxes['신분증'].files.map(f => ({ ...f, kind: '신분증' })), ...boxes['통장사본'].files.map(f => ({ ...f, kind: '통장사본' })), ...boxes['기타'].files.map(f => ({ ...f, kind: '기타' }))];
+    const row = { id: c0 ? c0.id : uid(), name, rrn: rrnIn ? fmtRrn(rrnIn) : null, bank: $('#cBank').value.trim() || null, phone: $('#cPhone').value.trim() || null,
+      role: $('#cRole').value.trim() || null, files, memo: $('#cMemo').value.trim() || null, active: $('#cActive') ? $('#cActive').checked : true,
+      created_by: c0 ? c0.created_by : me, created_at: c0 ? c0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('contractors', row);
+    // 이름이 바뀌면 지급 기록의 이름도 맞춤
+    if (c0 && c0.name !== name) for (const p of PAY().filter(p => p.contractor_id === c0.id)) await saveRow('contractor_pays', { ...p, name });
+    toast(c0 ? '저장했습니다' : `${name}님을 등록했습니다`);
+  };
+  const del = $('#cDelete'); if (del) del.onclick = async () => {
+    const n = PAY().filter(p => p.contractor_id === c0.id).length;
+    if (!confirm(`${c0.name}님을 삭제할까요?${n ? ` 지급 기록 ${n}건은 남고 이름만 유지됩니다.` : ''} 신분증·통장사본 파일도 함께 지워집니다.`)) return;
+    closeModal(); for (const f of c0.files) if (f.path) deleteFile(f.path);
+    await removeRow('contractors', c0.id); toast('삭제했습니다');
+  };
+}
+
+/* 이체용 계좌 목록 (이 달 이체 전인 사람) */
+function openCopyList(){
+  const list = monthPays().map(p => ({ p, c: C().find(x => x.id === p.contractor_id) || {} }));
+  const text = list.map(({ p, c }) => `${p.name}\t${c.bank || '(계좌 없음)'}\t${won(p.net)}원${p.paid_date ? '\t이체 완료' : ''}`).join('\n');
+  openModal(`${modalHead(`${monthLabel(month)} 이체 계좌 목록`)}
+    <div class="mb"><div class="hint">성명 · 계좌 · 차인지급액(실제 보낼 돈). 은행 앱에서 하나씩 이체한 뒤 지급 내역에서 지급일을 적어 주세요.</div>
+      <textarea id="cpText" style="min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:13px" readonly>${esc(text)}</textarea></div>
+    <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="cpCopy">전체 복사</button></div>`, { wide: true });
+  $('#cpCopy').onclick = async () => { try { await navigator.clipboard.writeText(text); toast('복사했습니다'); } catch { $('#cpText').select(); toast('Ctrl+C 로 복사하세요', true); } };
+}
+
+/* ---------- 엑셀 추출: "YYYY년 M월 사업소득지급내역" ---------- */
+function exportXlsx(){
+  if (!isAdmin()) { toast('관리자만 추출할 수 있습니다', true); return; }
+  if (typeof XLSX === 'undefined') { toast('엑셀 도구를 불러오지 못했습니다. 새로고침 후 다시 시도하세요', true); return; }
+  const list = sortBy(monthPays(), { key: 'name', dir: 'asc' });
+  const title = `${monthLabel(month)} 사업소득지급내역`;
+  const rows = [[title], [], ['성명', '주민등록번호', '지급액', '소득세', '지방소득세', '차인지급액', '용역내역']];
+  list.forEach(p => { const c = C().find(x => x.id === p.contractor_id) || {}; rows.push([p.name, fmtRrn(c.rrn), p.gross, p.tax, p.local_tax, p.net, p.service || '']); });
+  const s = k => list.reduce((a, p) => a + (Number(p[k]) || 0), 0);
+  rows.push(['합계', '', s('gross'), s('tax'), s('local_tax'), s('net'), '']);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+  ws['!cols'] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+  for (let r = 3; r < rows.length; r++) for (const col of [2, 3, 4, 5]) { const cell = ws[XLSX.utils.encode_cell({ r, c: col })]; if (cell && typeof cell.v === 'number') cell.z = '#,##0'; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, monthLabel(month));
+  XLSX.writeFile(wb, `${month.replace('-', '')}_사업소득지급내역.xlsx`);
+  toast('엑셀 파일을 내려받았습니다');
+}
+
+boot({ icon: '🧾', title: '외주 용역관리', tables: ['contractors', 'contractor_pays'], render, normalize });
+</script>
+</body>
+</html>
