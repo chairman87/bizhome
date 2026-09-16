@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161701">
-<script src="common.js?v=202609161701"></script>
+<link rel="stylesheet" href="common.css?v=202609161718">
+<script src="common.js?v=202609161718"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -44,7 +44,7 @@
    한 줄 = { group_name(구분), service, url, purpose, login_id, password, owner(담당자/구매자), shared_with(공유 사용자),
             fee(구독료), cycle(월/년/없음), billing_day(결제일), start_date, end_date(만료일), admin_only, memo }
 ================================================================ */
-const GROUP_ORDER = ['식이해법연구소', '레모너리', '서리맥스', '흑생마', '피에이치뷰티', '편집툴', '광고 계정'];
+const GROUP_ORDER = ['운영', '재무', '총무', '고객센터', '물류', '법무', '이메일·협업', '광고 계정', '레모너리', '서리맥스', '흑생마'];   // 탭 순서
 const CYCLES = ['없음', '월', '년'];
 /* 총무 / 마케팅 두 화면이 같은 표를 나눠 씀: 구분(group_name)이 MARKETING_GROUPS 에 있으면 마케팅 > 계정관리, 나머지는 총무 > 계정관리 */
 const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
