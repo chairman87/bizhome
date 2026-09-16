@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161739">
-<script src="common.js?v=202609161739"></script>
+<link rel="stylesheet" href="common.css?v=202609161743">
+<script src="common.js?v=202609161743"></script>
 <style>
   .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
   .dept{border-radius:10px;padding:10px}
@@ -145,7 +145,6 @@ function render(){
     'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료')).length,
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
-    'subscriptions.html': subs.filter(s => s.end_date && dayDiff(s.end_date) <= 30).length,   // 30일 내 만료·갱신(지난 것 포함)
     'docs.html': docs.filter(d => d.expire_date && dayDiff(d.expire_date) <= 30).length,   // 유효기간 30일 내(지난 것 포함)
     'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
