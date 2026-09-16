@@ -162,3 +162,6 @@ alter table ads add column if not exists google boolean default false;
 
 -- 14) 구독관리 사용자 칸 (sql-subscriptions-users.sql 과 동일)
 alter table subscriptions add column if not exists users text;
+
+-- 15) 구독관리 로그인 칸 (sql-subscriptions-login.sql 과 동일)
+alter table subscriptions add column if not exists url text, add column if not exists login_id text, add column if not exists password text;
