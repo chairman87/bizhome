@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회사 서류함</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161451">
-<script src="common.js?v=202609161451"></script>
+<link rel="stylesheet" href="common.css?v=202609161456">
+<script src="common.js?v=202609161456"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -102,7 +102,7 @@ function cardHtml(d){
 function openDoc(id){
   const d0 = id ? (DATA.docs || []).find(x => x.id === id) : null;
   const d = d0 || { company: COMPANIES.includes(view) ? view : COMPANIES[0], doc_type: '', title: '', files: [], issued_date: '', expire_date: '', memo: '', admin_only: false };
-  const at = attachBox('dFiles', d.files, 'docs');
+  const at = attachBox('dFiles', d.files, 'docs', { rename: isAdmin() });   // 관리자는 파일 이름을 고칠 수 있음
   openModal(`${modalHead(d0 ? '서류 수정' : '서류 올리기')}
     <div class="mb">
       <div class="f2">
@@ -110,7 +110,7 @@ function openDoc(id){
         <div class="f"><label>종류</label><input id="dType" list="typeList" value="${esc(d.doc_type || '')}" placeholder="예: 사업자등록증"><datalist id="typeList">${types().map(t => `<option value="${esc(t)}">`).join('')}</datalist></div>
       </div>
       <div class="f"><label>제목 *</label><input id="dTitle" value="${esc(d.title)}" placeholder="예: 사업자등록증 (2026년 발급)" maxlength="150"></div>
-      <div class="f"><label>파일 *</label>${at.html}</div>
+      <div class="f"><label>파일 * ${isAdmin() ? '<span class="hint">(파일 아래 노란 칸에서 이름을 고칠 수 있습니다)</span>' : ''}</label>${at.html}</div>
       <div class="f2">
         <div class="f"><label>발급일</label><input type="date" id="dIssued" value="${esc(d.issued_date || '')}"></div>
         <div class="f"><label>유효기간 (있으면)</label><input type="date" id="dExpire" value="${esc(d.expire_date || '')}"></div>

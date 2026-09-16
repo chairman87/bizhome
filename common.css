@@ -222,6 +222,8 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .file img{display:block;width:100%;height:100px;object-fit:cover;background:#f1f5f9}
 .file .doc{display:flex;align-items:center;justify-content:center;height:56px;font-size:26px;background:#f8fafc}
 .file .nm{display:block;font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg2)}
+.file .ren{display:block;width:100%;border:0;border-top:1px solid var(--line);font:inherit;font-size:11px;padding:4px 6px;background:#fffbea;color:var(--fg);box-sizing:border-box}
+.file .ren:focus{outline:2px solid #bfdbfe;background:#fff}
 .file .rm{position:absolute;top:4px;right:4px;border:0;border-radius:50%;width:20px;height:20px;padding:0;line-height:20px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer}
 .attach{display:grid;gap:6px}
 .attach .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

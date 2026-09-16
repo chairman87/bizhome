@@ -344,23 +344,24 @@ async function uploadFile(file, folder = 'etc'){
 async function deleteFile(path){ try { await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'DELETE', headers: fileHeaders() }); } catch {} }
 
 /* 첨부 목록 보기: 사진은 작게, 누르면 새 창에서 크게 */
-function filesHtml(files, { edit = false } = {}){
+function filesHtml(files, { edit = false, rename = false } = {}){
   files = files || []; if (!files.length && !edit) return '';
-  return `<div class="files">${files.map((f, i) => `<div class="file"><a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : '<span class="doc">📄</span>'}<span class="nm">${esc(f.name)}</span></a>${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`).join('')}</div>`;
+  return `<div class="files">${files.map((f, i) => `<div class="file"><a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : '<span class="doc">📄</span>'}${rename ? '' : `<span class="nm">${esc(f.name)}</span>`}</a>${rename ? `<input class="ren" data-ren="${i}" value="${esc(f.name)}" title="파일 이름 바꾸기 (내려받을 때 이 이름으로 저장됨)" maxlength="120">` : ''}${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`).join('')}</div>`;
 }
 const filesCount = files => (files && files.length) ? `<span class="cmt" title="첨부 ${files.length}개">📎 ${files.length}</span>` : '';
 
 /* 첨부 입력칸: 붙여넣기(Ctrl+V)·끌어다 놓기·파일 선택 → 바로 보관함에 올림
    사용: const at = attachBox('mFiles', 기존목록, 'tasks'); 창 html 에 at.html 넣고 openModal 뒤 at.bind(); 저장할 때 at.files */
-function attachBox(id, initial = [], folder = 'etc'){
-  const files = [...(initial || [])], orig = new Set(files);
+function attachBox(id, initial = [], folder = 'etc', { rename = false } = {}){   // rename: 파일 이름 고치기 허용
+  const files = (initial || []).map(f => ({ ...f })), orig = new Set(files.map(f => f.path));   // 처음부터 있던 파일은 빼도 보관함에서 지우지 않음
   const box = { files, html: `<div class="attach" id="${id}"><div class="list"></div><div class="row"><button type="button" class="btn sm" data-pick>📎 파일 첨부</button><span class="hint">캡처한 뒤 이 창에서 <b>Ctrl+V</b> 로 붙여넣거나, 파일을 끌어다 놓아도 됩니다</span><input type="file" multiple hidden><input type="text" hidden class="cnt" value="${files.length}"></div></div>` };
   box.bind = () => {
     const el = $('#' + id); if (!el) return;
     const inp = el.querySelector('input[type=file]'), cnt = el.querySelector('.cnt');
     const draw = () => {
-      el.querySelector('.list').innerHTML = filesHtml(files, { edit: true }); cnt.value = String(files.length);   // cnt: 창 닫을 때 "입력 중" 판단용
-      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [f] = files.splice(Number(b.dataset.rm), 1); draw(); if (f && f.path && !orig.has(f)) deleteFile(f.path); });
+      el.querySelector('.list').innerHTML = filesHtml(files, { edit: true, rename }); cnt.value = String(files.length) + files.map(f => f.name).join('|');   // cnt: 창 닫을 때 "입력 중" 판단용
+      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [f] = files.splice(Number(b.dataset.rm), 1); draw(); if (f && f.path && !orig.has(f.path)) deleteFile(f.path); });
+      el.querySelectorAll('[data-ren]').forEach(inp => { inp.onclick = e => e.stopPropagation(); inp.onchange = () => { const v = inp.value.trim(); if (v) files[Number(inp.dataset.ren)].name = v; else inp.value = files[Number(inp.dataset.ren)].name; cnt.value = String(files.length) + files.map(f => f.name).join('|'); }; });
     };
     box.add = async list => {
       const arr = [...list].filter(Boolean); if (!arr.length) return;
