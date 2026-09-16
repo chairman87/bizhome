@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>계정관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161541">
-<script src="common.js?v=202609161541"></script>
+<link rel="stylesheet" href="common.css?v=202609161546">
+<script src="common.js?v=202609161546"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -46,9 +46,13 @@
 ================================================================ */
 const GROUP_ORDER = ['식이해법연구소', '레모너리', '서리맥스', '흑생마', '피에이치뷰티', '편집툴', '광고 계정'];
 const CYCLES = ['없음', '월', '년'];
-const ALL = () => (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only);   // 관리자만 보기 항목은 관리자에게만
+/* 총무 / 마케팅 두 화면이 같은 표를 나눠 씀: 구분(group_name)이 MARKETING_GROUPS 에 있으면 마케팅 > 계정관리, 나머지는 총무 > 계정관리 */
+const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
+const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
+const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
+const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
-let view = LS.get('acc_view') || 'all';
+let view = LS.get('acc_view_' + DEPT) || 'all';
 let q = '';
 let shown = {};
 let sort = { key: 'service', dir: 'asc' };
@@ -68,11 +72,11 @@ function render(){
   if (view === 'subs') view = 'all';
   const tabs = [{ key: 'all', label: '전체' }, ...groups().map(g => ({ key: 'g:' + g, label: g }))];
   if (!tabs.some(t => t && t.key === view)) view = 'all';
-  $('#app').innerHTML = headerHtml({ icon: '🔐', title: '계정관리', tabs, active: view })
+  $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '계정관리 (마케팅)' : '계정관리', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
       <input type="search" id="fq" placeholder="검색 (서비스, 아이디, 목적, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
       <span class="count" id="cnt"></span></div><div id="view">${tableHtml()}</div>`}</main>`;
-  bindHeader(k => { view = k; LS.set('acc_view', k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
+  bindHeader(k => { view = k; LS.set('acc_view_' + DEPT, k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null, view.startsWith('g:') ? { group_name: view.slice(2) } : {});
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; renderView(); };
   bindView();
@@ -87,6 +91,7 @@ function statsHtml(){
   return `<div class="stats">
     <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개</div></div>
     <div class="stat"><div class="l">비밀번호 비어 있음</div><div class="v ${all.filter(a => !a.password).length ? 'orange' : ''}">${all.filter(a => !a.password).length}개</div><div class="s">계정을 열어 넣어 두세요</div></div>
+    <div class="stat"><div class="l">${DEPT === '마케팅' ? '총무 계정' : '마케팅 계정'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '총무 > 계정관리' : '마케팅 > 계정관리'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
     <div class="stat"><div class="l">구독료 · 결제일 · 만료일</div><div class="v" style="font-size:14px"><a href="subscriptions.html">💸 구독관리에서 →</a></div><div class="s">매월 나가는 돈은 그쪽에 모아 둡니다</div></div>
   </div>`;
 }
@@ -122,12 +127,12 @@ function bindView(){
 /* ---------- 추가·수정 창 ---------- */
 function openEdit(id, preset = {}){
   const a = id ? ALL().find(x => x.id === id) : null;
-  const d = a || { group_name: '', service: '', url: '', purpose: '', login_id: '', password: '', owner: '', shared_with: '', fee: '', cycle: '없음', billing_day: '', start_date: '', end_date: '', admin_only: false, memo: '', ...preset };
+  const d = a || { group_name: DEPT === '마케팅' ? (view.startsWith('g:') ? view.slice(2) : MARKETING_GROUPS[0]) : (view.startsWith('g:') ? view.slice(2) : ''), service: '', url: '', purpose: '', login_id: '', password: '', owner: '', shared_with: '', fee: '', cycle: '없음', billing_day: '', start_date: '', end_date: '', admin_only: false, memo: '', ...preset };
   openModal(`${modalHead(a ? '계정 정보' : '계정 추가')}
     <div class="mb">
       <div class="f3">
-        <div class="f"><label>구분 (회사/용도)</label><select id="aGroupSel"><option value="">(없음)</option>${[...new Set([...groups(), ...GROUP_ORDER])].map(g => `<option ${d.group_name === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new" ${d.group_name && ![...groups(), ...GROUP_ORDER].includes(d.group_name) ? 'selected' : ''}>＋ 직접 입력…</option></select>
-          <input id="aGroup" value="${esc(d.group_name || '')}" placeholder="새 구분 이름" style="margin-top:4px" ${d.group_name && ![...groups(), ...GROUP_ORDER].includes(d.group_name) ? '' : 'hidden'}></div>
+        <div class="f"><label>구분 (회사/용도)</label><select id="aGroupSel"><option value="">(없음)</option>${[...new Set([...groups(), ...(DEPT === '마케팅' ? MARKETING_GROUPS : GROUP_ORDER.filter(g => !MARKETING_GROUPS.includes(g)))])].map(g => `<option ${d.group_name === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new" ${d.group_name && ![...groups(), ...GROUP_ORDER, ...MARKETING_GROUPS].includes(d.group_name) ? 'selected' : ''}>＋ 직접 입력…</option></select>
+          <input id="aGroup" value="${esc(d.group_name || '')}" placeholder="새 구분 이름" style="margin-top:4px" ${d.group_name && ![...groups(), ...GROUP_ORDER, ...MARKETING_GROUPS].includes(d.group_name) ? '' : 'hidden'}></div>
         <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버, 어도비" maxlength="60"></div>
         <div class="f"><label>목적</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="예: email, ad, tool" maxlength="80"></div>
       </div>
@@ -168,7 +173,7 @@ function openEdit(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🔐', title: '계정관리', tables: ['accounts'], render, normalize });
+boot({ icon: '🔐', title: DEPT === '마케팅' ? '계정관리 (마케팅)' : '계정관리', tables: ['accounts'], render, normalize });
 </script>
 </body>
 </html>
