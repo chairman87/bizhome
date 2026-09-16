@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161344">
-<script src="common.js?v=202609161344"></script>
+<link rel="stylesheet" href="common.css?v=202609161334">
+<script src="common.js?v=202609161334"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -48,7 +48,7 @@
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
   .stf{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px}
   .stf .lb{font-size:12px;color:var(--fg2);margin-right:2px}
-  th select#fsHead{border:1px solid var(--blue);border-radius:4px;font:inherit;font-size:12px;padding:2px 4px;background:#eff6ff;color:var(--blue);font-weight:600;cursor:pointer}
+  th select#fsHead{border:1px solid var(--line2);border-radius:4px;font:inherit;font-size:12px;padding:2px 4px;background:#fff;color:var(--fg2);font-weight:600}
   th select#fsHead.on{border-color:var(--blue);color:var(--blue)}
   .stf button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--fg2)}
   .stf button b{font-weight:600;color:var(--fg)}
@@ -110,7 +110,7 @@ function productHtml(p){
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
       <span class="count">${filter.status ? `<b>${filter.status}</b> ${list.length}건 보는 중 · <a href="#" data-fs="" style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
-    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => k === 'status' ? `<th class="c"><select id="fsHead" title="상태로 걸러 보기" class="${filter.status ? 'on' : ''}"><option value="">상태 ▾ 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></th>` : `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
+    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => k === 'status' ? `<th class="c"><select id="fsHead" title="상태로 걸러 보기" class="${filter.status ? 'on' : ''}"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></th>` : `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
     <tr class="newrow">
       <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
@@ -118,7 +118,7 @@ function productHtml(p){
       <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="메타" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
-      <td class="c"><span class="hint" title="새 영상은 '운영중'으로 들어갑니다. 넣은 뒤 그 줄의 상태 칸에서 바꿀 수 있습니다">운영중</span></td>
+      <td class="c"><select id="nStatus" title="새로 넣을 영상의 상태 (걸러 보기는 위 '상태 보기' 버튼)">${STATUSES.map(s => `<option ${s === (filter.status || '운영중') ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
     ${list.length ? '' : `<tr><td colspan="8" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
@@ -139,7 +139,7 @@ async function addFromRow(){
   const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
   lastNew = { date: $('#nDate').value || todayStr(), editor: $('#nEditor').value.trim(), meta: $('#nMeta').value.trim() };
   const row = { id: uid(), product: view, date: lastNew.date, title, editor: lastNew.editor || null, meta_account: lastNew.meta || null,
-    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, status: '운영중', note: $('#nNote').value.trim() || null,
+    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
     created_by: me, created_at: nowIso(), updated_by: me };
   await saveRow('ads', row);
   toast(`추가: ${title}`);
