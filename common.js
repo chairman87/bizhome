@@ -313,6 +313,80 @@ function openModal(html, opts = {}){
 function closeModal(){ $('#modal').innerHTML = ''; document.onkeydown = null; }
 const modalHead = (title, extra = '') => `<div class="mh"><h2>${title}</h2>${extra}<button class="x" data-close>✕</button></div>`;
 
+/* ========== 파일 첨부 (Supabase Storage 'files' 보관함, sql-files.sql 로 준비) ========== */
+const FILE_BUCKET = 'files';
+const fileUrl = path => `${CONFIG.SUPABASE_URL}/storage/v1/object/public/${FILE_BUCKET}/${path}`;
+const isImg = f => /^image\//.test(f.type || '') || /\.(png|jpe?g|gif|webp)$/i.test(f.name || '');
+const fileHeaders = () => ({ apikey: CONFIG.SUPABASE_KEY, Authorization: `Bearer ${CONFIG.SUPABASE_KEY}` });
+/* 큰 사진은 가로·세로 1600px 이하 JPEG 로 줄여서 올림 (400KB 이하면 그대로) */
+async function shrinkImage(file){
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size < 400 * 1024) return file;
+  try {
+    const src = URL.createObjectURL(file);
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+    const r = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(src);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+    return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; }
+}
+async function uploadFile(file, folder = 'etc'){
+  if (file.size > 20 * 1024 * 1024) throw new Error('20MB 이하 파일만 올릴 수 있습니다');
+  const f = isImg(file) ? await shrinkImage(file) : file;
+  const ext = ((f.name || '').match(/\.(\w+)$/) || [])[1] || (f.type.split('/')[1] || 'bin');
+  const path = `${folder}/${todayStr().slice(0, 7)}/${uid()}.${ext.toLowerCase()}`;
+  const r = await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'POST', headers: { ...fileHeaders(), 'Content-Type': f.type || 'application/octet-stream', 'x-upsert': 'true' }, body: f });
+  if (!r.ok) { const t = await r.text(); throw new Error(/not found|Bucket/i.test(t) ? '파일 보관함이 아직 준비되지 않았습니다 (sql-files.sql 실행 필요)' : t.slice(0, 120)); }
+  const name = file.name && !/^image\.\w+$/.test(file.name) ? file.name : `캡처 ${fmtDateTime(nowIso()).slice(5)}.${ext}`;
+  return { name, path, url: fileUrl(path), type: f.type, size: f.size, by: me, at: nowIso() };
+}
+async function deleteFile(path){ try { await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'DELETE', headers: fileHeaders() }); } catch {} }
+
+/* 첨부 목록 보기: 사진은 작게, 누르면 새 창에서 크게 */
+function filesHtml(files, { edit = false } = {}){
+  files = files || []; if (!files.length && !edit) return '';
+  return `<div class="files">${files.map((f, i) => `<div class="file"><a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : '<span class="doc">📄</span>'}<span class="nm">${esc(f.name)}</span></a>${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`).join('')}</div>`;
+}
+const filesCount = files => (files && files.length) ? `<span class="cmt" title="첨부 ${files.length}개">📎 ${files.length}</span>` : '';
+
+/* 첨부 입력칸: 붙여넣기(Ctrl+V)·끌어다 놓기·파일 선택 → 바로 보관함에 올림
+   사용: const at = attachBox('mFiles', 기존목록, 'tasks'); 창 html 에 at.html 넣고 openModal 뒤 at.bind(); 저장할 때 at.files */
+function attachBox(id, initial = [], folder = 'etc'){
+  const files = [...(initial || [])], orig = new Set(files);
+  const box = { files, html: `<div class="attach" id="${id}"><div class="list"></div><div class="row"><button type="button" class="btn sm" data-pick>📎 파일 첨부</button><span class="hint">캡처한 뒤 이 창에서 <b>Ctrl+V</b> 로 붙여넣거나, 파일을 끌어다 놓아도 됩니다</span><input type="file" multiple hidden><input type="text" hidden class="cnt" value="${files.length}"></div></div>` };
+  box.bind = () => {
+    const el = $('#' + id); if (!el) return;
+    const inp = el.querySelector('input[type=file]'), cnt = el.querySelector('.cnt');
+    const draw = () => {
+      el.querySelector('.list').innerHTML = filesHtml(files, { edit: true }); cnt.value = String(files.length);   // cnt: 창 닫을 때 "입력 중" 판단용
+      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [f] = files.splice(Number(b.dataset.rm), 1); draw(); if (f && f.path && !orig.has(f)) deleteFile(f.path); });
+    };
+    box.add = async list => {
+      const arr = [...list].filter(Boolean); if (!arr.length) return;
+      const st = document.createElement('span'); st.className = 'hint up'; st.textContent = `올리는 중… (${arr.length})`; el.querySelector('.row').appendChild(st);
+      for (const f of arr) { try { files.push(await uploadFile(f, folder)); draw(); } catch (e) { toast(`올리지 못했습니다: ${e.message}`, true); } }
+      st.remove();
+    };
+    el.querySelector('[data-pick]').onclick = () => inp.click();
+    inp.onchange = () => { box.add(inp.files); inp.value = ''; };
+    // 한 창에 첨부칸이 둘 이상이면(요청 내용 + 댓글) 붙여넣은 곳과 가까운 칸으로, 아니면 첫 칸으로
+    const modal = el.closest('.modal') || el;
+    box.zone = el.parentElement || el;
+    if (!modal._attach) {
+      modal._attach = [];
+      const pick = t => modal._attach.find(b => b.zone.contains(t)) || modal._attach[0];
+      modal.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (fs.length) { e.preventDefault(); pick(e.target).add(fs); } });
+      modal.addEventListener('dragover', e => { e.preventDefault(); modal.classList.add('drop'); });
+      modal.addEventListener('dragleave', () => modal.classList.remove('drop'));
+      modal.addEventListener('drop', e => { e.preventDefault(); modal.classList.remove('drop'); pick(e.target).add((e.dataTransfer && e.dataTransfer.files) || []); });
+    }
+    modal._attach.push(box);
+    draw();
+  };
+  return box;
+}
+
 /* 댓글 목록 + 입력칸 (업무·영업 공통) */
 function commentsHtml(list){
   return `<div class="comments">

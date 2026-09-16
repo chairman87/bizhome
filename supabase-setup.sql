@@ -128,3 +128,16 @@ alter publication supabase_realtime add table menu;
 alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table leaves;
 alter publication supabase_realtime add table rnr;
+
+-- 7) 첨부 파일 보관함 (sql-files.sql 과 동일)
+insert into storage.buckets (id, name, public) values ('files', 'files', true)
+  on conflict (id) do update set public = true;
+drop policy if exists "team_files_select" on storage.objects;
+drop policy if exists "team_files_insert" on storage.objects;
+drop policy if exists "team_files_update" on storage.objects;
+drop policy if exists "team_files_delete" on storage.objects;
+create policy "team_files_select" on storage.objects for select using (bucket_id = 'files');
+create policy "team_files_insert" on storage.objects for insert with check (bucket_id = 'files');
+create policy "team_files_update" on storage.objects for update using (bucket_id = 'files');
+create policy "team_files_delete" on storage.objects for delete using (bucket_id = 'files');
+alter table tasks add column if not exists files jsonb default '[]';

@@ -72,7 +72,7 @@ const isDone = t => t.status === '완료';
 const isOver = t => !isDone(t) && t.status !== '보류' && t.due_date && t.due_date < todayStr();
 const prog = t => Math.max(0, Math.min(100, Number(t.progress) || 0));
 const progHtml = t => `<span class="prog"><span class="bar ${isDone(t) ? 'done' : isOver(t) ? 'over' : ''}"><i style="width:${prog(t)}%"></i></span><span class="pct">${prog(t)}%</span></span>`;
-const cmtHtml = t => (t.comments && t.comments.length) ? `<span class="cmt">💬 ${t.comments.length}</span>` : '';
+const cmtHtml = t => ((t.comments && t.comments.length) ? `<span class="cmt">💬 ${t.comments.length}</span>` : '') + filesCount(t.files);
 function lastLog(t){ const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'comment' || x.kind === 'revise'); return c ? `<span class="last" title="${esc(c.by)}: ${esc(c.text)}">${esc(c.by)}: ${esc(c.text)}<span class="at">${fmtDateTime(c.at).slice(5)}</span></span>` : '<span class="hint">-</span>'; }
 const isSelf = t => t.assignee && t.assignee === t.created_by;   // 본인이 직접 등록한 내 업무
 const stTask = t => (t.status === '요청' && isSelf(t)) ? tag('내 업무', '#e0f2fe', '#0369a1', true) : stHtml(t.status);
@@ -93,9 +93,10 @@ function normalize(table, t){
     priority: PRIORITIES.includes(t.priority) ? t.priority : '보통',
     start_date: t.start_date || (t.created_at ? t.created_at.slice(0, 10) : null),
     comments: Array.isArray(t.comments) ? t.comments : [],
+    files: Array.isArray(t.files) ? t.files : [],
   };
 }
-const log = (text, kind = 'log', progress) => ({ by: me, text, at: nowIso(), kind, ...(progress != null ? { progress } : {}) });
+const log = (text, kind = 'log', progress, files) => ({ by: me, text, at: nowIso(), kind, ...(progress != null ? { progress } : {}), ...(files && files.length ? { files } : {}) });
 
 /* ---------- 저장 동작 ---------- */
 async function setStatus(id, status){
@@ -113,44 +114,46 @@ async function completeTask(id){
 /* 담당자가 진행 상황을 보고 */
 function openReport(id){
   const t = T().find(x => x.id === id); if (!t) return;
+  const rAt = attachBox('rFiles', [], 'tasks');
   openModal(`${modalHead(isSelf(t) ? '진행률 업데이트' : '진행 보고', stTask(t))}
     <div class="mb">
       <div><span class="title">${esc(t.title)}</span><div class="hint">${isSelf(t) ? '내 업무' : esc(t.created_by || '') + '님 요청'} · 마감 ${fmtDate(t.due_date) || '-'} · 현재 ${prog(t)}%</div></div>
       <div class="f"><label>진행률</label>
         <div class="range"><input type="range" id="rProg" min="0" max="100" step="5" value="${prog(t)}"><span class="pct" id="rPct">${prog(t)}%</span></div>
         <div class="quick">${[25, 50, 75, 100].map(p => `<button type="button" data-q="${p}">${p}%</button>`).join('')}</div></div>
-      <div class="f"><label>${isSelf(t) ? '메모 (선택)' : '보고 내용'}</label><textarea id="rText" placeholder="${isSelf(t) ? '진행 상황을 간단히 남겨 두면 나중에 기록으로 볼 수 있습니다' : '어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요'}"></textarea></div>
+      <div class="f"><label>${isSelf(t) ? '메모 (선택)' : '보고 내용'}</label><textarea id="rText" placeholder="${isSelf(t) ? '진행 상황을 간단히 남겨 두면 나중에 기록으로 볼 수 있습니다' : '어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요'}"></textarea>${rAt.html}</div>
       <div class="hint">${isSelf(t) ? '100%로 맞추면 바로 <b>완료</b> 처리됩니다.' : `100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.`}</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">${isSelf(t) ? '저장' : '보고하기'}</button></div>`);
   const rp = $('#rProg'), pct = $('#rPct');
   rp.oninput = () => pct.textContent = rp.value + '%';
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { rp.value = b.dataset.q; pct.textContent = rp.value + '%'; });
-  $('#rText').focus();
+  rAt.bind(); $('#rText').focus();
   $('#rSend').onclick = async () => {
     const p = Number(rp.value), text = $('#rText').value.trim();
     // 남이 요청한 업무는 100% 보고 → 요청자가 확인(보고완료). 내가 등록한 내 업무는 100% → 바로 완료
     const status = p >= 100 ? (isSelf(t) ? '완료' : '보고완료') : (t.status === '보류' ? '보류' : '진행중');
     closeModal();
-    await saveRow('tasks', { ...t, progress: p, status, completed_at: status === '완료' ? nowIso() : null, comments: [...(t.comments || []), log(text || `진행률 ${p}%`, isSelf(t) ? 'comment' : 'report', p)] });
+    await saveRow('tasks', { ...t, progress: p, status, completed_at: status === '완료' ? nowIso() : null, comments: [...(t.comments || []), log(text || `진행률 ${p}%`, isSelf(t) ? 'comment' : 'report', p, rAt.files)] });
     toast(status === '완료' ? '완료했습니다. 보관함으로 옮겨졌습니다' : p >= 100 ? '보고완료로 표시했습니다' : '진행 상황을 보고했습니다');
   };
 }
 /* 요청자가 보완 요청 */
 function openRevise(id){
   const t = T().find(x => x.id === id); if (!t) return;
+  const vAt = attachBox('vFiles', [], 'tasks');
   openModal(`${modalHead('보완 요청')}
     <div class="mb">
       <div><span class="title">${esc(t.title)}</span><div class="hint">담당 ${esc(t.assignee || '')}</div></div>
-      <div class="f"><label>보완할 내용</label><textarea id="vText" placeholder="무엇을 더 해야 하는지 적어 주세요"></textarea></div>
+      <div class="f"><label>보완할 내용</label><textarea id="vText" placeholder="무엇을 더 해야 하는지 적어 주세요"></textarea>${vAt.html}</div>
       <div class="hint">상태가 다시 <b>진행중</b>이 되고 담당자의 받은 업무에 표시됩니다.</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="vSend">보완 요청</button></div>`);
-  $('#vText').focus();
+  vAt.bind(); $('#vText').focus();
   $('#vSend').onclick = async () => {
     const text = $('#vText').value.trim(); if (!text) { $('#vText').focus(); toast('보완할 내용을 적어 주세요', true); return; }
     closeModal();
-    await saveRow('tasks', { ...t, status: '진행중', progress: Math.min(prog(t), 90), comments: [...(t.comments || []), log(text, 'revise')] });
+    await saveRow('tasks', { ...t, status: '진행중', progress: Math.min(prog(t), 90), comments: [...(t.comments || []), log(text, 'revise', undefined, vAt.files)] });
     toast('보완을 요청했습니다');
   };
 }
@@ -336,6 +339,7 @@ function openTask(id, preset = {}){
   const d = t || { title: '', assignee: '', priority: '보통', start_date: todayStr(), due_date: '', status: '요청', progress: 0, memo: '', comments: [], ...preset };
   const logs = t ? (t.comments || []) : [];
   const selfMode = !t && preset.self;
+  const mAt = attachBox('mFiles', d.files, 'tasks'), cAt = attachBox('cFiles', [], 'tasks');
   openModal(`${modalHead(t ? '업무 내용' : selfMode ? '내 업무 등록' : '업무 요청', t ? stTask(t) : '')}
     ${selfMode ? '<div class="mb" style="padding-bottom:0"><div class="hint">내가 직접 할 일을 적어 둡니다. 담당자를 다른 사람으로 바꾸면 그 사람에게 요청하는 업무가 됩니다.</div></div>' : ''}
     <div class="mb">
@@ -352,10 +356,10 @@ function openTask(id, preset = {}){
         <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
         <div class="f"><label>진행률</label><div class="range"><input type="range" id="mProg" min="0" max="100" step="5" value="${prog(d)}"><span class="pct" id="mPct">${prog(d)}%</span></div></div>
       </div>` : ''}
-      <div class="f"><label>${selfMode ? '내용 (자세한 설명, 참고 링크 등)' : '요청 내용 (자세한 설명, 참고 링크 등)'}</label><textarea id="mMemo">${esc(d.memo || '')}</textarea></div>
+      <div class="f"><label>${selfMode ? '내용 (자세한 설명, 참고 링크 등)' : '요청 내용 (자세한 설명, 참고 링크 등)'}</label><textarea id="mMemo">${esc(d.memo || '')}</textarea>${mAt.html}</div>
       ${t ? `<div class="comments"><h4>보고·기록 ${logs.length ? `(${logs.length})` : ''}</h4>
-        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${c.kind === 'report' ? tag('보고', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'revise' ? tag('보완 요청', '#fbeccc', '#9a6700') + ' ' : ''}${c.progress != null ? `<span class="pg">${c.progress}%</span>` : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span></div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
-        <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>
+        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${c.kind === 'report' ? tag('보고', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'revise' ? tag('보완 요청', '#fbeccc', '#9a6700') + ' ' : ''}${c.progress != null ? `<span class="pg">${c.progress}%</span>` : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
+        <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>${cAt.html}
       </div>
       <div class="hint">요청: ${esc(t.created_by || '')} ${fmtDateTime(t.created_at)}${t.completed_at ? ` · 완료: ${fmtDateTime(t.completed_at)}` : ''}</div>` : ''}
     </div>
@@ -365,6 +369,7 @@ function openTask(id, preset = {}){
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="mSave">${t ? '저장' : selfMode ? '등록' : '요청하기'}</button>
     </div>`);
+  mAt.bind(); if (t) cAt.bind();
   $('#mTitle').focus();
   const mProg = $('#mProg'), mPct = $('#mPct'), mStatus = $('#mStatus');
   if (mProg) {
@@ -383,6 +388,7 @@ function openTask(id, preset = {}){
       status,
       progress: mProg ? Number(mProg.value) : 0,
       memo: $('#mMemo').value.trim() || null,
+      files: mAt.files,
       comments: t ? [...(t.comments || [])] : [],
       created_by: t ? t.created_by : me,
       created_at: t ? t.created_at : nowIso(),
@@ -402,7 +408,7 @@ function openTask(id, preset = {}){
   $('#mSave').onclick = () => save();
   $('#mTitle').onkeydown = e => { if (e.key === 'Enter') save(); };
   if (t) {
-    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text) { $('#cText').focus(); return; } save(log(text, 'comment')); };
+    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text && !cAt.files.length) { $('#cText').focus(); return; } save(log(text || '첨부 파일', 'comment', undefined, cAt.files)); };
     $('#mDelete').onclick = async () => { if (confirm(`"${t.title}" 업무를 삭제할까요?`)) { closeModal(); await removeRow('tasks', t.id); toast('삭제했습니다'); } };
     const rb = $('#mReport'); if (rb) rb.onclick = () => { closeModal(); openReport(t.id); };
   }
