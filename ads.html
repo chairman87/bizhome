@@ -5,13 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161352">
-<script src="common.js?v=202609161352"></script>
+<link rel="stylesheet" href="common.css?v=202609161357">
+<script src="common.js?v=202609161357"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
   table.ads{min-width:1000px}
-  table.ads th{text-align:center}
+  /* 제목 줄(정렬·필터): 진한 남색 배경, 큰 글자, 높은 칸 */
+  table.ads th{text-align:center;background:#1e3a8a;color:#fff;font-size:14px;font-weight:600;padding:11px 8px;border-bottom:2px solid #172554}
+  table.ads th[data-sort]:hover{color:#fff;background:#1d4ed8}
+  table.ads th .arrow{color:#bfdbfe}
   table.ads td{padding:5px 8px;font-size:13px}
   td.c{text-align:center;white-space:nowrap}
   td.ttl{font-weight:500;min-width:220px}
@@ -48,8 +51,9 @@
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
   .stf{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px}
   .stf .lb{font-size:12px;color:var(--fg2);margin-right:2px}
-  th select[data-hf]{border:1px solid var(--line2);border-radius:4px;font:inherit;font-size:12px;padding:2px 4px;background:#fff;color:var(--fg2);font-weight:600}
-  th select[data-hf].on{border-color:var(--blue);color:var(--blue)}
+  th select[data-hf]{border:1px solid #3b82f6;border-radius:6px;font:inherit;font-size:14px;font-weight:600;padding:5px 8px;background:#1d4ed8;color:#fff;cursor:pointer;min-width:120px}
+  th select[data-hf]:hover{background:#2563eb}
+  th select[data-hf].on{background:#facc15;border-color:#facc15;color:#1e3a8a}
   .stf button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--fg2)}
   .stf button b{font-weight:600;color:var(--fg)}
   .stf button.on{background:var(--blue);border-color:var(--blue);color:#fff}
