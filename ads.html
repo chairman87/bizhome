@@ -46,6 +46,11 @@
   .wk .it b{font-weight:700}
   .p-레{color:#1d4ed8}.p-서{color:#15803d}.p-흑{color:#6d28d9}
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
+  .stf{display:inline-flex;gap:4px;flex-wrap:wrap}
+  .stf button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--fg2)}
+  .stf button b{font-weight:600;color:var(--fg)}
+  .stf button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .stf button.on b{color:#fff}
 </style>
 </head>
 <body>
@@ -93,13 +98,14 @@ function listOf(p){
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
+  const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
   const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '메타'], ['meta_budget', '메타 예산'], ['tiktok', '틱톡'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
   return `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <select id="fe"><option value="">편집자: 전체</option>${editors().map(e => `<option ${filter.editor === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
       <select id="fm"><option value="">메타: 전체</option>${metas().map(e => `<option ${filter.meta === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
-      <select id="fs"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
-      <span class="count">${list.length}건 · 운영중 ${listOf(p).filter(a => a.status === '운영중').length} · OFF ${listOf(p).filter(a => a.status === 'OFF').length} · 삭제·수정필요 ${listOf(p).filter(a => a.status === '삭제·수정필요').length}</span></div>
+      <span class="stf">${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + '만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
+      <span class="count">${list.length}건</span></div>
     <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
     <tr class="newrow">
@@ -175,7 +181,7 @@ function bindView(){
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
   const fe = $('#fe'); if (fe) fe.onchange = () => { filter.editor = fe.value; render(); };
   const fm = $('#fm'); if (fm) fm.onchange = () => { filter.meta = fm.value; render(); };
-  const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; render(); };
+  document.querySelectorAll('[data-fs]').forEach(b => b.onclick = () => { filter.status = b.dataset.fs === filter.status ? '' : b.dataset.fs; render(); });   // 상태 버튼: 누르면 걸리고 다시 누르면 풀림
   bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
   document.querySelectorAll('select[data-status]').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { const a = G().find(x => x.id === s.dataset.status); await saveRow('ads', { ...a, status: s.value, updated_by: me }); }; });
