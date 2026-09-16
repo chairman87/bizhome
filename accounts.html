@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161729">
-<script src="common.js?v=202609161729"></script>
+<link rel="stylesheet" href="common.css?v=202609161731">
+<script src="common.js?v=202609161731"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -112,8 +112,9 @@ function statsHtml(){
 function tableHtml(){
   // 구분은 정해진 순서(GROUP_ORDER)로, 같은 구분 안에서는 서비스 이름순
   const order = groups();
-  const pre = listOf().slice().sort((a, b) => String(a.service || '').localeCompare(String(b.service || ''), 'ko'));
-  const list = sortBy(pre, sort, { fee: f => Number(f) || 0, group_name: g => (order.indexOf(g) + 1 || 99) });
+  const list = sort.key === 'group_name'
+    ? listOf().slice().sort((a, b) => { const d = ((order.indexOf(a.group_name) + 1 || 99) - (order.indexOf(b.group_name) + 1 || 99)) * (sort.dir === 'asc' ? 1 : -1); return d || String(a.service || '').localeCompare(String(b.service || ''), 'ko'); })
+    : sortBy(listOf(), sort, { fee: f => Number(f) || 0 });
   const showGroup = !view.startsWith('g:');
   const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', '목적'], ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
