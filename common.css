@@ -19,7 +19,7 @@ a{color:var(--blue)}
 .home{display:flex;align-items:center;gap:6px;color:var(--fg);text-decoration:none;padding:4px 8px;border-radius:var(--radius);white-space:nowrap;font-size:16px;font-weight:700}
 .home:hover{background:var(--bg3)}
 .brand{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;white-space:nowrap;margin-right:8px}
-.brand.page{font-size:15px;font-weight:600;color:var(--fg2);padding-left:8px;border-left:1px solid var(--line2)}   /* 홈이 아닌 화면의 제목 */
+.brand.page{padding-left:10px;border-left:1px solid var(--line2)}   /* 홈이 아닌 화면의 제목: 인트라넷 글자와 같은 크기·굵기 */
 .logo-sm{width:24px;height:24px;border-radius:7px;display:block;flex:none}
 .tabs{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;align-items:center}
 .tabs::-webkit-scrollbar{display:none}
