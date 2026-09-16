@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>결제</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161357">
-<script src="common.js?v=202609161357"></script>
+<link rel="stylesheet" href="common.css?v=202609161428">
+<script src="common.js?v=202609161428"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -119,8 +119,9 @@ function openPaid(id){
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pdSend">${isIn(p) ? '입금 확인' : '이체 완료'}</button></div>`);
   at.bind(); bindCopy();
   $('#pdSend').onclick = async () => {
+    const text = $('#pdText').value.trim();   // 창을 닫기 전에 읽어야 함
     closeModal();
-    await saveRow('payments', { ...p, status: '이체완료', paid_by: me, paid_at: nowIso(), comments: [...p.comments, log($('#pdText').value.trim() || (isIn(p) ? '입금 확인' : '이체 완료'), 'paid', at.files)] });
+    await saveRow('payments', { ...p, status: '이체완료', paid_by: me, paid_at: nowIso(), comments: [...p.comments, log(text || (isIn(p) ? '입금 확인' : '이체 완료'), 'paid', at.files)] });
     toast(isIn(p) ? '입금 확인으로 표시했습니다' : '이체 완료로 표시했습니다');
   };
 }
