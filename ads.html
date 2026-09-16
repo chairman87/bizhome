@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161347">
-<script src="common.js?v=202609161347"></script>
+<link rel="stylesheet" href="common.css?v=202609161352">
+<script src="common.js?v=202609161352"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -48,8 +48,8 @@
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
   .stf{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px}
   .stf .lb{font-size:12px;color:var(--fg2);margin-right:2px}
-  th select#fsHead{border:1px solid var(--line2);border-radius:4px;font:inherit;font-size:12px;padding:2px 4px;background:#fff;color:var(--fg2);font-weight:600}
-  th select#fsHead.on{border-color:var(--blue);color:var(--blue)}
+  th select[data-hf]{border:1px solid var(--line2);border-radius:4px;font:inherit;font-size:12px;padding:2px 4px;background:#fff;color:var(--fg2);font-weight:600}
+  th select[data-hf].on{border-color:var(--blue);color:var(--blue)}
   .stf button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--fg2)}
   .stf button b{font-weight:600;color:var(--fg)}
   .stf button.on{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -72,13 +72,15 @@ const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑'
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
 let view = LS.get('ads_view') || PRODUCTS[0];
-let filter = { q: '', editor: '', meta: '', status: '' };
+let filter = { q: '', editor: '', meta: '', budget: '', status: '' };
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let sort = { key: 'date', dir: 'desc' };
 
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
 const editors = () => uniq(G().map(a => a.editor));
 const metas = () => uniq(G().map(a => a.meta_account));
+const budgetKey = v => String(v || '').replace(/,/g, '').trim().toUpperCase();   // 예산 값 비교용 (10,000 = 10000, off = OFF)
+const budgets = () => [...new Set(G().map(a => budgetKey(a.meta_budget)).filter(Boolean))].sort((x, y) => (x === 'OFF') - (y === 'OFF') || Number(x) - Number(y));
 const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(String(b).replace(/,/g, '')); return isNaN(n) ? esc(b) : n.toLocaleString('ko-KR'); };
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
 const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
@@ -97,31 +99,34 @@ function render(){
 function listOf(p){
   const q = filter.q.trim().toLowerCase();
   return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
-    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.status || a.status === filter.status));
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
   const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '메타'], ['meta_budget', '메타 예산'], ['tiktok', '틱톡'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
   return `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
-      <select id="fe"><option value="">편집자: 전체</option>${editors().map(e => `<option ${filter.editor === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
-      <select id="fm"><option value="">메타: 전체</option>${metas().map(e => `<option ${filter.meta === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
-      <span class="count">${filter.status ? `<b>${filter.status}</b> ${list.length}건 보는 중 · <a href="#" data-fs="" style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
+      <span class="count">${(filter.editor || filter.meta || filter.budget || filter.status) ? `<b>${[filter.editor, filter.meta, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
-    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => k === 'status' ? `<th class="c"><select id="fsHead" title="상태로 걸러 보기" class="${filter.status ? 'on' : ''}"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></th>` : `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
+    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
+      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_budget: ['budget', budgets()], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
+      if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
+      const [fk, opts] = HF, cur = filter[fk];
+      return `<th class="c"><select data-hf="${fk}" title="${l}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}: 전체</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
+    }).join('')}</tr></thead><tbody>
     <tr class="newrow">
       <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
       <td class="c"><input id="nEditor" list="edList2" value="${esc(lastNew.editor)}" placeholder="편집자" style="width:70px"><datalist id="edList2">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
-      <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="메타" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
       <td class="c"><select id="nStatus" title="새로 넣을 영상의 상태 (걸러 보기는 위 '상태 보기' 버튼)">${STATUSES.map(s => `<option ${s === (filter.status || '운영중') ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="8" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="8" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.budget || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
@@ -182,10 +187,9 @@ function bindView(){
     document.querySelectorAll('.newrow input, .newrow select').forEach(i => { i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addFromRow(); } }; i.onclick = e => e.stopPropagation(); });
   }
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
-  const fe = $('#fe'); if (fe) fe.onchange = () => { filter.editor = fe.value; render(); };
-  const fm = $('#fm'); if (fm) fm.onchange = () => { filter.meta = fm.value; render(); };
   document.querySelectorAll('[data-fs]').forEach(b => b.onclick = e => { e.preventDefault(); filter.status = (b.tagName === 'BUTTON' && b.dataset.fs === filter.status) ? '' : b.dataset.fs; render(); });   // 상태 버튼: 누르면 걸리고 다시 누르면 풀림
-  const fh = $('#fsHead'); if (fh) { fh.onclick = e => e.stopPropagation(); fh.onchange = () => { filter.status = fh.value; render(); }; }
+  document.querySelectorAll('select[data-hf]').forEach(h => { h.onclick = e => e.stopPropagation(); h.onchange = () => { filter[h.dataset.hf] = h.value; render(); }; });   // 열 머리 필터
+  const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.budget = filter.status = ''; render(); };
   bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
   document.querySelectorAll('select[data-status]').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { const a = G().find(x => x.id === s.dataset.status); await saveRow('ads', { ...a, status: s.value, updated_by: me }); }; });
@@ -224,8 +228,8 @@ function openAd(id, preset = {}){
       <div class="f"><label>영상 타이틀 *</label><input id="aTitle" value="${esc(d.title)}" placeholder="예: 유산균 들어간 고체레몬즙(심포니)" maxlength="200"></div>
       <div class="f3">
         <div class="f"><label>편집자</label><input id="aEditor" value="${esc(d.editor || '')}" list="edList" placeholder="예: 예솔"><datalist id="edList">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
-        <div class="f"><label>메타 계정</label><input id="aMeta" value="${esc(d.meta_account || '')}" list="metaList" placeholder="예: Diet Beauty"><datalist id="metaList">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
-        <div class="f"><label>메타 예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
+        <div class="f"><label>페이지명 (메타 계정)</label><input id="aMeta" value="${esc(d.meta_account || '')}" list="metaList" placeholder="예: Diet Beauty"><datalist id="metaList">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
+        <div class="f"><label>예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
       </div>
       <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
       <div class="f"><label>질병 예방/치료 오인 사유 · 수정 콘티</label><textarea id="aNote">${esc(d.note || '')}</textarea></div>
