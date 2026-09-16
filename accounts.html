@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161718">
-<script src="common.js?v=202609161718"></script>
+<link rel="stylesheet" href="common.css?v=202609161722">
+<script src="common.js?v=202609161722"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -29,7 +29,18 @@
   .exp{white-space:nowrap;font-variant-numeric:tabular-nums}
   .exp.soon{color:var(--orange);font-weight:600}
   .exp.over{color:var(--red);font-weight:600}
-  .grp{display:inline-block;padding:0 7px;border-radius:4px;font-size:11px;background:var(--bg3);color:var(--fg2);white-space:nowrap}
+  .grp{display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid transparent}
+  /* 구분별 색: 운영 파랑, 재무 초록, 총무 노랑, 고객센터 보라, 물류 주황, 법무 빨강, 이메일 청록, 마케팅 쪽은 분홍·남색 */
+  .grp.c0{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+  .grp.c1{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+  .grp.c2{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .grp.c3{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+  .grp.c4{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
+  .grp.c5{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  .grp.c6{background:#ccfbf1;color:#115e59;border-color:#99f6e4}
+  .grp.c7{background:#fce7f3;color:#9d174d;border-color:#fbcfe8}
+  .grp.c8{background:#e0e7ff;color:#3730a3;border-color:#c7d2fe}
+  .grp.c9{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
   .sec{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;font-size:12px;color:var(--fg2);font-weight:600}
 </style>
 </head>
@@ -50,6 +61,9 @@ const CYCLES = ['없음', '월', '년'];
 const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
+/* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
+const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9' };
+const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
 const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
 const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
@@ -102,7 +116,7 @@ function tableHtml(){
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
   return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
     ${list.map(a => `<tr class="row" data-id="${a.id}">
-      ${showGroup ? `<td><span class="grp">${esc(a.group_name || '-')}</span></td>` : ''}
+      ${showGroup ? `<td><span class="grp ${grpCls(a.group_name)}">${esc(a.group_name || '-')}</span></td>` : ''}
       <td><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
       <td>${siteHtml(a.url)}</td>
       <td class="small">${esc(a.purpose || '')}</td>
