@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>계정관리</title>
+<title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161653">
-<script src="common.js?v=202609161653"></script>
+<link rel="stylesheet" href="common.css?v=202609161701">
+<script src="common.js?v=202609161701"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -49,6 +49,7 @@ const CYCLES = ['없음', '월', '년'];
 /* 총무 / 마케팅 두 화면이 같은 표를 나눠 씀: 구분(group_name)이 MARKETING_GROUPS 에 있으면 마케팅 > 계정관리, 나머지는 총무 > 계정관리 */
 const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
+if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
 const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
 const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
@@ -72,7 +73,7 @@ function render(){
   if (view === 'subs') view = 'all';
   const tabs = [{ key: 'all', label: '전체' }, ...groups().map(g => ({ key: 'g:' + g, label: g }))];
   if (!tabs.some(t => t && t.key === view)) view = 'all';
-  $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '계정관리 (마케팅)' : '계정관리', tabs, active: view })
+  $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
       <input type="search" id="fq" placeholder="검색 (서비스, 아이디, 목적, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
       <span class="count" id="cnt"></span></div><div id="view">${tableHtml()}</div>`}</main>`;
@@ -91,8 +92,7 @@ function statsHtml(){
   return `<div class="stats">
     <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개</div></div>
     <div class="stat"><div class="l">비밀번호 비어 있음</div><div class="v ${all.filter(a => !a.password).length ? 'orange' : ''}">${all.filter(a => !a.password).length}개</div><div class="s">계정을 열어 넣어 두세요</div></div>
-    <div class="stat"><div class="l">${DEPT === '마케팅' ? '총무 계정' : '마케팅 계정'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '총무 > 계정관리' : '마케팅 > 계정관리'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
-    <div class="stat"><div class="l">구독료 · 결제일 · 만료일</div><div class="v" style="font-size:14px"><a href="subscriptions.html">💸 구독관리에서 →</a></div><div class="s">매월 나가는 돈은 그쪽에 모아 둡니다</div></div>
+    <div class="stat"><div class="l">${DEPT === '마케팅' ? '운영계정 (총무)' : '마케팅계정 (마케팅)'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '총무 > 운영계정' : '마케팅 > 마케팅계정'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
   </div>`;
 }
 function tableHtml(){
@@ -142,7 +142,6 @@ function openEdit(id, preset = {}){
         <div class="f"><label>아이디</label><input id="aId" value="${esc(d.login_id || '')}" autocomplete="off"></div>
         <div class="f"><label>비밀번호</label><div style="display:flex;gap:4px"><input id="aPw" type="password" value="${esc(d.password || '')}" autocomplete="off" style="flex:1"><button type="button" class="btn sm" id="aPwEye">👁</button></div></div>
       </div>
-      <div class="hint">구독료·결제일·만료일은 <a href="subscriptions.html">구독관리</a>에서 넣습니다.</div>
       <div class="sec">담당·공유</div>
       <div class="f2">
         <div class="f"><label>담당자 / 구매자</label><select id="aOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
@@ -173,7 +172,7 @@ function openEdit(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🔐', title: DEPT === '마케팅' ? '계정관리 (마케팅)' : '계정관리', tables: ['accounts'], render, normalize });
+boot({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tables: ['accounts'], render, normalize });
 </script>
 </body>
 </html>

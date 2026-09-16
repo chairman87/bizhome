@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구독관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161653">
-<script src="common.js?v=202609161653"></script>
+<link rel="stylesheet" href="common.css?v=202609161701">
+<script src="common.js?v=202609161701"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -58,7 +58,6 @@ const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티', '공통']
 const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b', '공통': 'c' };
 const CYCLES = ['월', '년'];
 const S = () => (DATA.subscriptions || []).filter(s => isAdmin() || !s.admin_only);
-const ACC = () => (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only);
 const won = n => (n == null || n === '' || isNaN(Number(n))) ? '' : Number(n).toLocaleString('ko-KR') + '원';
 const money = (n, cur) => cur === 'USD' ? `<span class="usd">$${Number(n).toLocaleString('en-US')}</span>` : won(n);
 const monthly = s => { const f = Number(s.fee) || 0; return s.cycle === '년' ? Math.round(f / 12) : f; };
@@ -119,8 +118,8 @@ function tableHtml(){
   const cols = [['name', '항목'], ['category', '구분'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['users', '사용자']];
   const krw = list.filter(s => s.currency !== 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0), usd = list.filter(s => s.currency === 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0);
   return `<div class="tablewrap"><table style="min-width:1000px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}" class="${['fee', 'monthly'].includes(k) ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
-    ${list.map(s => { const acc = s.account_id ? ACC().find(a => a.id === s.account_id) : null; return `<tr class="row ${isOn(s) ? '' : 'off'}" data-id="${s.id}">
-      <td><b>${esc(s.name)}</b>${s.admin_only ? ' 🔒' : ''}${!isOn(s) ? ' <span class="hint">(해지)</span>' : ''}${acc ? ` <a class="hint" href="accounts.html" title="계정관리에서 로그인 정보 보기">🔐 계정</a>` : ''}${s.vendor ? `<div class="hint">${esc(s.vendor)}</div>` : ''}</td>
+    ${list.map(s => { return `<tr class="row ${isOn(s) ? '' : 'off'}" data-id="${s.id}">
+      <td><b>${esc(s.name)}</b>${s.admin_only ? ' 🔒' : ''}${!isOn(s) ? ' <span class="hint">(해지)</span>' : ''}${s.vendor ? `<div class="hint">${esc(s.vendor)}</div>` : ''}</td>
       <td><span class="cat">${esc(s.category || '기타')}</span></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td>
       <td class="num">${feeHtml(s)}</td><td class="num">${isOn(s) && monthly(s) ? money(monthly(s), s.currency) : '<span class="hint">-</span>'}</td>
       <td>${s.billing_day ? `매${s.cycle === '년' ? '년' : '월'} ${s.billing_day}일` : '<span class="hint">-</span>'}</td>
@@ -183,7 +182,6 @@ function openEdit(id, preset = {}){
         <div class="f"><label>만료·갱신일</label><input type="date" id="sEnd" value="${esc(d.end_date || '')}"></div>
         <div class="f"><label>상태</label><select id="sStatus"><option ${d.status !== '해지' ? 'selected' : ''}>이용중</option><option ${d.status === '해지' ? 'selected' : ''}>해지</option></select></div>
       </div>
-      <div class="f"><label>연결된 계정 (계정관리에 있는 로그인 정보)</label><select id="sAcc"><option value="">없음</option>${ACC().map(a => `<option value="${a.id}" ${d.account_id === a.id ? 'selected' : ''}>${esc(a.service)}${a.group_name ? ` (${esc(a.group_name)})` : ''}</option>`).join('')}</select></div>
       <div class="f"><label>메모</label><textarea id="sMemo" placeholder="플랜 이름, 인원 수, 해지 방법 등">${esc(d.memo || '')}</textarea></div>
       ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="sAdmin" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기</label>` : ''}
       ${s0 ? `<div class="hint">등록: ${esc(s0.created_by || '')} ${fmtDateTime(s0.created_at)}${s0.updated_by ? ` · 수정: ${esc(s0.updated_by)} ${fmtDateTime(s0.updated_at)}` : ''}</div>` : ''}
@@ -197,14 +195,14 @@ function openEdit(id, preset = {}){
     const row = { id: s0 ? s0.id : uid(), name, category: $('#sCat').value.trim() || '기타', company: $('#sCo').value, vendor: $('#sVendor').value.trim() || null,
       fee: f, currency: $('#sCur').value, cycle: $('#sCycle').value, billing_day: $('#sBill').value ? Number($('#sBill').value) : null,
       start_date: $('#sStart').value || null, end_date: $('#sEnd').value || null, pay_method: $('#sPay').value.trim() || null, owner: $('#sOwner').value || null, users: $('#sUsers').value.trim() || null,
-      account_id: $('#sAcc').value || null, status: $('#sStatus').value, memo: $('#sMemo').value.trim() || null,
+      account_id: null, status: $('#sStatus').value, memo: $('#sMemo').value.trim() || null,
       admin_only: $('#sAdmin') ? $('#sAdmin').checked : !!(s0 && s0.admin_only), created_by: s0 ? s0.created_by : me, created_at: s0 ? s0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('subscriptions', row); toast(s0 ? '저장했습니다' : '추가했습니다');
   };
   const del = $('#sDel'); if (del) del.onclick = async () => { if (confirm(`"${s0.name}" 항목을 삭제할까요? (해지한 것은 삭제 대신 상태를 "해지"로 두면 기록이 남습니다)`)) { closeModal(); await removeRow('subscriptions', s0.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '💸', title: '구독관리', tables: ['subscriptions', 'accounts'], render, normalize });
+boot({ icon: '💸', title: '구독관리', tables: ['subscriptions'], render, normalize });
 </script>
 </body>
 </html>
