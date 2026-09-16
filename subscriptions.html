@@ -66,6 +66,8 @@ const feeHtml = s => Number(s.fee) > 0 ? `${money(s.fee, s.currency)}<span class
 const daysTo = d => d ? dayDiff(d) : null;
 function expHtml(d){ if (!d) return '<span class="hint">-</span>'; const n = daysTo(d); const cls = n < 0 ? 'over' : n <= 30 ? 'soon' : ''; return `<span class="exp ${cls}">${fmtDate(d)}${n < 0 ? ` (${-n}일 지남)` : n <= 30 ? ` (D-${n})` : ''}</span>`; }
 const isOn = s => s.status !== '해지';
+/* 사용자: 이름을 쉼표로 나눠 팀원이면 아바타, 아니면 글자로 */
+const usersHtml = s => { const names = String(s.users || '').split(/[,·/]/).map(x => x.trim()).filter(Boolean); if (!names.length) return '<span class="hint">-</span>'; return names.map(n => members.some(m => m.name === n) ? who(n) : `<span class="chip none">${esc(n)}</span>`).join(' '); };
 
 let view = LS.get('sub_view') || 'all';
 let q = '';
@@ -94,7 +96,7 @@ function render(){
 function listOf(){
   const showOff = !!LS.get('sub_off');
   return S().filter(s => (showOff || isOn(s)) && (view === 'all' || view === 'sched' || view === 'expire' || (view.startsWith('c:') && s.company === view.slice(2)))
-    && (!q || [s.name, s.vendor, s.category, s.memo, s.pay_method, s.owner].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
+    && (!q || [s.name, s.vendor, s.category, s.memo, s.pay_method, s.owner, s.users].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
 }
 function statsHtml(){
   const on = S().filter(isOn);
@@ -114,7 +116,7 @@ function renderView(){ $('#view').innerHTML = viewHtml(); const c = $('#cnt'); i
 function tableHtml(){
   const list = sortBy(listOf(), sort, { fee: f => Number(f) || 0, billing_day: d => Number(d) || 99, end_date: d => d || '9999' });
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 구독·정기 지출이 없습니다.<br>위 <b>＋ 구독·정기 지출 추가</b>로 넣어 두면 매월 나가는 돈이 한눈에 보입니다.'}</div>`;
-  const cols = [['name', '항목'], ['category', '구분'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['owner', '담당']];
+  const cols = [['name', '항목'], ['category', '구분'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['users', '사용자']];
   const krw = list.filter(s => s.currency !== 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0), usd = list.filter(s => s.currency === 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0);
   return `<div class="tablewrap"><table style="min-width:1000px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}" class="${['fee', 'monthly'].includes(k) ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}</tr></thead><tbody>
     ${list.map(s => { const acc = s.account_id ? ACC().find(a => a.id === s.account_id) : null; return `<tr class="row ${isOn(s) ? '' : 'off'}" data-id="${s.id}">
@@ -122,7 +124,7 @@ function tableHtml(){
       <td><span class="cat">${esc(s.category || '기타')}</span></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td>
       <td class="num">${feeHtml(s)}</td><td class="num">${isOn(s) && monthly(s) ? money(monthly(s), s.currency) : '<span class="hint">-</span>'}</td>
       <td>${s.billing_day ? `매${s.cycle === '년' ? '년' : '월'} ${s.billing_day}일` : '<span class="hint">-</span>'}</td>
-      <td class="hint">${esc(s.pay_method || '')}</td><td>${expHtml(s.end_date)}</td><td>${s.owner ? who(s.owner) : '<span class="hint">-</span>'}</td></tr>`; }).join('')}
+      <td class="hint">${esc(s.pay_method || '')}</td><td>${expHtml(s.end_date)}</td><td class="small">${usersHtml(s)}</td></tr>`; }).join('')}
     <tr class="total"><td colspan="4" style="text-align:right">월 환산 합계 (해지 제외)</td><td class="num">${won(krw) || '0원'}${usd ? ` + $${usd.toLocaleString('en-US')}` : ''}</td><td colspan="4"></td></tr>
   </tbody></table></div>`;
 }
@@ -142,12 +144,12 @@ function expireHtml(){
   const list = S().filter(s => isOn(s) && s.end_date).sort((a, b) => a.end_date.localeCompare(b.end_date));
   if (!list.length) return '<div class="empty">만료·갱신일이 입력된 항목이 없습니다.</div>';
   return `<div class="hint" style="margin-bottom:8px">만료·갱신일이 가까운 순서입니다. 연간 결제는 갱신 전에 계속 쓸지 확인하세요.</div>
-    <div class="tablewrap"><table><thead><tr><th>항목</th><th>회사</th><th class="num">금액</th><th>만료·갱신일</th><th>결제 수단</th><th>담당</th></tr></thead><tbody>
-    ${list.map(s => `<tr class="row" data-id="${s.id}"><td><b>${esc(s.name)}</b></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td><td class="num">${feeHtml(s)}</td><td>${expHtml(s.end_date)}</td><td class="hint">${esc(s.pay_method || '')}</td><td>${s.owner ? who(s.owner) : '-'}</td></tr>`).join('')}
+    <div class="tablewrap"><table><thead><tr><th>항목</th><th>회사</th><th class="num">금액</th><th>만료·갱신일</th><th>결제 수단</th><th>사용자</th></tr></thead><tbody>
+    ${list.map(s => `<tr class="row" data-id="${s.id}"><td><b>${esc(s.name)}</b></td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td><td class="num">${feeHtml(s)}</td><td>${expHtml(s.end_date)}</td><td class="hint">${esc(s.pay_method || '')}</td><td class="small">${usersHtml(s)}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function bindView(){
-  bindSort(sort, renderView, { name: 'asc', category: 'asc', company: 'asc', pay_method: 'asc', owner: 'asc' });
+  bindSort(sort, renderView, { name: 'asc', category: 'asc', company: 'asc', pay_method: 'asc', users: 'asc' });
   document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a')) return; openEdit(tr.dataset.id); });
   document.querySelectorAll('[data-open]').forEach(el => el.onclick = () => openEdit(el.dataset.open));
 }
@@ -155,7 +157,7 @@ function bindView(){
 /* 추가·수정 창 */
 function openEdit(id, preset = {}){
   const s0 = id ? S().find(x => x.id === id) : null;
-  const d = s0 || { name: '', category: CATS[0], company: COMPANIES[0], vendor: '', fee: '', currency: 'KRW', cycle: '월', billing_day: '', start_date: '', end_date: '', pay_method: '', owner: '', account_id: '', status: '이용중', memo: '', admin_only: false, ...preset };
+  const d = s0 || { name: '', category: CATS[0], company: COMPANIES[0], vendor: '', fee: '', currency: 'KRW', cycle: '월', billing_day: '', start_date: '', end_date: '', pay_method: '', owner: '', users: '', account_id: '', status: '이용중', memo: '', admin_only: false, ...preset };
   const pays = [...new Set(S().map(s => s.pay_method).filter(Boolean))];
   openModal(`${modalHead(s0 ? '구독·정기 지출' : '구독·정기 지출 추가', s0 && !isOn(s0) ? tag('해지', '#e9e9e7', '#5a5a55', true) : '')}
     <div class="mb">
@@ -173,8 +175,9 @@ function openEdit(id, preset = {}){
       <div class="f3">
         <div class="f"><label>결제 수단</label><input id="sPay" list="payList" value="${esc(d.pay_method || '')}" placeholder="예: 하나카드 4312, 계좌 자동이체"><datalist id="payList">${pays.map(p => `<option value="${esc(p)}">`).join('')}</datalist></div>
         <div class="f"><label>결제처 (업체)</label><input id="sVendor" value="${esc(d.vendor || '')}" placeholder="예: Adobe, SK텔레콤"></div>
-        <div class="f"><label>담당</label><select id="sOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
+        <div class="f"><label>구매자 (결제 담당)</label><select id="sOwner"><option value="">미지정</option>${memberOptions(d.owner)}</select></div>
       </div>
+      <div class="f"><label>사용자 (쓰는 사람, 쉼표로 여러 명)</label><input id="sUsers" list="userList" value="${esc(d.users || '')}" placeholder="예: 류수연, 김채은 (팀원 이름이면 얼굴 표시)"><datalist id="userList">${members.map(m => `<option value="${esc(m.name)}">`).join('')}<option value="전체 팀원"></datalist></div>
       <div class="f3">
         <div class="f"><label>시작일</label><input type="date" id="sStart" value="${esc(d.start_date || '')}"></div>
         <div class="f"><label>만료·갱신일</label><input type="date" id="sEnd" value="${esc(d.end_date || '')}"></div>
@@ -193,7 +196,7 @@ function openEdit(id, preset = {}){
     const f = Number(fee.value.replace(/[^\d.]/g, '')) || 0;
     const row = { id: s0 ? s0.id : uid(), name, category: $('#sCat').value.trim() || '기타', company: $('#sCo').value, vendor: $('#sVendor').value.trim() || null,
       fee: f, currency: $('#sCur').value, cycle: $('#sCycle').value, billing_day: $('#sBill').value ? Number($('#sBill').value) : null,
-      start_date: $('#sStart').value || null, end_date: $('#sEnd').value || null, pay_method: $('#sPay').value.trim() || null, owner: $('#sOwner').value || null,
+      start_date: $('#sStart').value || null, end_date: $('#sEnd').value || null, pay_method: $('#sPay').value.trim() || null, owner: $('#sOwner').value || null, users: $('#sUsers').value.trim() || null,
       account_id: $('#sAcc').value || null, status: $('#sStatus').value, memo: $('#sMemo').value.trim() || null,
       admin_only: $('#sAdmin') ? $('#sAdmin').checked : !!(s0 && s0.admin_only), created_by: s0 ? s0.created_by : me, created_at: s0 ? s0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('subscriptions', row); toast(s0 ? '저장했습니다' : '추가했습니다');

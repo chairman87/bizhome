@@ -159,3 +159,6 @@ create table if not exists subscriptions ( id          uuid primary key, name   
 
 -- 13) 광고 영상 구글 칸 (sql-ads-google.sql 과 동일)
 alter table ads add column if not exists google boolean default false;
+
+-- 14) 구독관리 사용자 칸 (sql-subscriptions-users.sql 과 동일)
+alter table subscriptions add column if not exists users text;
