@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>공지사항</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161124">
-<script src="common.js?v=202609161124"></script>
+<link rel="stylesheet" href="common.css?v=202609161316">
+<script src="common.js?v=202609161316"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
@@ -105,6 +105,9 @@ function openEdit(id){
   };
 }
 
+let openedNew = false;   // 홈의 "＋ 공지 작성" 링크(#new)로 들어오면 작성 창을 바로 엶
+const render0 = render;
+render = function(){ render0(); if (location.hash === '#new' && !openedNew && me && isAdmin()) { openedNew = true; history.replaceState(null, '', location.pathname); openEdit(null); } };
 boot({ icon: '📢', title: '공지사항', tables: ['notices'], render, normalize });
 </script>
 </body>
