@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>견적서 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161510">
-<script src="common.js?v=202609161510"></script>
+<link rel="stylesheet" href="common.css?v=202609161514">
+<script src="common.js?v=202609161514"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -101,9 +101,9 @@ function productsHtml(){
     const diff = rows.length > 1 && first.unit_price ? cur.unit_price - first.unit_price : 0;
     return `<section class="prod">
       <div class="hd"><h2>${esc(p)}</h2><span class="spec">${esc(cur.spec || '')}</span><span class="sup">${esc(cur.supplier || '')}</span><span class="sp"></span>
-        <span class="now">현재 단가 <b>${won(cur.unit_price)}원</b> <span class="hint">/ ${won(cur.qty)}개 기준</span>${diff ? `<span class="${diff < 0 ? 'dn' : 'up'}">${diff < 0 ? '▼' : '▲'} ${won(Math.abs(diff))}원 (처음 견적 대비)</span>` : ''}</span>
+        <span class="now">현재 단가 <b>${won(cur.unit_price)}원</b> <span class="hint">(${cur.vat === false ? '부가세 포함' : '부가세별도'}) / ${won(cur.qty)}개 기준</span>${diff ? `<span class="${diff < 0 ? 'dn' : 'up'}">${diff < 0 ? '▼' : '▲'} ${won(Math.abs(diff))}원 (처음 견적 대비)</span>` : ''}</span>
         <button class="btn sm" data-addfor="${esc(p)}">＋ 새 견적</button></div>
-      <div class="tablewrap"><table class="q"><thead><tr><th>견적일</th><th class="n">발주량</th><th class="n">최종 단가</th><th class="n">조정 전</th><th class="n">총 금액</th><th class="n">원료비</th><th class="n">부자재비</th><th class="n">가공비</th><th>변경 내용</th><th>유효기간</th><th>파일</th><th></th></tr></thead><tbody>
+      <div class="tablewrap"><table class="q"><thead><tr><th>견적일</th><th class="n">발주량</th><th class="n">최종 단가<br><span class="hint">(부가세별도)</span></th><th class="n">조정 전</th><th class="n">총 금액<br><span class="hint">(부가세별도)</span></th><th class="n">원료비</th><th class="n">부자재비</th><th class="n">가공비</th><th>변경 내용</th><th>유효기간</th><th>파일</th><th></th></tr></thead><tbody>
         ${rows.map((x, i) => { const prev = rows[i + 1]; const d = prev && prev.unit_price ? x.unit_price - prev.unit_price : 0; return `<tr class="row ${x.id === cur.id ? 'final' : 'old'}" data-id="${x.id}">
           <td>${fmtDate(x.quote_date) || '-'}${x.id === cur.id ? ` <span class="fin">${x.is_final ? '최종 확정' : '최신'}</span>` : ''}</td>
           <td class="n">${won(x.qty)}</td><td class="n"><b>${won(x.unit_price)}</b>${d ? `<div class="diff ${d < 0 ? 'dn' : 'up'}">${d < 0 ? '▼' : '▲'}${won(Math.abs(d))}</div>` : ''}</td>
@@ -111,7 +111,7 @@ function productsHtml(){
           <td class="n hint">${x.cost_material ? won(x.cost_material) : ''}</td><td class="n hint">${x.cost_packaging ? won(x.cost_packaging) : ''}</td><td class="n hint">${x.cost_labor ? won(x.cost_labor) : ''}</td>
           <td>${esc(x.change || '')}</td><td><span class="exp ${expCls(x)}">${expText(x)}</span></td>
           <td>${x.files.map(f => `<a class="f" href="${esc(f.url)}?download=${encodeURIComponent(f.name)}" download="${esc(f.name)}" title="${esc(f.name)}">📕 내려받기</a>`).join(' ')}</td>
-          <td class="act">${x.is_final ? '' : `<button class="btn sm" data-final="${x.id}" title="이 견적을 최종 확정으로 표시">최종 확정</button>`}</td></tr>`; }).join('')}
+          <td class="act">${x.is_final ? '' : `<button class="btn sm" data-final="${x.id}" title="이 견적을 현재 단가로 되돌리기">현재 단가로</button>`}</td></tr>`; }).join('')}
       </tbody></table></div></section>`;
   }).join('');
 }
@@ -170,7 +170,7 @@ function openQuote(id, preset = {}){
       <div class="f"><label>견적서 파일 (PDF) *</label>${at.html}</div>
       <div class="f"><label>메모</label><textarea id="qMemo">${esc(x.memo || '')}</textarea></div>
       <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qVat" ${x.vat !== false ? 'checked' : ''}> VAT 별도</label>
-      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qFinal" ${x.is_final ? 'checked' : ''}> 이 견적을 <b>최종 확정</b>으로 표시 (같은 제품의 다른 견적은 해제됨)</label>
+      ${x0 ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qFinal" ${x.is_final ? 'checked' : ''}> 이 견적을 <b>현재 단가(최종 확정)</b>로 표시 (같은 제품의 다른 견적은 해제됨)</label>` : '<div class="hint">새로 등록하는 견적이 그 제품의 <b>현재 단가</b>가 됩니다. 이전 견적은 이력으로 남습니다.</div>'}
       ${x0 ? `<div class="hint">등록: ${esc(x0.created_by || '')} ${fmtDateTime(x0.created_at)}</div>` : ''}
     </div>
     <div class="mf">${x0 && (x0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="qDelete">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="qSave">${x0 ? '저장' : '등록'}</button></div>`, { wide: true });
@@ -189,9 +189,9 @@ function openQuote(id, preset = {}){
     const row = { id: x0 ? x0.id : uid(), supplier, product, spec: $('#qSpec').value.trim() || null, quote_date: $('#qDate').value || todayStr(), qty, unit_price: price,
       list_price: sum || null, cost_material: num($('#qMat').value) || null, cost_packaging: num($('#qPack').value) || null, cost_labor: num($('#qLab').value) || null, one_time: num($('#qOne').value) || null,
       vat: $('#qVat').checked, valid_until: $('#qValid').value || null, terms: $('#qTerms').value.trim() || null, change: $('#qChange').value.trim() || null, memo: $('#qMemo').value.trim() || null,
-      files: at.files, is_final: $('#qFinal').checked, created_by: x0 ? x0.created_by : me, created_at: x0 ? x0.created_at : nowIso(), updated_by: me };
+      files: at.files, is_final: x0 ? $('#qFinal').checked : true, created_by: x0 ? x0.created_by : me, created_at: x0 ? x0.created_at : nowIso(), updated_by: me };
     closeModal();
-    if (row.is_final) for (const o of Q().filter(r => r.product === product && r.is_final && r.id !== row.id)) await saveRow('quotes', { ...o, is_final: false });
+    if (row.is_final) for (const o of Q().filter(r => r.product === product && r.is_final && r.id !== row.id)) await saveRow('quotes', { ...o, is_final: false });   // 같은 제품은 현재 견적 하나만
     await saveRow('quotes', row); toast(x0 ? '저장했습니다' : `${product} 견적서를 등록했습니다`);
   };
   const del = $('#qDelete'); if (del) del.onclick = async () => {
