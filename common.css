@@ -16,9 +16,11 @@ a{color:var(--blue)}
 
 /* ---------- 상단 바 ---------- */
 .top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding:0 16px;display:flex;align-items:center;gap:8px;height:52px}
-.home{display:flex;align-items:center;gap:4px;color:var(--fg2);text-decoration:none;padding:4px 8px;border-radius:var(--radius);white-space:nowrap;font-size:13px}
-.home:hover{background:var(--bg3);color:var(--fg)}
-.brand{font-weight:700;font-size:16px;white-space:nowrap;margin-right:8px}
+.home{display:flex;align-items:center;gap:6px;color:var(--fg);text-decoration:none;padding:4px 8px;border-radius:var(--radius);white-space:nowrap;font-size:16px;font-weight:700}
+.home:hover{background:var(--bg3)}
+.brand{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;white-space:nowrap;margin-right:8px}
+.brand.page{font-size:15px;font-weight:600;color:var(--fg2);padding-left:8px;border-left:1px solid var(--line2)}   /* 홈이 아닌 화면의 제목 */
+.logo-sm{width:24px;height:24px;border-radius:7px;display:block;flex:none}
 .tabs{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;align-items:center}
 .tabs::-webkit-scrollbar{display:none}
 .tab{border:0;background:transparent;padding:6px 10px;border-radius:var(--radius);color:var(--fg2);white-space:nowrap;display:flex;align-items:center;gap:4px}

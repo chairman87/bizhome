@@ -11,6 +11,7 @@ const CONFIG = {
 
 /* ========== 이름·부제 (로그인 화면과 홈 제목에 쓰임) ========== */
 const BRAND = { name: '인트라넷', sub: '식이해법연구소 · (주)피에이치뷰티', icon: '🏢' };
+const BRAND_LOGO = '<img src="favicon.svg" class="logo-sm" alt="">';   // 상단 바의 PH 마크 (홈 링크·홈 제목 공통)
 /* ========== 파비콘·홈 화면 아이콘 (favicon.svg / favicon-64.png / apple-touch-icon.png) ========== */
 [['icon', 'favicon.svg', 'image/svg+xml'], ['icon', 'favicon-64.png', 'image/png'], ['apple-touch-icon', 'apple-touch-icon.png', '']]
   .forEach(([rel, href, type]) => { const l = document.createElement('link'); l.rel = rel; l.href = href; if (type) l.type = type; document.head.appendChild(l); });
@@ -437,8 +438,8 @@ function openMembers(counter){
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
-    ${home ? `<a class="home" href="index.html">🏠 ${esc(BRAND.name)}</a>` : ''}
-    <a class="brand" href="${esc(location.pathname.split('/').pop() || 'index.html')}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>
+    ${home ? `<a class="home" href="index.html" title="홈으로">${BRAND_LOGO}${esc(BRAND.name)}</a>` : ''}
+    <a class="brand ${home ? 'page' : ''}" href="${esc(location.pathname.split('/').pop() || 'index.html')}" title="누르면 새로고침">${title === BRAND.name ? BRAND_LOGO : esc(icon || '') + ' '}${esc(title)}</a>
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}
