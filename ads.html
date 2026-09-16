@@ -49,6 +49,8 @@
   .wk .it b{font-weight:700}
   .p-레{color:#1d4ed8}.p-서{color:#15803d}.p-흑{color:#6d28d9}
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
+  .ox{border:1px solid var(--line2);background:#fff;border-radius:6px;width:34px;height:26px;font-weight:700;cursor:pointer;color:var(--fg3)}
+  .ox.on{background:#dcfce7;border-color:#86efac;color:#15803d}
   .stf{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px}
   .stf .lb{font-size:12px;color:var(--fg2);margin-right:2px}
   th select[data-hf]{border:1px solid #3b82f6;border-radius:6px;font:inherit;font-size:14px;font-weight:600;padding:5px 8px;background:#1d4ed8;color:#fff;cursor:pointer;min-width:120px}
@@ -76,7 +78,7 @@ const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑'
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
 let view = LS.get('ads_view') || PRODUCTS[0];
-let filter = { q: '', editor: '', meta: '', budget: '', status: '' };
+let filter = { q: '', editor: '', meta: '', budget: '', google: '', status: '' };
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let sort = { key: 'date', dir: 'desc' };
 
@@ -88,7 +90,7 @@ const budgets = () => [...new Set(G().map(a => budgetKey(a.meta_budget)).filter(
 const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(String(b).replace(/,/g, '')); return isNaN(n) ? esc(b) : n.toLocaleString('ko-KR'); };
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
 const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
-function normalize(table, a){ return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중' }; }
+function normalize(table, a){ return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중', google: !!a.google }; }
 
 /* ---------- 화면 ---------- */
 function render(){
@@ -103,19 +105,19 @@ function render(){
 function listOf(p){
   const q = filter.q.trim().toLowerCase();
   return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
-    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.status || a.status === filter.status));
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
   const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
   return `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
       <span class="count">${(filter.editor || filter.meta || filter.budget || filter.status) ? `<b>${[filter.editor, filter.meta, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
-      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_budget: ['budget', budgets()], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
+      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
       const [fk, opts] = HF, cur = filter[fk];
       return `<th class="c"><select data-hf="${fk}" title="${l}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}: 전체</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
@@ -127,10 +129,11 @@ function productHtml(p){
       <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
+      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>
       <td class="c"><select id="nStatus" title="새로 넣을 영상의 상태 (걸러 보기는 위 '상태 보기' 버튼)">${STATUSES.map(s => `<option ${s === (filter.status || '운영중') ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="8" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.budget || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="9" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.budget || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
@@ -138,6 +141,7 @@ function productHtml(p){
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
       <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
+      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
       <td class="c"><select data-status="${a.id}" style="border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px">${STATUSES.map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}</td>
     </tr>`).join('')}</tbody></table></div>`;
@@ -148,7 +152,7 @@ async function addFromRow(){
   const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
   lastNew = { date: $('#nDate').value || todayStr(), editor: $('#nEditor').value.trim(), meta: $('#nMeta').value.trim() };
   const row = { id: uid(), product: view, date: lastNew.date, title, editor: lastNew.editor || null, meta_account: lastNew.meta || null,
-    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
+    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, google: $('#nGoogle').value === '1', status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
     created_by: me, created_at: nowIso(), updated_by: me };
   await saveRow('ads', row);
   toast(`추가: ${title}`);
@@ -196,6 +200,7 @@ function bindView(){
   const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.budget = filter.status = ''; render(); };
   bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
+  document.querySelectorAll('[data-google]').forEach(b => b.onclick = async e => { e.stopPropagation(); const a = G().find(x => x.id === b.dataset.google); await saveRow('ads', { ...a, google: !a.google, updated_by: me }); });   // 구글 O/X 토글
   document.querySelectorAll('select[data-status]').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { const a = G().find(x => x.id === s.dataset.status); await saveRow('ads', { ...a, status: s.value, updated_by: me }); }; });
   document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = e => { e.stopPropagation(); inlineEdit(el); });
   const mp = $('#mPrev'); if (mp) {
@@ -221,7 +226,7 @@ function inlineEdit(el){
 /* ---------- 추가·수정 창 ---------- */
 function openAd(id, preset = {}){
   const a = id ? G().find(x => x.id === id) : null;
-  const d = a || { product: PRODUCTS.includes(view) ? view : PRODUCTS[0], date: todayStr(), title: '', editor: '', meta_account: '', meta_budget: '', tiktok: '', status: '운영중', note: '', ...preset };
+  const d = a || { product: PRODUCTS.includes(view) ? view : PRODUCTS[0], date: todayStr(), title: '', editor: '', meta_account: '', meta_budget: '', tiktok: '', google: false, status: '운영중', note: '', ...preset };
   openModal(`${modalHead(a ? '영상 정보' : '영상 추가')}
     <div class="mb">
       <div class="f3">
@@ -236,6 +241,7 @@ function openAd(id, preset = {}){
         <div class="f"><label>예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
       </div>
       <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
+      <div class="f"><label>구글</label><select id="aGoogle"><option value="0" ${!d.google ? 'selected' : ''}>X</option><option value="1" ${d.google ? 'selected' : ''}>O</option></select></div>
       <div class="f"><label>질병 예방/치료 오인 사유 · 수정 콘티</label><textarea id="aNote">${esc(d.note || '')}</textarea></div>
       ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
     </div>
@@ -248,7 +254,7 @@ function openAd(id, preset = {}){
   $('#aSave').onclick = async () => {
     const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
     const row = { id: a ? a.id : uid(), product: $('#aProduct').value, date: $('#aDate').value || null, title, editor: $('#aEditor').value.trim() || null, meta_account: $('#aMeta').value.trim() || null,
-      meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, status: $('#aStatus').value, note: $('#aNote').value.trim() || null,
+      meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, google: $('#aGoogle').value === '1', status: $('#aStatus').value, note: $('#aNote').value.trim() || null,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('ads', row); toast(a ? '저장했습니다' : '영상을 추가했습니다');
   };
