@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구독관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161937">
-<script src="common.js?v=202609161937"></script>
+<link rel="stylesheet" href="common.css?v=202609161939">
+<script src="common.js?v=202609161939"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -55,7 +55,8 @@
   .pw{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
   .ib{border:1px solid var(--line2);background:var(--bg);border-radius:4px;font-size:11px;padding:1px 6px;cursor:pointer;color:var(--fg2)}
   .ib:hover{background:var(--bg3);color:var(--fg)}
-  a.site{font-size:11px;color:var(--fg3)}
+  a.site{font-size:12px;color:var(--fg3);text-decoration:none}
+  a.site:hover{color:var(--blue)}
 </style>
 </head>
 <body>
@@ -150,7 +151,7 @@ function tableHtml(){
       <td class="nm"><b>${esc(s.name)}</b>${s.admin_only ? ' 🔒' : ''}${!isOn(s) ? ' <span class="hint">(해지)</span>' : ''}${s.vendor ? ` <span class="hint">${esc(s.vendor)}</span>` : ''}</td><td><span class="co ${CO_CLS[s.company] || 'c'}">${esc(s.company)}</span></td>
       <td class="num">${feeHtml(s)}</td><td class="num">${isOn(s) && monthly(s) ? money(monthly(s), s.currency) : '<span class="hint">-</span>'}</td>
       <td class="nw">${s.billing_day ? `매${s.cycle === '년' ? '년' : '월'} ${s.billing_day}일` : '<span class="hint">-</span>'}</td>
-      <td><span class="mono">${esc(s.login_id || '')}</span>${s.login_id ? ` <button class="ib" data-copy="${esc(s.login_id)}">복사</button>` : ''}${s.url ? `<div>${siteHtml(s.url)}</div>` : ''}</td>
+      <td class="nw"><span class="mono">${esc(s.login_id || '')}</span>${s.login_id ? ` <button class="ib" data-copy="${esc(s.login_id)}">복사</button>` : ''}${s.url ? ` <a class="site" href="${esc(/^https?:\/\//i.test(s.url) ? s.url : 'https://' + s.url)}" target="_blank" rel="noopener" title="${esc(s.url)}">🔗</a>` : ''}</td>
       <td>${pwHtml(s)}</td>
       <td class="hint">${esc(s.pay_method || '')}</td><td>${expHtml(s.end_date)}</td><td class="small">${usersHtml(s)}</td></tr>`; }).join('')}
     <tr class="total"><td colspan="4" style="text-align:right">월 환산 합계 (해지 제외)</td><td class="num">${won(krw) || '0원'}${usd ? ` + $${usd.toLocaleString('en-US')}` : ''}</td><td colspan="6"></td></tr>
