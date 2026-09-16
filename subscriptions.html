@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구독관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609161731">
-<script src="common.js?v=202609161731"></script>
+<link rel="stylesheet" href="common.css?v=202609161733">
+<script src="common.js?v=202609161733"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -78,7 +78,7 @@ const usersHtml = s => { const names = String(s.users || '').split(/[,·/]/).map
 
 let view = LS.get('sub_view') || 'all';
 let q = '';
-let sort = { key: 'billing_day', dir: 'asc' };
+let sort = { key: 'category', dir: 'asc' };   // 처음 열면 구분 순서로 정렬
 
 function normalize(table, s){
   if (table !== 'subscriptions') return s;
@@ -121,7 +121,10 @@ function viewHtml(){ return view === 'sched' ? schedHtml() : view === 'expire' ?
 function renderView(){ $('#view').innerHTML = viewHtml(); const c = $('#cnt'); if (c) c.textContent = `${listOf().length}건`; bindView(); }
 
 function tableHtml(){
-  const list = sortBy(listOf(), sort, { fee: f => Number(f) || 0, billing_day: d => Number(d) || 99, end_date: d => d || '9999' });
+  // 구분은 정해진 순서(CATS)로, 같은 구분 안에서는 항목 이름순
+  const list = sort.key === 'category'
+    ? listOf().slice().sort((a, b) => { const d = ((CATS.indexOf(a.category) + 1 || 99) - (CATS.indexOf(b.category) + 1 || 99)) * (sort.dir === 'asc' ? 1 : -1); return d || String(a.name || '').localeCompare(String(b.name || ''), 'ko'); })
+    : sortBy(listOf(), sort, { fee: f => Number(f) || 0, billing_day: d => Number(d) || 99, end_date: d => d || '9999' });
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 구독·정기 지출이 없습니다.<br>위 <b>＋ 구독·정기 지출 추가</b>로 넣어 두면 매월 나가는 돈이 한눈에 보입니다.'}</div>`;
   const cols = [['name', '항목'], ['category', '구분'], ['company', '회사'], ['fee', '금액'], ['monthly', '월 환산'], ['billing_day', '결제일'], ['login_id', '아이디'], ['password', '비밀번호'], ['pay_method', '결제 수단'], ['end_date', '만료·갱신일'], ['users', '사용자']];
   const krw = list.filter(s => s.currency !== 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0), usd = list.filter(s => s.currency === 'USD' && isOn(s)).reduce((a, s) => a + monthly(s), 0);
