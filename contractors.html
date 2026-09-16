@@ -6,8 +6,8 @@
 <title>외주 용역관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609161357">
-<script src="common.js?v=202609161357"></script>
+<link rel="stylesheet" href="common.css?v=202609161451">
+<script src="common.js?v=202609161451"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -199,7 +199,7 @@ function openPay(id){
     const t = calc(); if (!t.gross) { amt.focus(); toast('금액을 입력하세요', true); return; }
     const m = $('#pMonth').value || month; if (m < START_MONTH) { toast(`${monthLabel(START_MONTH)}부터 관리합니다`, true); return; }
     const row = { id: p0 ? p0.id : uid(), month: m, contractor_id: c.id, name: c.name, gross: t.gross, tax: t.tax, local_tax: t.local, net: t.net,
-      service: $('#pService').value.trim() || null, paid_date: $('#pPaid').value || null, memo: $('#pMemo').value.trim() || null, files: at.files,
+      service: $('#pService').value.trim() || c.role || null, paid_date: $('#pPaid').value || null, memo: $('#pMemo').value.trim() || null, files: at.files,
       created_by: p0 ? p0.created_by : me, created_at: p0 ? p0.created_at : nowIso(), updated_by: me };
     closeModal(); month = m; await saveRow('contractor_pays', row); toast(p0 ? '저장했습니다' : `${c.name}님 ${monthLabel(m)} 지급을 추가했습니다`);
   };
