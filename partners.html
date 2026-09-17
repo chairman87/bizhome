@@ -43,6 +43,18 @@
   .kb .card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font-size:13px}
   .kb .card:hover{box-shadow:var(--shadow)}
   .kb .card .sub{font-size:11px;color:var(--fg3);margin-top:2px}
+  table.ld{min-width:1700px}
+  table.ld td{white-space:nowrap;vertical-align:top}
+  table.ld td.wrap2{white-space:normal;min-width:220px;max-width:340px;font-size:12px;color:var(--fg2)}
+  select.lst{border:1px solid var(--line2);border-radius:6px;font:inherit;font-size:12px;padding:3px 6px;background:#fff}
+  select.lst.l-go{background:#dcfce7;border-color:#86efac;color:#15803d;font-weight:600}
+  select.lst.l-contact{background:#dbeafe;border-color:#93c5fd;color:#1e40af}
+  select.lst.l-hold{background:#fef3c7;border-color:#fde68a;color:#92400e}
+  select.lst.l-out{background:#f1f5f9;border-color:#e2e8f0;color:#64748b}
+  select.lst.l-done{background:#ede9fe;border-color:#c4b5fd;color:#5b21b6}
+  .lsum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .lsum span{font-size:12px;border:1px solid var(--line2);border-radius:999px;padding:2px 10px;background:#fff;cursor:pointer}
+  .lsum span.on{background:var(--blue);border-color:var(--blue);color:#fff}
   .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3{grid-template-columns:1fr}}
 </style>
@@ -61,6 +73,12 @@
 ================================================================ */
 const STAGES = ['1. 컨택', '2. 견적 협의', '3. 계약 완료', '4. 제품 전달', '5. 콘티 피드백 완료', '6. 1차본 수령', '7. 1차본 피드백 완료', '8. 최종본 확정', '9. 광고 게재 완료', '10. 정산 완료'];
 const PRODUCTS = ['레모너리', '서리맥스', '흑생마', '기타'];
+/* 팀원별 컨택 후보 리스트 (partner_leads) */
+const LEAD_OWNERS = ['김채은', '류수연', '전예솔', '안상형', '김홍재'];
+const LEAD_STATUS = ['검토중', '컨택함', '진행 결정', '보류', '리스트 제외', '중복', '완료'];
+const leadCls = st => st === '진행 결정' ? 'l-go' : st === '컨택함' ? 'l-contact' : st === '보류' ? 'l-hold' : (st === '리스트 제외' || st === '중복') ? 'l-out' : st === '완료' ? 'l-done' : '';
+const L = () => DATA.partner_leads || [];
+let leadFilter = '';
 const P = () => DATA.partners || [];
 const won = n => (n == null || n === '' || isNaN(Number(n))) ? '' : Number(n).toLocaleString('ko-KR') + '원';
 const num = s => { const n = Number(String(s || '').replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; };
@@ -78,20 +96,21 @@ let view = LS.get('pt_view') || 'active';
 let filter = { q: '', product: '', assignee: '', stage: '' };
 let sort = { key: 'stage', dir: 'asc' };
 
-function normalize(table, p){ return { ...p, stage: Number(p.stage) || 1, followers: Number(p.followers) || 0, fee: Number(p.fee) || 0, delivered: !!p.delivered, paid: !!p.paid, files: Array.isArray(p.files) ? p.files : [] }; }
-const VIEWS = () => [{ key: 'active', label: '진행 중', badge: P().filter(p => !isDone(p)).length }, { key: 'done', label: '정산 완료' }, { key: 'all', label: '전체' }, null, { key: 'board', label: '단계별 상황판' }, { key: 'people', label: '담당자별' }];
+function normalize(table, p){ if (table === 'partner_leads') return { ...p, followers: Number(p.followers) || 0, status: LEAD_STATUS.includes(p.status) ? p.status : '검토중' }; return { ...p, stage: Number(p.stage) || 1, followers: Number(p.followers) || 0, fee: Number(p.fee) || 0, delivered: !!p.delivered, paid: !!p.paid, files: Array.isArray(p.files) ? p.files : [] }; }
+const VIEWS = () => [{ key: 'active', label: '진행 중', badge: P().filter(p => !isDone(p)).length }, { key: 'done', label: '정산 완료' }, { key: 'all', label: '전체' }, null, { key: 'board', label: '단계별 상황판' }, { key: 'people', label: '담당자별' }, null, ...LEAD_OWNERS.map(o => ({ key: 'lead:' + o, label: o.slice(1), badge: L().filter(l => l.owner === o && l.status === '검토중').length }))];
 
 function render(){
   $('#app').innerHTML = headerHtml({ icon: '🤝', title: '파트너스', tabs: VIEWS(), active: view })
     + `<main class="wrap wrap-wide" style="max-width:1700px">${!DATA.partners ? `<div class="empty">파트너스 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-partners.sql)을 실행하세요.' : ''}</div>` : `
-    <div class="actions"><button class="btn primary" id="newBtn2">＋ 크리에이터 추가</button>
+    ${view.startsWith('lead:') ? leadHtml(view.slice(5)) : `<div class="actions"><button class="btn primary" id="newBtn2">＋ 크리에이터 추가</button>
       <input type="search" id="fq" placeholder="검색 (계정, 이름, 제품)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
       <select id="f_product"><option value="">제품: 전체</option>${PRODUCTS.map(p => `<option ${filter.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
       <select id="f_assignee"><option value="">담당자: 전체</option>${[...new Set(P().map(p => p.assignee).filter(Boolean))].sort().map(a => `<option ${filter.assignee === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
       ${view !== 'board' ? `<select id="f_stage"><option value="">단계: 전체</option>${STAGES.map((s, i) => `<option value="${i + 1}" ${filter.stage == i + 1 ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
       <span class="count" id="cnt"></span></div>
-    ${statsHtml()}<div id="view">${viewHtml()}</div>`}</main>`;
-  bindHeader(k => { view = k; LS.set('pt_view', k); render(); }, null, m => `담당 ${P().filter(p => p.assignee === m.name && !isDone(p)).length}건 진행 중`);
+    ${statsHtml()}<div id="view">${viewHtml()}</div>`}`}</main>`;
+  bindHeader(k => { view = k; LS.set('pt_view', k); render(); }, null, m => `담당 ${P().filter(p => p.assignee === m.name && !isDone(p)).length}건 진행 중 · 후보 ${L().filter(l => l.owner === m.name).length}명`);
+  if (view.startsWith('lead:')) { bindLeads(view.slice(5)); return; }
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   ['product', 'assignee', 'stage'].forEach(k => { const el = $('#f_' + k); if (el) el.onchange = () => { filter[k] = el.value; renderView(); }; });
@@ -206,7 +225,79 @@ function openEdit(id){
   const del = $('#pDelete'); if (del) del.onclick = async () => { if (confirm(`${p0.name || p0.handle} 항목을 삭제할까요?`)) { closeModal(); for (const f of p0.files) if (f.path) deleteFile(f.path); await removeRow('partners', p0.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🤝', title: '파트너스', tables: ['partners'], render, normalize });
+/* ---------- 팀원별 컨택 후보 리스트 ---------- */
+function leadHtml(owner){
+  if (!DATA.partner_leads) return `<div class="empty">후보 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-partner-leads.sql)을 실행하세요.' : ''}</div>`;
+  const mine = L().filter(l => l.owner === owner);
+  const q = filter.q.trim().toLowerCase();
+  const list = mine.filter(l => (!leadFilter || l.status === leadFilter) && (!q || [l.handle, l.name, l.job, l.note, l.opinion].some(v => (v || '').toLowerCase().includes(q))))
+    .sort((a, b) => String(b.contact_date || '').localeCompare(String(a.contact_date || '')));
+  const inProgress = new Set(P().map(p => p.handle));
+  return `<div class="actions"><button class="btn primary" id="leadAdd">＋ 후보 추가</button>
+      <input type="search" id="fq" placeholder="검색 (계정, 이름, 특징, 의견)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
+      <span class="count">${who(owner)} 후보 ${mine.length}명${leadFilter ? ` · ${leadFilter} ${list.length}명` : ''}</span></div>
+    <div class="lsum"><span data-lf="" class="${leadFilter ? '' : 'on'}">전체 ${mine.length}</span>${LEAD_STATUS.map(st => `<span data-lf="${st}" class="${leadFilter === st ? 'on' : ''}">${st} ${mine.filter(l => l.status === st).length}</span>`).join('')}</div>
+    <div class="hint" style="margin-bottom:8px">상태는 줄에서 바로 바꿀 수 있고, <b>진행으로 올리기</b>를 누르면 위 "진행 중" 목록에 크리에이터로 등록됩니다. 줄을 누르면 자세히 보거나 고칠 수 있습니다.</div>
+    ${list.length ? `<div class="tablewrap"><table class="ld"><thead><tr><th>컨택일</th><th>상태</th><th>크리에이터</th><th class="num">팔로워</th><th>직업 / 특징</th><th>컨택방법</th><th>연락처</th><th>견적</th><th>참고</th><th>의견</th><th></th></tr></thead><tbody>
+      ${list.map(l => `<tr class="row" data-lead="${l.id}">
+        <td>${l.contact_date ? fmtDate(l.contact_date).slice(5) : '-'}</td>
+        <td><select class="lst ${leadCls(l.status)}" data-lstat="${l.id}">${LEAD_STATUS.map(st => `<option ${l.status === st ? 'selected' : ''}>${st}</option>`).join('')}</select></td>
+        <td><b>${esc(l.name || l.handle)}</b> <span class="handle">${l.profile_url ? `<a href="${esc(igUrl(l.profile_url))}" target="_blank" rel="noopener">@${esc(l.handle || '')} ↗</a>` : '@' + esc(l.handle || '')}</span>${inProgress.has(l.handle) ? ' <span class="prod p1" style="font-size:11px;padding:1px 6px">진행 중</span>' : ''}</td>
+        <td class="num">${fmtFol(l.followers)}</td>
+        <td class="wrap2">${esc(l.job || '')}</td><td>${esc(l.method || '')}</td><td class="wrap2" style="min-width:140px">${esc(l.contact || '')}</td><td>${esc(l.quote || '')}</td>
+        <td class="wrap2">${esc(l.note || '')}</td><td class="wrap2">${esc(l.opinion || '')}</td>
+        <td class="act">${inProgress.has(l.handle) ? '' : `<button class="btn sm" data-promote="${l.id}" title="진행 중 목록에 크리에이터로 등록">진행으로 올리기</button>`}</td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="empty">${mine.length ? '조건에 맞는 후보가 없습니다.' : `${esc(owner)}님의 후보가 아직 없습니다. <b>＋ 후보 추가</b>로 넣으세요.`}</div>`}`;
+}
+function bindLeads(owner){
+  const ab = $('#leadAdd'); if (ab) ab.onclick = () => openLead(null, owner);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
+  document.querySelectorAll('[data-lf]').forEach(b => b.onclick = () => { leadFilter = b.dataset.lf; render(); });
+  document.querySelectorAll('tr.row[data-lead]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button, select')) return; openLead(tr.dataset.lead, owner); });
+  document.querySelectorAll('select[data-lstat]').forEach(sel => { sel.onclick = e => e.stopPropagation(); sel.onchange = async () => { const l = L().find(x => x.id === sel.dataset.lstat); await saveRow('partner_leads', { ...l, status: sel.value, updated_by: me }); }; });
+  document.querySelectorAll('[data-promote]').forEach(b => b.onclick = async e => { e.stopPropagation(); const l = L().find(x => x.id === b.dataset.promote); if (!l) return;
+    const prod = prompt(`${l.name || l.handle}님을 어떤 제품으로 진행할까요? (${PRODUCTS.join(' / ')})`, PRODUCTS[0]); if (prod === null) return;
+    await saveRow('partners', { id: uid(), product: PRODUCTS.includes(prod.trim()) ? prod.trim() : PRODUCTS[0], assignee: l.owner, handle: l.handle, name: l.name || null, profile_url: l.profile_url || null, followers: l.followers || 0, fee: num(l.quote), fee_note: null, delivered: false, stage: 1, next_schedule: null, upload_url: null, upload_date: null, paid: false, memo: [l.job, l.note, l.opinion].filter(Boolean).join('\n') || null, files: [], created_by: me, created_at: nowIso(), updated_by: me });
+    await saveRow('partner_leads', { ...l, status: '진행 결정', updated_by: me }); toast(`${l.name || l.handle}님을 진행 중 목록에 올렸습니다`); });
+}
+function openLead(id, owner){
+  const l0 = id ? L().find(x => x.id === id) : null;
+  const d = l0 || { owner, contact_date: todayStr(), method: 'DM', quote: '', handle: '', name: '', profile_url: '', followers: 0, job: '', contact: '', note: '', opinion: '', status: '검토중' };
+  openModal(`${modalHead(l0 ? '후보 정보' : '후보 추가', who(d.owner))}
+    <div class="mb">
+      <div class="f3">
+        <div class="f"><label>담당</label><select id="lOwner">${LEAD_OWNERS.map(o => `<option ${d.owner === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div>
+        <div class="f"><label>컨택일</label><input type="date" id="lDate" value="${esc(d.contact_date || '')}"></div>
+        <div class="f"><label>상태</label><select id="lStatus">${LEAD_STATUS.map(st => `<option ${d.status === st ? 'selected' : ''}>${st}</option>`).join('')}</select></div>
+      </div>
+      <div class="f3">
+        <div class="f"><label>계정명 *</label><input id="lHandle" value="${esc(d.handle || '')}" placeholder="예: hheelele"></div>
+        <div class="f"><label>이름</label><input id="lName" value="${esc(d.name || '')}"></div>
+        <div class="f"><label>팔로워 수</label><input id="lFol" value="${d.followers ? fmtFol(d.followers) : ''}" placeholder="예: 1.4만, 809"></div>
+      </div>
+      <div class="f"><label>프로필 / 릴스 링크</label><input id="lProfile" value="${esc(d.profile_url || '')}"></div>
+      <div class="f3">
+        <div class="f"><label>컨택방법</label><input id="lMethod" value="${esc(d.method || '')}" list="mList" placeholder="DM, 메일"><datalist id="mList"><option value="DM"><option value="메일"><option value="DM/메일"><option value="멀티링크"></datalist></div>
+        <div class="f"><label>연락처 (DM/이메일)</label><input id="lContact" value="${esc(d.contact || '')}"></div>
+        <div class="f"><label>수령 견적 / 협의 견적</label><input id="lQuote" value="${esc(d.quote || '')}" placeholder="예: 30만원, 미응답"></div>
+      </div>
+      <div class="f"><label>직업 / 특징</label><input id="lJob" value="${esc(d.job || '')}"></div>
+      <div class="f"><label>참고</label><textarea id="lNote" style="min-height:60px">${esc(d.note || '')}</textarea></div>
+      <div class="f"><label>의견</label><textarea id="lOpinion" style="min-height:60px">${esc(d.opinion || '')}</textarea></div>
+    </div>
+    <div class="mf">${l0 ? '<button class="btn danger left" id="lDelete">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="lSave">${l0 ? '저장' : '추가'}</button></div>`, { wide: true });
+  $('#lHandle').focus();
+  $('#lSave').onclick = async () => {
+    const handle = $('#lHandle').value.trim().replace(/^@/, ''); if (!handle) { $('#lHandle').focus(); toast('계정명을 입력하세요', true); return; }
+    const row = { id: l0 ? l0.id : uid(), owner: $('#lOwner').value, contact_date: $('#lDate').value || null, method: $('#lMethod').value.trim() || null, quote: $('#lQuote').value.trim() || null, handle, name: $('#lName').value.trim() || null,
+      profile_url: $('#lProfile').value.trim() || null, followers: parseFol($('#lFol').value), job: $('#lJob').value.trim() || null, contact: $('#lContact').value.trim() || null, note: $('#lNote').value.trim() || null, opinion: $('#lOpinion').value.trim() || null,
+      status: $('#lStatus').value, created_by: l0 ? l0.created_by : me, created_at: l0 ? l0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('partner_leads', row); toast(l0 ? '저장했습니다' : '후보를 추가했습니다');
+  };
+  const del = $('#lDelete'); if (del) del.onclick = async () => { if (confirm(`${l0.name || l0.handle} 후보를 삭제할까요?`)) { closeModal(); await removeRow('partner_leads', l0.id); toast('삭제했습니다'); } };
+}
+
+boot({ icon: '🤝', title: '파트너스', tables: ['partners', 'partner_leads'], render, normalize });
 </script>
 </body>
 </html>
