@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171223">
-<script src="common.js?v=202609171223"></script>
+<link rel="stylesheet" href="common.css?v=202609171233">
+<script src="common.js?v=202609171233"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -31,6 +31,8 @@
   tr.sent td{color:var(--fg3)}
   tr.sent td .prod{opacity:.6}
   .cat{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .co{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap;background:var(--bg3);color:var(--fg2)}
+  .co.a{background:#dcfce7;color:#166534}.co.b{background:#fce7f3;color:#9d174d}
   .ox{border:1px solid var(--line2);background:#fff;border-radius:6px;padding:2px 10px;font-weight:600;cursor:pointer;color:var(--fg3);font-size:12px;white-space:nowrap}
   .ox.on{background:#dcfce7;border-color:#86efac;color:#15803d}
   .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -67,6 +69,11 @@ const PRESETS = {
   '흑생마':   { name: '[공식] 137 흑생마 1박스 (500mg, 60정)', option: '[공식] 137 흑생마 1박스 (500mg, 60정)' },
 };
 const PRODUCTS = Object.keys(PRESETS);
+/* 제품 → 회사 (물류 계정이 회사별로 달라 엑셀도 회사별로 나눔) */
+const COMPANY_OF = { '레모너리': '식이해법연구소', '서리맥스': '식이해법연구소', '흑생마': '(주)피에이치뷰티' };
+const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
+const coOf = s => COMPANY_OF[s.product] || '기타';
+const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b' };
 const CATS = ['파트너스', '고객'];   // 구분 선택지 (그 외는 직접 입력)
 /* 구분 선택 상자: 파트너스 / 고객 / 직접 입력… (직접 입력을 고르면 글자 칸이 나옴) */
 const catSelHtml = (id, val, extra = '') => { const custom = val && !CATS.includes(val); return `<span class="catsel"><select id="${id}Sel" ${extra} ${custom ? 'hidden' : ''}>${CATS.map(c => `<option ${val === c ? 'selected' : ''}>${c}</option>`).join('')}<option value="__new" ${custom ? 'selected' : ''}>직접 입력…</option></select><input id="${id}" value="${esc(val || '')}" placeholder="구분 입력 후 Enter" ${extra} ${custom ? '' : 'hidden'}><button type="button" class="back" id="${id}Back" title="목록에서 고르기" ${custom ? '' : 'hidden'}>▾</button></span>`; };
@@ -85,23 +92,25 @@ const fmtPhone = s => { const d = String(s || '').replace(/\D/g, ''); return d.l
 
 let view = LS.get('smp_view') || 'todo';
 let filter = { q: '', product: '', cat: '' };
+let company = LS.get('smp_co') || '';   // 회사 탭 ('' = 전체)
 let sort = { key: 'created_at', dir: 'desc' };
 let picked = new Set();   // 체크한 줄(추출 대상 고르기)
 
 function normalize(table, s){ return { ...s, qty: Number(s.qty) || 1, sent: !!s.sent, country: s.country || '대한민국' }; }
-const VIEWS = () => [{ key: 'todo', label: '발송 전', badge: S().filter(s => !s.sent).length }, { key: 'sent', label: '발송 완료' }, { key: 'all', label: '전체' }];
+const VIEWS = () => [{ key: 'todo', label: '발송 전', badge: S().filter(s => !s.sent).length }, { key: 'sent', label: '발송 완료' }, { key: 'all', label: '전체' }, null, { key: 'co:', label: '회사: 전체' }, ...COMPANIES.map(c => ({ key: 'co:' + c, label: c, badge: S().filter(s => !s.sent && coOf(s) === c).length }))];
 
 function render(){
   $('#app').innerHTML = headerHtml({ icon: '📦', title: '비매출', tabs: VIEWS(), active: view })
     + `<main class="wrap wrap-wide" style="max-width:1700px">${!DATA.samples ? `<div class="empty">비매출 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-samples.sql)을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 샘플 발송 등록</button><button class="btn" id="bulkBtn" title="여러 명을 한 번에 붙여넣기">📋 여러 명 붙여넣기</button>
-      ${view === 'todo' ? `<button class="btn" id="xlsBtn" style="background:#15803d;border-color:#15803d;color:#fff" ${S().some(s => !s.sent) ? '' : 'disabled'}>📥 엑셀 추출 (발송 전 ${picked.size ? picked.size + '건 선택' : '전체'})</button>` : ''}
+      ${view === 'todo' ? `<button class="btn" id="xlsBtn" style="background:#15803d;border-color:#15803d;color:#fff" ${S().some(s => !s.sent) ? '' : 'disabled'}>📥 엑셀 추출 (${company ? company.replace('(주)', '') + ' ' : ''}발송 전 ${picked.size ? picked.size + '건 선택' : '전체'}${!company ? ' · 회사별 파일' : ''})</button>` : ''}
       <input type="search" id="fq" placeholder="검색 (수령인, 전화, 주소)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
       <select id="f_product"><option value="">제품: 전체</option>${PRODUCTS.map(p => `<option ${filter.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
       <select id="f_cat"><option value="">구분: 전체</option>${[...new Set([...CATS, ...S().map(s => s.category)])].filter(Boolean).map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <span class="count" id="cnt"></span></div>
     ${statsHtml()}${view === 'todo' ? '<div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에서 제품을 고르고 수령인·전화·주소를 적은 뒤 <b>Enter</b> 를 누르면 바로 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>' : ''}<div id="view">${tableHtml()}</div>`}</main>`;
-  bindHeader(k => { view = k; LS.set('smp_view', k); picked = new Set(); render(); }, null, m => `등록 ${S().filter(s => s.created_by === m.name).length}건`);
+  bindHeader(k => { if (k.startsWith('co:')) { company = k.slice(3); LS.set('smp_co', company); } else { view = k; LS.set('smp_view', k); } picked = new Set(); render(); }, null, m => `등록 ${S().filter(s => s.created_by === m.name).length}건`);
+  const coTab = document.querySelector(`.tab[data-view="co:${company}"]`); if (coTab) coTab.classList.add('on');   // 회사 탭도 켜진 표시
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
   const bb = $('#bulkBtn'); if (bb) bb.onclick = openBulk;
   const xb = $('#xlsBtn'); if (xb) xb.onclick = exportXlsx;
@@ -111,7 +120,7 @@ function render(){
 }
 function listOf(){
   const q = filter.q.trim().toLowerCase();
-  return S().filter(s => (view === 'all' || (view === 'sent' ? s.sent : !s.sent))
+  return S().filter(s => (view === 'all' || (view === 'sent' ? s.sent : !s.sent)) && (!company || coOf(s) === company)
     && (!q || [s.recipient, s.phone, s.address, s.address2, s.memo, s.category].some(v => (v || '').toLowerCase().includes(q)))
     && (!filter.product || s.product === filter.product) && (!filter.cat || s.category === filter.cat));
 }
@@ -120,6 +129,7 @@ function statsHtml(){
   return `<div class="stats">
     <div class="stat"><div class="l">발송 전</div><div class="v ${todo.length ? 'orange' : ''}">${todo.length}건</div><div class="s">수량 ${todo.reduce((a, s) => a + s.qty, 0)}개 · 추출 안 한 것 ${todo.filter(s => !s.exported_at).length}건</div></div>
     ${PRODUCTS.map(p => `<div class="stat"><div class="l">${p} (이번 달)</div><div class="v">${all.filter(s => s.product === p && (s.created_at || '').startsWith(m)).reduce((a, s) => a + s.qty, 0)}개</div><div class="s">누적 ${all.filter(s => s.product === p).reduce((a, s) => a + s.qty, 0)}개</div></div>`).join('')}
+    <div class="stat"><div class="l">회사별 발송 전</div><div class="v" style="font-size:14px">${COMPANIES.map(c => `<span class="co ${CO_CLS[c]}">${c.replace('(주)', '')}</span> ${todo.filter(s => coOf(s) === c).length}건`).join('<br>')}</div><div class="s">엑셀은 회사별로 따로 나옵니다</div></div>
     <div class="stat"><div class="l">발송 완료</div><div class="v">${all.filter(s => s.sent).length}건</div><div class="s">전체 ${all.length}건</div></div>
   </div>`;
 }
@@ -143,7 +153,7 @@ function tableHtml(){
     ${!list.length ? `<tr><td colspan="12" class="hint" style="text-align:center;padding:16px">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '발송 전인 샘플이 없습니다. 위 노란 줄에 바로 입력해 보세요.'}</td></tr>` : ''}
     ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
       ${view === 'todo' ? `<td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>` : ''}
-      <td><select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${PRODUCTS.map(p => `<option ${s.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
+      <td><span class="co ${CO_CLS[coOf(s)] || ''}" title="회사">${esc(coOf(s).replace('(주)', ''))}</span> <select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${PRODUCTS.map(p => `<option ${s.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
       <td class="num" data-edit="qty" data-id="${s.id}">${s.qty}</td><td data-edit="recipient" data-id="${s.id}"><b>${esc(s.recipient || '')}</b></td><td data-edit="phone" data-id="${s.id}">${esc(fmtPhone(s.phone))}</td><td data-edit="zip" data-id="${s.id}">${esc(s.zip || '')}</td>
       <td class="addr" data-edit="address" data-id="${s.id}">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
       <td>${s.category ? `<span class="cat">${esc(s.category)}</span>` : '<span class="hint">-</span>'}${s.memo ? ` <span class="hint" title="${esc(s.memo)}">📝</span>` : ''}</td>
@@ -191,18 +201,24 @@ function bindView(){
 /* 물류 양식 그대로 엑셀 추출 (발송 전만, 체크한 것이 있으면 그것만) */
 function exportXlsx(){
   if (typeof XLSX === 'undefined') { toast('엑셀 도구를 불러오지 못했습니다. 새로고침 후 다시 시도하세요', true); return; }
-  const list = S().filter(s => !s.sent && (!picked.size || picked.has(s.id))).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const list = S().filter(s => !s.sent && (!company || coOf(s) === company) && (!picked.size || picked.has(s.id))).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   if (!list.length) { toast('추출할 발송 전 건이 없습니다', true); return; }
-  const rows = [COLS.map(c => c[1])];
-  list.forEach(s => rows.push([s.product_name || (PRESETS[s.product] || {}).name || s.product, s.option_name || (PRESETS[s.product] || {}).option || '', s.qty, s.recipient || '', fmtPhone(s.phone), s.zip || '', s.address || '', s.address2 || '', s.pay_type || '', s.pay_method || '', s.order_date ? fmtDate(s.order_date) : '', s.country || '대한민국', s.category || '']));
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 44 }, { wch: 60 }, { wch: 6 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
-  for (let r = 1; r < rows.length; r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 5 })]; if (c) c.t = 's'; }   // 우편번호 앞 0 유지
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '샘플발송');
-  XLSX.writeFile(wb, `샘플발송_${todayStr().replace(/-/g, '')}_${list.length}건.xlsx`);
+  // 회사별로 파일을 따로 만듦 (물류 계정이 다름)
+  const groups = [...new Set(list.map(coOf))].map(c => [c, list.filter(s => coOf(s) === c)]);
+  const made = [];
+  for (const [co, items] of groups) {
+    const rows = [COLS.map(c => c[1])];
+    items.forEach(s => rows.push([s.product_name || (PRESETS[s.product] || {}).name || s.product, s.option_name || (PRESETS[s.product] || {}).option || '', s.qty, s.recipient || '', fmtPhone(s.phone), s.zip || '', s.address || '', s.address2 || '', s.pay_type || '', s.pay_method || '', s.order_date ? fmtDate(s.order_date) : '', s.country || '대한민국', s.category || '']));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 44 }, { wch: 60 }, { wch: 6 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
+    for (let r = 1; r < rows.length; r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 5 })]; if (c) c.t = 's'; }   // 우편번호 앞 0 유지
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '샘플발송');
+    XLSX.writeFile(wb, `샘플발송_${co.replace('(주)', '')}_${todayStr().replace(/-/g, '')}_${items.length}건.xlsx`);
+    made.push(`${co} ${items.length}건`);
+  }
   const now = nowIso();
   (async () => { for (const s of list) await saveRow('samples', { ...s, exported_at: now, updated_by: me }); })();
-  openModal(`${modalHead('엑셀 추출 완료')}<div class="mb"><div>발송 전 <b>${list.length}건</b>을 엑셀 파일로 내려받았습니다. 물류에 올린 뒤 이 건들을 <b>발송 완료</b>로 바꿀까요?</div><div class="hint">나중에 바꾸려면 각 줄의 "발송 전" 버튼을 누르면 됩니다.</div></div>
+  openModal(`${modalHead('엑셀 추출 완료')}<div class="mb"><div>${groups.length > 1 ? `회사별로 파일 ${groups.length}개(${made.join(', ')})를` : `<b>${made[0]}</b>을`} 내려받았습니다. 물류에 올린 뒤 이 건들을 <b>발송 완료</b>로 바꿀까요?</div><div class="hint">나중에 바꾸려면 각 줄의 "발송 전" 버튼을 누르면 됩니다.</div></div>
     <div class="mf"><button class="btn" data-close>나중에</button><button class="btn primary" id="markSent">${list.length}건 발송 완료로</button></div>`);
   $('#markSent').onclick = async () => { closeModal(); for (const s of list) await saveRow('samples', { ...s, sent: true, sent_at: now, exported_at: now, updated_by: me }); picked = new Set(); toast(`${list.length}건을 발송 완료로 표시했습니다`); };
 }
