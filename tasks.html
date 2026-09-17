@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무요청/보고</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609171300">
-<script src="common.js?v=202609171300"></script>
+<link rel="stylesheet" href="common.css?v=202609171312">
+<script src="common.js?v=202609171312"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -60,7 +60,9 @@ const STATUSES = Object.keys(ST);
 const PRIORITIES = ['높음', '보통', '낮음'];
 const stHtml = s => tag(s, ...(ST[s] || ST['요청']), true);
 const prHtml = p => p === '높음' ? '<span class="pr high">! 높음</span>' : p === '낮음' ? '<span class="pr low">낮음</span>' : '';
-const T = () => DATA.tasks || [];
+/* 남이 스스로 등록한 '내 업무'(담당자=요청자)는 본인과 관리자만 볼 수 있음. 요청·요청받은 업무는 모두에게 보임 */
+const visibleTask = t => isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me;
+const T = () => (DATA.tasks || []).filter(visibleTask);
 
 let view = LS.get('tasks_view') || 'received';
 let filter = { q: '', person: '', status: '', hideDone: true };
