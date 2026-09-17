@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171233">
-<script src="common.js?v=202609171233"></script>
+<link rel="stylesheet" href="common.css?v=202609171237">
+<script src="common.js?v=202609171237"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -74,6 +74,9 @@ const COMPANY_OF = { '레모너리': '식이해법연구소', '서리맥스': '�
 const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
 const coOf = s => COMPANY_OF[s.product] || '기타';
 const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b' };
+/* 고를 수 있는 제품: 회사 탭을 골랐으면 그 회사 제품만 (식이해법연구소=레모너리·서리맥스, 피에이치뷰티=흑생마) */
+const prodsFor = co => co ? PRODUCTS.filter(p => COMPANY_OF[p] === co) : PRODUCTS;
+const prodOpts = (sel, co) => prodsFor(co).map(p => `<option ${sel === p ? 'selected' : ''}>${p}</option>`).join('');
 const CATS = ['파트너스', '고객'];   // 구분 선택지 (그 외는 직접 입력)
 /* 구분 선택 상자: 파트너스 / 고객 / 직접 입력… (직접 입력을 고르면 글자 칸이 나옴) */
 const catSelHtml = (id, val, extra = '') => { const custom = val && !CATS.includes(val); return `<span class="catsel"><select id="${id}Sel" ${extra} ${custom ? 'hidden' : ''}>${CATS.map(c => `<option ${val === c ? 'selected' : ''}>${c}</option>`).join('')}<option value="__new" ${custom ? 'selected' : ''}>직접 입력…</option></select><input id="${id}" value="${esc(val || '')}" placeholder="구분 입력 후 Enter" ${extra} ${custom ? '' : 'hidden'}><button type="button" class="back" id="${id}Back" title="목록에서 고르기" ${custom ? '' : 'hidden'}>▾</button></span>`; };
@@ -105,7 +108,7 @@ function render(){
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 샘플 발송 등록</button><button class="btn" id="bulkBtn" title="여러 명을 한 번에 붙여넣기">📋 여러 명 붙여넣기</button>
       ${view === 'todo' ? `<button class="btn" id="xlsBtn" style="background:#15803d;border-color:#15803d;color:#fff" ${S().some(s => !s.sent) ? '' : 'disabled'}>📥 엑셀 추출 (${company ? company.replace('(주)', '') + ' ' : ''}발송 전 ${picked.size ? picked.size + '건 선택' : '전체'}${!company ? ' · 회사별 파일' : ''})</button>` : ''}
       <input type="search" id="fq" placeholder="검색 (수령인, 전화, 주소)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
-      <select id="f_product"><option value="">제품: 전체</option>${PRODUCTS.map(p => `<option ${filter.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+      <select id="f_product"><option value="">제품: 전체</option>${prodOpts(filter.product, company)}</select>
       <select id="f_cat"><option value="">구분: 전체</option>${[...new Set([...CATS, ...S().map(s => s.category)])].filter(Boolean).map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <span class="count" id="cnt"></span></div>
     ${statsHtml()}${view === 'todo' ? '<div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에서 제품을 고르고 수령인·전화·주소를 적은 뒤 <b>Enter</b> 를 누르면 바로 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>' : ''}<div id="view">${tableHtml()}</div>`}</main>`;
@@ -142,7 +145,7 @@ function tableHtml(){
   const catOpts = [...new Set([...CATS, ...S().map(x => x.category)])].filter(Boolean);
   return `<div class="tablewrap"><table class="sm"><thead><tr>${view === 'todo' ? `<th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>` : ''}${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
     ${view === 'todo' ? `<tr class="newrow"><td></td>
-      <td><select id="nProd">${PRODUCTS.map(p => `<option ${lastNew.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></td>
+      <td><select id="nProd">${prodOpts(prodsFor(company).includes(lastNew.product) ? lastNew.product : prodsFor(company)[0], company)}</select></td>
       <td><input type="number" id="nQty" value="${lastNew.qty}" min="1" style="width:56px"></td>
       <td><input id="nName" placeholder="수령인" style="width:90px"></td>
       <td><input id="nPhone" placeholder="휴대전화" inputmode="tel" style="width:130px"></td>
@@ -153,7 +156,7 @@ function tableHtml(){
     ${!list.length ? `<tr><td colspan="12" class="hint" style="text-align:center;padding:16px">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '발송 전인 샘플이 없습니다. 위 노란 줄에 바로 입력해 보세요.'}</td></tr>` : ''}
     ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
       ${view === 'todo' ? `<td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>` : ''}
-      <td><span class="co ${CO_CLS[coOf(s)] || ''}" title="회사">${esc(coOf(s).replace('(주)', ''))}</span> <select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${PRODUCTS.map(p => `<option ${s.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
+      <td><span class="co ${CO_CLS[coOf(s)] || ''}" title="회사">${esc(coOf(s).replace('(주)', ''))}</span> <select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${prodOpts(s.product, coOf(s))}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
       <td class="num" data-edit="qty" data-id="${s.id}">${s.qty}</td><td data-edit="recipient" data-id="${s.id}"><b>${esc(s.recipient || '')}</b></td><td data-edit="phone" data-id="${s.id}">${esc(fmtPhone(s.phone))}</td><td data-edit="zip" data-id="${s.id}">${esc(s.zip || '')}</td>
       <td class="addr" data-edit="address" data-id="${s.id}">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
       <td>${s.category ? `<span class="cat">${esc(s.category)}</span>` : '<span class="hint">-</span>'}${s.memo ? ` <span class="hint" title="${esc(s.memo)}">📝</span>` : ''}</td>
@@ -226,12 +229,12 @@ function exportXlsx(){
 /* 등록·수정 창 */
 function openEdit(id){
   const s0 = id ? S().find(x => x.id === id) : null;
-  const d = s0 || { product: filter.product || PRODUCTS[0], qty: 1, recipient: '', phone: '', zip: '', address: '', address2: '', pay_type: '', pay_method: '', order_date: '', country: '대한민국', category: CATS[0], memo: '', sent: false };
+  const d = s0 || { product: prodsFor(company).includes(filter.product) ? filter.product : prodsFor(company)[0], qty: 1, recipient: '', phone: '', zip: '', address: '', address2: '', pay_type: '', pay_method: '', order_date: '', country: '대한민국', category: CATS[0], memo: '', sent: false };
   const preset = PRESETS[d.product] || {};
   openModal(`${modalHead(s0 ? '샘플 발송 정보' : '샘플 발송 등록', s0 && s0.sent ? tag('발송 완료', '#dcfce7', '#15803d', true) : '')}
     <div class="mb">
       <div class="f4">
-        <div class="f"><label>제품 *</label><select id="sProd">${PRODUCTS.map(p => `<option ${d.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>제품 *</label><select id="sProd">${prodOpts(d.product, s0 ? coOf(s0) : company)}</select></div>
         <div class="f"><label>수량</label><input type="number" id="sQty" value="${d.qty}" min="1" max="99"></div>
         <div class="f"><label>구분</label>${catSelHtml('sCat', d.category || CATS[0])}</div>
       </div>
@@ -278,7 +281,7 @@ function openBulk(){
   openModal(`${modalHead('여러 명 한 번에 등록')}
     <div class="mb">
       <div class="f3">
-        <div class="f"><label>제품</label><select id="bProd">${PRODUCTS.map(p => `<option>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>제품</label><select id="bProd">${prodOpts(prodsFor(company)[0], company)}</select></div>
         <div class="f"><label>수량 (모두 같게)</label><input type="number" id="bQty" value="1" min="1"></div>
         <div class="f"><label>구분</label>${catSelHtml('bCat', CATS[0])}</div>
       </div>
