@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171441">
-<script src="common.js?v=202609171441"></script>
+<link rel="stylesheet" href="common.css?v=202609171443">
+<script src="common.js?v=202609171443"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -65,7 +65,7 @@
 /* 물류 양식에 들어가는 제품 이름 (주문상품명 / 옵션포함) */
 const PRESETS = {
   '레모너리': { name: '[공식] 레모너리 1박스 트리플 고체레몬즙 600mg X 60정', option: '[공식] 레모너리 1박스 트리플 고체레몬즙 600mg X 60정' },
-  '서리맥스': { name: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 90정)', option: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 90정)(용량선택= 서리맥스 1박스 29800원 )' },
+  '서리맥스': { name: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 60정)', option: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 60정)' },
   '흑생마':   { name: '[공식] 137 흑생마 1박스 (500mg, 60정)', option: '[공식] 137 흑생마 1박스 (500mg, 60정)' },
 };
 const PRODUCTS = Object.keys(PRESETS);
