@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171218">
-<script src="common.js?v=202609171218"></script>
+<link rel="stylesheet" href="common.css?v=202609171223">
+<script src="common.js?v=202609171223"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -37,6 +37,9 @@
   .f4{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3,.f4{grid-template-columns:1fr}}
   .sel{background:#fffbea}
+  .catsel{display:flex;gap:2px;align-items:center;width:100%}
+  .catsel select,.catsel input{flex:1;min-width:0}
+  .catsel .back{border:1px solid var(--line2);background:#fff;border-radius:4px;padding:0 6px;height:30px;cursor:pointer;color:var(--fg2);flex:none}
   tr.newrow td{background:#fffbea;padding:4px 6px}
   tr.newrow input,tr.newrow select{width:100%;border:1px solid #e0c25a;border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff;box-sizing:border-box}
   tr.newrow input:focus,tr.newrow select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
@@ -66,8 +69,15 @@ const PRESETS = {
 const PRODUCTS = Object.keys(PRESETS);
 const CATS = ['파트너스', '고객'];   // 구분 선택지 (그 외는 직접 입력)
 /* 구분 선택 상자: 파트너스 / 고객 / 직접 입력… (직접 입력을 고르면 글자 칸이 나옴) */
-const catSelHtml = (id, val, extra = '') => { const custom = val && !CATS.includes(val); return `<select id="${id}Sel" ${extra}>${CATS.map(c => `<option ${val === c ? 'selected' : ''}>${c}</option>`).join('')}<option value="__new" ${custom ? 'selected' : ''}>직접 입력…</option></select><input id="${id}" value="${esc(val || '')}" placeholder="구분 입력" ${extra} ${custom ? '' : 'hidden'}>`; };
-const bindCatSel = id => { const sel = $('#' + id + 'Sel'), inp = $('#' + id); if (!sel || !inp) return; if (sel.value !== '__new') inp.value = sel.value; sel.onchange = () => { if (sel.value === '__new') { inp.hidden = false; inp.value = ''; inp.focus(); } else { inp.hidden = true; inp.value = sel.value; } }; };
+const catSelHtml = (id, val, extra = '') => { const custom = val && !CATS.includes(val); return `<span class="catsel"><select id="${id}Sel" ${extra} ${custom ? 'hidden' : ''}>${CATS.map(c => `<option ${val === c ? 'selected' : ''}>${c}</option>`).join('')}<option value="__new" ${custom ? 'selected' : ''}>직접 입력…</option></select><input id="${id}" value="${esc(val || '')}" placeholder="구분 입력 후 Enter" ${extra} ${custom ? '' : 'hidden'}><button type="button" class="back" id="${id}Back" title="목록에서 고르기" ${custom ? '' : 'hidden'}>▾</button></span>`; };
+/* 직접 입력을 고르면 같은 자리에서 선택 상자가 글자 칸으로 바뀜. ▾ 를 누르거나 빈 채로 Esc 하면 다시 목록으로 */
+const bindCatSel = id => { const sel = $('#' + id + 'Sel'), inp = $('#' + id), back = $('#' + id + 'Back'); if (!sel || !inp) return;
+  if (sel.value !== '__new') inp.value = sel.value;
+  const toInput = () => { sel.hidden = true; inp.hidden = false; back.hidden = false; inp.focus(); };
+  const toList = () => { inp.hidden = true; back.hidden = true; sel.hidden = false; sel.value = CATS[0]; inp.value = sel.value; sel.focus(); };
+  sel.onchange = () => { if (sel.value === '__new') { inp.value = ''; toInput(); } else inp.value = sel.value; };
+  back.onclick = e => { e.stopPropagation(); toList(); };
+  inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toList(); } }); };
 const COLS = [['product_name', '주문상품명'], ['option_name', '주문상품명(옵션포함)'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '수령인 휴대전화'], ['zip', '수령인 우편번호'], ['address', '수령인 주소'], ['address2', '수령인 상세주소'], ['pay_type', '결제구분'], ['pay_method', '결제수단'], ['order_date', '발주일'], ['country', '배송국가'], ['category', '구분']];
 const S = () => DATA.samples || [];
 const prodCls = p => 'p' + Math.max(0, PRODUCTS.indexOf(p));
