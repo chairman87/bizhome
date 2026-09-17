@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무요청/보고</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609171312">
-<script src="common.js?v=202609171312"></script>
+<link rel="stylesheet" href="common.css?v=202609171313">
+<script src="common.js?v=202609171313"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -64,7 +64,7 @@ const prHtml = p => p === '높음' ? '<span class="pr high">! 높음</span>' : p
 const visibleTask = t => isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me;
 const T = () => (DATA.tasks || []).filter(visibleTask);
 
-let view = LS.get('tasks_view') || 'received';
+let view = 'received';   // 화면을 열면 항상 '내 업무'부터 (탭을 바꿔도 다음에 열 때는 다시 내 업무)
 let filter = { q: '', person: '', status: '', hideDone: true };
 let sort = { key: 'due_date', dir: 'asc' };
 const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
@@ -166,7 +166,7 @@ function render(){
   const actions = `<div class="actions"><button class="btn primary" id="selfBtn" title="내가 직접 할 일을 등록">＋ 내 업무 등록</button><button class="btn primary" id="reqBtn" style="background:#6d28d9;border-color:#6d28d9" title="다른 사람에게 업무 요청">＋ 업무 요청</button></div>`;
   $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무요청/보고', tabs: VIEWS(), active: view })
     + `<main class="wrap">${actions}${view === 'all' ? statsHtml() : ''}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
-  bindHeader(k => { view = k; LS.set('tasks_view', k); render(); }, null, m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
+  bindHeader(k => { view = k; render(); }, null, m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
   $('#selfBtn').onclick = () => openTask(null, { assignee: me, self: true });
   $('#reqBtn').onclick = () => openTask(null);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
