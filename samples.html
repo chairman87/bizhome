@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171313">
-<script src="common.js?v=202609171313"></script>
+<link rel="stylesheet" href="common.css?v=202609171441">
+<script src="common.js?v=202609171441"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -88,7 +88,9 @@ const bindCatSel = id => { const sel = $('#' + id + 'Sel'), inp = $('#' + id), b
   sel.onchange = () => { if (sel.value === '__new') { inp.value = ''; toInput(); } else inp.value = sel.value; };
   back.onclick = e => { e.stopPropagation(); toList(); };
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toList(); } }); };
-const COLS = [['product_name', '주문상품명'], ['option_name', '주문상품명(옵션포함)'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '수령인 휴대전화'], ['zip', '수령인 우편번호'], ['address', '수령인 주소'], ['address2', '수령인 상세주소'], ['pay_type', '결제구분'], ['pay_method', '결제수단'], ['order_date', '발주일'], ['country', '배송국가'], ['category', '구분']];
+/* 물류 출고 양식 (★ 260911 레모너리 비매출 출고 양식 과 동일한 21개 열) */
+const XLS_HEAD = ['쇼핑몰', '쇼핑몰번호', '주문번호', '품목별 주문번호', '배송메시지', '총 주문금액', '총 결제금액', '상품번호', '주문상품명', '주문상품명(옵션포함)', '수량', '판매가', '수령인', '수령인 휴대전화', '수령인 우편번호', '수령인 주소', '수령인 상세 주소', '결제구분', '결제수단', '발주일', '배송국가'];
+const XLS_WIDTH = [13, 10.3, 17.8, 20.8, 10.3, 11.1, 11.1, 8.6, 50.2, 51.2, 5, 6.8, 13, 15.2, 15, 91.5, 15.8, 8.6, 8.6, 16.2, 8.8];
 const S = () => DATA.samples || [];
 const prodCls = p => 'p' + Math.max(0, PRODUCTS.indexOf(p));
 const fmtPhone = s => { const d = String(s || '').replace(/\D/g, ''); return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : String(s || ''); };
@@ -210,13 +212,17 @@ function exportXlsx(){
   const groups = [...new Set(list.map(coOf))].map(c => [c, list.filter(s => coOf(s) === c)]);
   const made = [];
   for (const [co, items] of groups) {
-    const rows = [COLS.map(c => c[1])];
-    items.forEach(s => rows.push([s.product_name || (PRESETS[s.product] || {}).name || s.product, s.option_name || (PRESETS[s.product] || {}).option || '', s.qty, s.recipient || '', fmtPhone(s.phone), s.zip || '', s.address || '', s.address2 || '', s.pay_type || '', s.pay_method || '', s.order_date ? fmtDate(s.order_date) : '', s.country || '대한민국', s.category || '']));
+    // 양식과 같은 규칙: 첫 줄에만 쇼핑몰/쇼핑몰번호, 주문번호 = 날짜-1000001부터, 품목별 주문번호 = 날짜-1000001-01, -02 ...
+    const ymd8 = todayStr().replace(/-/g, ''), ymd6 = ymd8.slice(2);
+    const rows = [XLS_HEAD];
+    items.forEach((s, i) => rows.push([i === 0 ? '한국어 쇼핑몰' : '', i === 0 ? 1 : '', `${ymd8}-${1000001 + i}`, `${ymd8}-1000001-${String(i + 1).padStart(2, '0')}`, '', '', '', '',
+      s.product_name || (PRESETS[s.product] || {}).name || s.product, s.option_name || (PRESETS[s.product] || {}).option || '', s.qty, '',
+      s.recipient || '', fmtPhone(s.phone), s.zip || '', [s.address || '', s.address2 || ''].filter(Boolean).join(' '), '', s.pay_type || '', s.pay_method || '', s.order_date ? fmtDate(s.order_date) : '', s.country && s.country !== '대한민국' ? s.country : '']));
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 44 }, { wch: 60 }, { wch: 6 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
-    for (let r = 1; r < rows.length; r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 5 })]; if (c) c.t = 's'; }   // 우편번호 앞 0 유지
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '샘플발송');
-    XLSX.writeFile(wb, `샘플발송_${co.replace('(주)', '')}_${todayStr().replace(/-/g, '')}_${items.length}건.xlsx`);
+    ws['!cols'] = XLS_WIDTH.map(w => ({ wch: w }));
+    for (let r = 1; r < rows.length; r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 14 })]; if (c) c.t = 's'; }   // 우편번호 앞 0 유지
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, `${ymd6} ${co.replace('(주)', '')} 출고 양식(샘플)`.slice(0, 31));
+    XLSX.writeFile(wb, `★ ${ymd6} ${co.replace('(주)', '')} 비매출 출고 양식(엑셀).xlsx`);
     made.push(`${co} ${items.length}건`);
   }
   const now = nowIso();
