@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609171206">
-<script src="common.js?v=202609171206"></script>
+<link rel="stylesheet" href="common.css?v=202609171210">
+<script src="common.js?v=202609171210"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -26,6 +26,8 @@
   .prod.p1{background:#dcfce7;color:#166534;border-color:#bbf7d0}
   .prod.p2{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
   .prod.p3{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+  select.prodsel{border:1px solid transparent;background:transparent;border-radius:6px;font:inherit;font-size:13px;font-weight:700;padding:3px 6px;cursor:pointer}
+  select.prodsel:hover{border-color:var(--line2);background:#fff}
   tr.sent td{color:var(--fg3)}
   tr.sent td .prod{opacity:.6}
   .cat{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
@@ -35,6 +37,11 @@
   .f4{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3,.f4{grid-template-columns:1fr}}
   .sel{background:#fffbea}
+  tr.newrow td{background:#fffbea;padding:4px 6px}
+  tr.newrow input,tr.newrow select{width:100%;border:1px solid #e0c25a;border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff;box-sizing:border-box}
+  tr.newrow input:focus,tr.newrow select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
+  [data-edit]{cursor:text}
+  .inline{width:100%;font:inherit;font-size:13px;border:2px solid var(--blue);border-radius:4px;padding:2px 6px;background:var(--bg);box-sizing:border-box}
   .bulk{font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:160px}
 </style>
 </head>
@@ -80,7 +87,7 @@ function render(){
       <select id="f_product"><option value="">제품: 전체</option>${PRODUCTS.map(p => `<option ${filter.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
       <select id="f_cat"><option value="">구분: 전체</option>${[...new Set([...CATS, ...S().map(s => s.category)])].filter(Boolean).map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <span class="count" id="cnt"></span></div>
-    ${statsHtml()}<div id="view">${tableHtml()}</div>`}</main>`;
+    ${statsHtml()}${view === 'todo' ? '<div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에서 제품을 고르고 수령인·전화·주소를 적은 뒤 <b>Enter</b> 를 누르면 바로 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>' : ''}<div id="view">${tableHtml()}</div>`}</main>`;
   bindHeader(k => { view = k; LS.set('smp_view', k); picked = new Set(); render(); }, null, m => `등록 ${S().filter(s => s.created_by === m.name).length}건`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
   const bb = $('#bulkBtn'); if (bb) bb.onclick = openBulk;
@@ -106,24 +113,63 @@ function statsHtml(){
 function renderView(){ $('#view').innerHTML = tableHtml(); const c = $('#cnt'); if (c) c.textContent = `${listOf().length}건`; bindView(); }
 function tableHtml(){
   const list = sortBy(listOf(), sort, { qty: n => Number(n) || 0, order_date: d => d || '', created_at: d => d || '' });
-  if (!list.length) return `<div class="empty">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : view === 'todo' ? '발송 전인 샘플이 없습니다.<br><b>＋ 샘플 발송 등록</b>으로 넣으세요.' : '해당하는 건이 없습니다.'}</div>`;
+  if (!list.length && view !== 'todo') return `<div class="empty">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '해당하는 건이 없습니다.'}</div>`;   // 발송 전 탭은 비어 있어도 입력 줄을 보여 줌
   const cols = [['product', '제품'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '휴대전화'], ['zip', '우편번호'], ['address', '주소'], ['category', '구분'], ['order_date', '발주일'], ['created_by', '등록'], ['created_at', '등록일']];
   const allPicked = list.length && list.every(s => picked.has(s.id));
+  const catOpts = [...new Set([...CATS, ...S().map(x => x.category)])].filter(Boolean);
   return `<div class="tablewrap"><table class="sm"><thead><tr>${view === 'todo' ? `<th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>` : ''}${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
+    ${view === 'todo' ? `<tr class="newrow"><td></td>
+      <td><select id="nProd">${PRODUCTS.map(p => `<option ${lastNew.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></td>
+      <td><input type="number" id="nQty" value="${lastNew.qty}" min="1" style="width:56px"></td>
+      <td><input id="nName" placeholder="수령인" style="width:90px"></td>
+      <td><input id="nPhone" placeholder="휴대전화" inputmode="tel" style="width:130px"></td>
+      <td><input id="nZip" placeholder="우편번호" inputmode="numeric" style="width:80px"></td>
+      <td><input id="nAddr" placeholder="주소 (상세주소까지 한 칸에)" style="min-width:320px"></td>
+      <td><input id="nCat" list="catList3" value="${esc(lastNew.category || '')}" placeholder="구분" style="width:130px"><datalist id="catList3">${catOpts.map(c => `<option value="${esc(c)}">`).join('')}</datalist></td>
+      <td colspan="3" class="hint">Enter 로 저장 · Tab 으로 칸 이동</td><td><button class="btn sm primary" id="nAdd">추가</button></td></tr>` : ''}
+    ${!list.length ? `<tr><td colspan="12" class="hint" style="text-align:center;padding:16px">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '발송 전인 샘플이 없습니다. 위 노란 줄에 바로 입력해 보세요.'}</td></tr>` : ''}
     ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
       ${view === 'todo' ? `<td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>` : ''}
-      <td><span class="prod ${prodCls(s.product)}">${esc(s.product)}</span>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
-      <td class="num">${s.qty}</td><td><b>${esc(s.recipient || '')}</b></td><td>${esc(fmtPhone(s.phone))}</td><td>${esc(s.zip || '')}</td>
-      <td class="addr">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
-      <td>${s.category ? `<span class="cat">${esc(s.category)}</span>` : '<span class="hint">-</span>'}${s.memo ? ` <span class="hint" title="${esc(s.memo)}">📝</span>` : ''}</td>
+      <td><select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${PRODUCTS.map(p => `<option ${s.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
+      <td class="num" data-edit="qty" data-id="${s.id}">${s.qty}</td><td data-edit="recipient" data-id="${s.id}"><b>${esc(s.recipient || '')}</b></td><td data-edit="phone" data-id="${s.id}">${esc(fmtPhone(s.phone))}</td><td data-edit="zip" data-id="${s.id}">${esc(s.zip || '')}</td>
+      <td class="addr" data-edit="address" data-id="${s.id}">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
+      <td data-edit="category" data-id="${s.id}">${s.category ? `<span class="cat">${esc(s.category)}</span>` : '<span class="hint">-</span>'}${s.memo ? ` <span class="hint" title="${esc(s.memo)}">📝</span>` : ''}</td>
       <td>${fmtDate(s.order_date) || '<span class="hint">-</span>'}</td><td>${who(s.created_by)}</td><td class="hint">${fmtDate((s.created_at || '').slice(0, 10))}${s.exported_at ? ' <span title="엑셀 추출함">📥</span>' : ''}</td>
       <td><button type="button" class="ox ${s.sent ? 'on' : ''}" data-sent="${s.id}" title="누르면 발송 완료/발송 전이 바뀝니다">${s.sent ? `발송 완료 ${fmtDate((s.sent_at || '').slice(0, 10)).slice(5)}` : '발송 전'}</button></td>
     </tr>`).join('')}
   </tbody></table></div>`;
 }
+let lastNew = { product: PRODUCTS[0], qty: 1, category: CATS[0] };   // 입력 줄에 남겨 두는 값
+/* 노란 입력 줄에서 바로 추가 (Enter) */
+async function addFromRow(){
+  const recipient = $('#nName').value.trim(), phone = $('#nPhone').value.trim(), address = $('#nAddr').value.trim();
+  if (!recipient) { $('#nName').focus(); toast('수령인을 입력하세요', true); return; }
+  if (!phone) { $('#nPhone').focus(); toast('휴대전화를 입력하세요', true); return; }
+  if (!address) { $('#nAddr').focus(); toast('주소를 입력하세요', true); return; }
+  const prod = $('#nProd').value;
+  lastNew = { product: prod, qty: Number($('#nQty').value) || 1, category: $('#nCat').value.trim() };
+  const row = { id: uid(), product: prod, product_name: PRESETS[prod].name, option_name: PRESETS[prod].option, qty: lastNew.qty, recipient, phone: fmtPhone(phone), zip: $('#nZip').value.trim() || null, address, address2: null,
+    pay_type: null, pay_method: null, order_date: null, country: '대한민국', category: lastNew.category || null, memo: null, sent: false, sent_at: null, exported_at: null, created_by: me, created_at: nowIso(), updated_by: me };
+  await saveRow('samples', row);
+  setTimeout(() => { const n = $('#nName'); if (n) n.focus(); }, 300);   // 다음 사람 바로 입력 (화면 다시 그린 뒤)
+}
+/* 칸 더블클릭으로 고치기 */
+function inlineEdit(el){
+  const s = S().find(x => x.id === el.dataset.id); if (!s || el.querySelector('input')) return;
+  const k = el.dataset.edit, old = k === 'phone' ? fmtPhone(s.phone) : (s[k] ?? '');
+  const box = document.createElement('input'); box.className = 'inline'; box.value = old; if (k === 'qty') { box.type = 'number'; box.min = 1; }
+  el.innerHTML = ''; el.appendChild(box); box.focus(); box.select();
+  let done = false;
+  const finish = async save => { if (done) return; done = true; const v = box.value.trim(); if (!save || v === String(old).trim()) { renderView(); return; } await saveRow('samples', { ...s, [k]: k === 'qty' ? (Number(v) || 1) : k === 'phone' ? fmtPhone(v) : (v || null), updated_by: me }); };
+  box.onblur = () => finish(true);
+  box.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); finish(false); } else if (e.key === 'Enter') { e.preventDefault(); finish(true); } };
+}
 function bindView(){
   bindSort(sort, renderView, { recipient: 'asc', product: 'asc', category: 'asc', created_by: 'asc' });
-  document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button, input')) return; openEdit(tr.dataset.id); });
+  const na = $('#nAdd'); if (na) { na.onclick = addFromRow; document.querySelectorAll('.newrow input, .newrow select').forEach(i => { i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addFromRow(); } }; i.onclick = e => e.stopPropagation(); }); }
+  document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = e => { e.stopPropagation(); inlineEdit(el); });
+  document.querySelectorAll('select[data-prod]').forEach(sel => { sel.onclick = e => e.stopPropagation(); sel.onchange = async () => { const s = S().find(x => x.id === sel.dataset.prod); const p = PRESETS[sel.value]; await saveRow('samples', { ...s, product: sel.value, product_name: p.name, option_name: p.option, updated_by: me }); }; });
+  document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button, input, select')) return; openEdit(tr.dataset.id); });
   document.querySelectorAll('[data-pick]').forEach(cb => cb.onchange = () => { if (cb.checked) picked.add(cb.dataset.pick); else picked.delete(cb.dataset.pick); render(); });
   const pa = $('#pickAll'); if (pa) pa.onchange = () => { const ids = listOf().map(s => s.id); if (pa.checked) ids.forEach(i => picked.add(i)); else ids.forEach(i => picked.delete(i)); render(); };
   document.querySelectorAll('[data-sent]').forEach(b => b.onclick = async e => { e.stopPropagation(); const s = S().find(x => x.id === b.dataset.sent); await saveRow('samples', { ...s, sent: !s.sent, sent_at: !s.sent ? nowIso() : null, updated_by: me }); });
