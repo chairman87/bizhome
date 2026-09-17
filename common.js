@@ -143,9 +143,27 @@ async function reload(){
 }
 let schemaWarn = '';
 const warnHtml = () => schemaWarn ? `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;font-size:13px;text-align:center">⚠ ${esc(schemaWarn)}</div>` : '';
+/* 메뉴 접근 권한: 홈의 메뉴 편집에서 "볼 수 있는 사람"이 정해진 화면은 그 사람과 관리자만 (주소를 직접 쳐도 막힘) */
+let accessState = null;   // null=아직 확인 안 함, 'checking', 'ok', 'denied'
+async function checkAccess(){
+  accessState = 'checking';
+  try {
+    const rows = await store.load('menu');
+    const key = location.pathname.split('/').pop() + location.search;
+    const row = rows.find(r => r.href === key || r.href === decodeURIComponent(key));
+    const allowed = row && Array.isArray(row.allowed) ? row.allowed : [];
+    accessState = (allowed.length && !isAdmin() && !allowed.includes(me)) ? 'denied' : 'ok';
+  } catch { accessState = 'ok'; }
+  renderApp();
+}
 function renderApp(){
-  if (!me || !members.some(m => m.name === me)) { me = ''; renderLogin(); return; }
+  if (!me || !members.some(m => m.name === me)) { me = ''; accessState = null; renderLogin(); return; }
   document.body.classList.remove('login-bg');
+  if (APP.title !== BRAND.name) {   // 홈이 아닌 화면만 확인
+    if (accessState === null) { checkAccess(); return; }
+    if (accessState === 'checking') return;
+    if (accessState === 'denied') { $('#app').innerHTML = headerHtml({ icon: APP.icon, title: APP.title }) + `<main class="wrap"><div class="empty">이 화면은 볼 수 있는 사람이 정해져 있어 <b>${esc(me)}</b>님은 열 수 없습니다.<br>필요하면 관리자에게 요청하세요.<br><br><a class="btn" href="index.html">홈으로</a></div></main>`; bindHeader(() => {}, null, () => ''); return; }
+  }
   APP.render();
 }
 /* 한 줄 저장(화면 먼저 바꾸고 저장소에 씀). 실패하면 알리고 다시 읽음 */

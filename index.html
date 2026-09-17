@@ -37,6 +37,9 @@
   .emojis button{border:1px solid var(--line);background:var(--bg);border-radius:4px;font-size:16px;padding:2px 4px;line-height:1}
   .emojis button:hover{background:var(--bg3)}
   .foot{margin-top:24px;font-size:12px;color:var(--fg3);text-align:center}
+  .allow{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;padding:6px 0}
+  .allow label{display:flex;align-items:center;gap:4px;cursor:pointer}
+  .allow label.adm{color:var(--fg3)}
   /* 공지사항 판 (홈 맨 위) */
   .nboard{background:var(--bg);border:1px solid var(--line);border-radius:10px;margin-bottom:18px;overflow:hidden}
   .nboard .hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
@@ -157,13 +160,13 @@ function render(){
     ${editing ? '' : noticeBoard(notices)}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
-      const pages = pagesOf(d.id);
+      const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
       return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}">
         <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
           <span class="ed"><button data-dedit="${d.id}" title="부서 이름·색 바꾸기">✎</button><button data-dmove="${d.id}" data-dir="-1" ${di === 0 ? 'disabled' : ''} title="왼쪽으로">←</button><button data-dmove="${d.id}" data-dir="1" ${di === arr.length - 1 ? 'disabled' : ''} title="오른쪽으로">→</button><button class="del" data-ddel="${d.id}" title="부서 삭제">✕</button></span></h2>
         ${pages.map((p, pi) => {
           const ed = `<span class="ed"><button data-pmove="${p.id}" data-dir="-1" ${pi === 0 ? 'disabled' : ''} title="위로">↑</button><button data-pmove="${p.id}" data-dir="1" ${pi === pages.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="del" data-pdel="${p.id}" title="페이지 삭제">✕</button></span>`;
-          const inner = `<span class="ic">${esc(p.icon || '📄')}</span><span class="t">${esc(p.name)}</span>`;
+          const inner = `<span class="ic">${esc(p.icon || '📄')}</span><span class="t">${esc(p.name)}${(p.allowed || []).length ? ` <span class="hint" title="볼 수 있는 사람: ${esc(p.allowed.join(', '))}">🔒</span>` : ''}</span>`;
           if (editing) return `<div class="pg" data-pedit="${p.id}">${inner}${ed}</div>`;
           if (p.href === 'members') return `<button class="pg" data-members>${inner}<span class="hint">${members.length}명</span></button>`;
           if (p.href && /^https?:\/\//i.test(p.href)) return `<a class="pg" href="${esc(p.href)}" target="_blank" rel="noopener">${inner}<span class="hint">↗</span></a>`;
@@ -219,6 +222,7 @@ async function delDept(id){
 }
 
 /* 페이지 추가·수정 창 */
+const canSee = p => !(Array.isArray(p.allowed) && p.allowed.length) || isAdmin() || p.allowed.includes(me);
 function openPage(id, deptId){
   if (!guard()) return;
   const p = id ? M().find(x => x.id === id) : null;
@@ -238,6 +242,8 @@ function openPage(id, deptId){
       </div>
       <div class="f" id="pUrlBox" ${screenVal === 'url' ? '' : 'hidden'}><label>인터넷 주소</label><input id="pUrl" value="${esc(isUrl ? d.href : '')}" placeholder="https://..."></div>
       <div class="hint">화면이 아직 없는 메뉴는 "아직 없음"으로 두면 "준비 중"으로 표시됩니다. 새 화면을 만들면 여기서 연결합니다.</div>
+      <div class="f"><label>볼 수 있는 사람 <span class="hint">(아무도 체크하지 않으면 전체 공개 · 관리자는 항상 볼 수 있음)</span></label>
+        <div class="allow">${members.map(m => `<label class="${m.role === 'admin' ? 'adm' : ''}"><input type="checkbox" data-allow="${esc(m.name)}" ${(d.allowed || []).includes(m.name) ? 'checked' : ''} ${m.role === 'admin' ? 'checked disabled' : ''}> ${esc(fullName(m.name))}</label>`).join('')}</div></div>
     </div>
     <div class="mf">
       ${p ? `<button class="btn danger left" id="pDel">삭제</button>` : ''}
@@ -252,7 +258,8 @@ function openPage(id, deptId){
     let href = $('#pScreen').value;
     if (href === 'url') { href = $('#pUrl').value.trim(); if (!/^https?:\/\//i.test(href)) { $('#pUrl').focus(); toast('주소는 https:// 로 시작해야 합니다', true); return; } }
     const parent = $('#pDept').value;
-    const n = { id: p ? p.id : uid(), type: 'page', parent, name, icon: $('#pIcon').value.trim() || '📄', color: null, href: href || null,
+    const allowed = [...document.querySelectorAll('[data-allow]:checked:not(:disabled)')].map(c => c.dataset.allow);   // 관리자는 저장 안 함(항상 허용)
+    const n = { id: p ? p.id : uid(), type: 'page', parent, name, icon: $('#pIcon').value.trim() || '📄', color: null, href: href || null, allowed,
       sort_order: p && p.parent === parent ? p.sort_order : pagesOf(parent).length, created_at: p ? p.created_at : nowIso() };
     closeModal();
     await saveRow('menu', n);
