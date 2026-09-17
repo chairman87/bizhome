@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609171257">
-<script src="common.js?v=202609171257"></script>
+<link rel="stylesheet" href="common.css?v=202609171300">
+<script src="common.js?v=202609171300"></script>
 <style>
   .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
   .dept{border-radius:10px;padding:10px}
@@ -38,8 +38,9 @@
   .emojis button:hover{background:var(--bg3)}
   .foot{margin-top:24px;font-size:12px;color:var(--fg3);text-align:center}
   .allow{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;padding:6px 0}
-  .allow label{display:flex;align-items:center;gap:4px;cursor:pointer}
-  .allow label.adm{color:var(--fg3)}
+  .allow label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)}
+  .allow label:has(input:checked){background:#dbeafe;border-color:#93c5fd}
+  .allow label.adm{color:var(--fg3);background:var(--bg2)!important;border-color:var(--line)!important}
   /* 공지사항 판 (홈 맨 위) */
   .nboard{background:var(--bg);border:1px solid var(--line);border-radius:10px;margin-bottom:18px;overflow:hidden}
   .nboard .hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
