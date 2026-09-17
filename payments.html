@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>결제</title>
+<title>결재</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609171237">
-<script src="common.js?v=202609171237"></script>
+<link rel="stylesheet" href="common.css?v=202609171247">
+<script src="common.js?v=202609171247"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -139,8 +139,8 @@ function bindCopy(){ document.querySelectorAll('[data-copy]').forEach(b => b.onc
 function render(){
   const actions = `<div class="actions"><button class="btn primary" id="newBtn2">＋ 지출 등록</button>
     <span class="flow"><span class="step">1 등록</span>→<span class="step">2 대표 결재</span>→<span class="step">3 은행 앱 이체</span>→<span class="step">4 이체 완료 표시</span></span></div>`;
-  $('#app').innerHTML = headerHtml({ icon: '💳', title: '결제', tabs: VIEWS(), active: view })
-    + `<main class="wrap">${!DATA.payments ? `<div class="empty">결제 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-payments.sql)을 실행하세요.' : ''}</div>` : actions + (view === 'month' ? monthHtml() : (view === 'all' ? statsHtml() : '') + toolbarHtml() + `<div id="view">${tableHtml(filtered())}</div>`)}</main>`;
+  $('#app').innerHTML = headerHtml({ icon: '💳', title: '결재', tabs: VIEWS(), active: view })
+    + `<main class="wrap">${!DATA.payments ? `<div class="empty">결재 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-payments.sql)을 실행하세요.' : ''}</div>` : actions + (view === 'month' ? monthHtml() : (view === 'all' ? statsHtml() : '') + toolbarHtml() + `<div id="view">${tableHtml(filtered())}</div>`)}</main>`;
   bindHeader(k => { view = k; LS.set('pay_view', k); render(); }, null, m => `올린 건 ${P().filter(p => p.created_by === m.name).length}건`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openPay(null, { kind: '비용' });
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
@@ -317,7 +317,7 @@ function openPay(id, preset = {}){
   }
 }
 
-boot({ icon: '💳', title: '결제', tables: ['payments'], render, normalize });
+boot({ icon: '💳', title: '결재', tables: ['payments'], render, normalize });
 </script>
 </body>
 </html>
