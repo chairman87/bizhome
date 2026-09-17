@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>비매출</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="common.css?v=202609162213">
+<script src="common.js?v=202609162213"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v.orange{color:var(--orange)}
+  .stat .s{font-size:11px;color:var(--fg3)}
+  table.sm{min-width:1500px}
+  table.sm td{white-space:nowrap}
+  table.sm td.addr{white-space:normal;min-width:260px;max-width:420px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .prod{display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid transparent;background:#f1f5f9;color:#334155}
+  .prod.p0{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .prod.p1{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+  .prod.p2{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
+  .prod.p3{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+  tr.sent td{color:var(--fg3)}
+  tr.sent td .prod{opacity:.6}
+  .cat{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .ox{border:1px solid var(--line2);background:#fff;border-radius:6px;padding:2px 10px;font-weight:600;cursor:pointer;color:var(--fg3);font-size:12px;white-space:nowrap}
+  .ox.on{background:#dcfce7;border-color:#86efac;color:#15803d}
+  .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .f4{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+  @media(max-width:640px){.f3,.f4{grid-template-columns:1fr}}
+  .sel{background:#fffbea}
+  .bulk{font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:160px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   비매출 — 샘플(무상) 발송 관리. 물류에 올리는 엑셀 양식 그대로 추출
+   한 줄 = { product(제품), product_name(주문상품명), option_name(주문상품명(옵션포함)), qty(수량), recipient(수령인), phone, zip, address, address2,
+             pay_type(결제구분), pay_method(결제수단), order_date(발주일), country(배송국가), category(구분), memo,
+             sent(발송 완료), sent_at, exported_at(엑셀 추출한 때), created_by/at, updated_by/at }
+================================================================ */
+/* 물류 양식에 들어가는 제품 이름 (주문상품명 / 옵션포함) */
+const PRESETS = {
+  '레모너리': { name: '[공식] 레모너리 1박스 트리플 고체레몬즙 600mg X 60정', option: '[공식] 레모너리 1박스 트리플 고체레몬즙 600mg X 60정' },
+  '서리맥스': { name: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 90정)', option: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 90정)(용량선택= 서리맥스 1박스 29800원 )' },
+  '흑생마':   { name: '[공식] 137 흑생마 1박스 (500mg, 60정)', option: '[공식] 137 흑생마 1박스 (500mg, 60정)' },
+};
+const PRODUCTS = Object.keys(PRESETS);
+const CATS = ['파트너스(인플루언서)', '체험단', '거래처·지인', '내부', '기타'];
+const COLS = [['product_name', '주문상품명'], ['option_name', '주문상품명(옵션포함)'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '수령인 휴대전화'], ['zip', '수령인 우편번호'], ['address', '수령인 주소'], ['address2', '수령인 상세주소'], ['pay_type', '결제구분'], ['pay_method', '결제수단'], ['order_date', '발주일'], ['country', '배송국가'], ['category', '구분']];
+const S = () => DATA.samples || [];
+const prodCls = p => 'p' + Math.max(0, PRODUCTS.indexOf(p));
+const fmtPhone = s => { const d = String(s || '').replace(/\D/g, ''); return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : String(s || ''); };
+
+let view = LS.get('smp_view') || 'todo';
+let filter = { q: '', product: '', cat: '' };
+let sort = { key: 'created_at', dir: 'desc' };
+let picked = new Set();   // 체크한 줄(추출 대상 고르기)
+
+function normalize(table, s){ return { ...s, qty: Number(s.qty) || 1, sent: !!s.sent, country: s.country || '대한민국' }; }
+const VIEWS = () => [{ key: 'todo', label: '발송 전', badge: S().filter(s => !s.sent).length }, { key: 'sent', label: '발송 완료' }, { key: 'all', label: '전체' }];
+
+function render(){
+  $('#app').innerHTML = headerHtml({ icon: '📦', title: '비매출', tabs: VIEWS(), active: view })
+    + `<main class="wrap wrap-wide" style="max-width:1700px">${!DATA.samples ? `<div class="empty">비매출 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-samples.sql)을 실행하세요.' : ''}</div>` : `
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 샘플 발송 등록</button><button class="btn" id="bulkBtn" title="여러 명을 한 번에 붙여넣기">📋 여러 명 붙여넣기</button>
+      ${view === 'todo' ? `<button class="btn" id="xlsBtn" style="background:#15803d;border-color:#15803d;color:#fff" ${S().some(s => !s.sent) ? '' : 'disabled'}>📥 엑셀 추출 (발송 전 ${picked.size ? picked.size + '건 선택' : '전체'})</button>` : ''}
+      <input type="search" id="fq" placeholder="검색 (수령인, 전화, 주소)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
+      <select id="f_product"><option value="">제품: 전체</option>${PRODUCTS.map(p => `<option ${filter.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+      <select id="f_cat"><option value="">구분: 전체</option>${[...new Set([...CATS, ...S().map(s => s.category)])].filter(Boolean).map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <span class="count" id="cnt"></span></div>
+    ${statsHtml()}<div id="view">${tableHtml()}</div>`}</main>`;
+  bindHeader(k => { view = k; LS.set('smp_view', k); picked = new Set(); render(); }, null, m => `등록 ${S().filter(s => s.created_by === m.name).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const bb = $('#bulkBtn'); if (bb) bb.onclick = openBulk;
+  const xb = $('#xlsBtn'); if (xb) xb.onclick = exportXlsx;
+  const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
+  ['product', 'cat'].forEach(k => { const el = $('#f_' + k); if (el) el.onchange = () => { filter[k] = el.value; renderView(); }; });
+  bindView();
+}
+function listOf(){
+  const q = filter.q.trim().toLowerCase();
+  return S().filter(s => (view === 'all' || (view === 'sent' ? s.sent : !s.sent))
+    && (!q || [s.recipient, s.phone, s.address, s.address2, s.memo, s.category].some(v => (v || '').toLowerCase().includes(q)))
+    && (!filter.product || s.product === filter.product) && (!filter.cat || s.category === filter.cat));
+}
+function statsHtml(){
+  const all = S(), todo = all.filter(s => !s.sent), m = todayStr().slice(0, 7);
+  return `<div class="stats">
+    <div class="stat"><div class="l">발송 전</div><div class="v ${todo.length ? 'orange' : ''}">${todo.length}건</div><div class="s">수량 ${todo.reduce((a, s) => a + s.qty, 0)}개 · 추출 안 한 것 ${todo.filter(s => !s.exported_at).length}건</div></div>
+    ${PRODUCTS.map(p => `<div class="stat"><div class="l">${p} (이번 달)</div><div class="v">${all.filter(s => s.product === p && (s.created_at || '').startsWith(m)).reduce((a, s) => a + s.qty, 0)}개</div><div class="s">누적 ${all.filter(s => s.product === p).reduce((a, s) => a + s.qty, 0)}개</div></div>`).join('')}
+    <div class="stat"><div class="l">발송 완료</div><div class="v">${all.filter(s => s.sent).length}건</div><div class="s">전체 ${all.length}건</div></div>
+  </div>`;
+}
+function renderView(){ $('#view').innerHTML = tableHtml(); const c = $('#cnt'); if (c) c.textContent = `${listOf().length}건`; bindView(); }
+function tableHtml(){
+  const list = sortBy(listOf(), sort, { qty: n => Number(n) || 0, order_date: d => d || '', created_at: d => d || '' });
+  if (!list.length) return `<div class="empty">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : view === 'todo' ? '발송 전인 샘플이 없습니다.<br><b>＋ 샘플 발송 등록</b>으로 넣으세요.' : '해당하는 건이 없습니다.'}</div>`;
+  const cols = [['product', '제품'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '휴대전화'], ['zip', '우편번호'], ['address', '주소'], ['category', '구분'], ['order_date', '발주일'], ['created_by', '등록'], ['created_at', '등록일']];
+  const allPicked = list.length && list.every(s => picked.has(s.id));
+  return `<div class="tablewrap"><table class="sm"><thead><tr>${view === 'todo' ? `<th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>` : ''}${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
+    ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
+      ${view === 'todo' ? `<td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>` : ''}
+      <td><span class="prod ${prodCls(s.product)}">${esc(s.product)}</span>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
+      <td class="num">${s.qty}</td><td><b>${esc(s.recipient || '')}</b></td><td>${esc(fmtPhone(s.phone))}</td><td>${esc(s.zip || '')}</td>
+      <td class="addr">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
+      <td>${s.category ? `<span class="cat">${esc(s.category)}</span>` : '<span class="hint">-</span>'}${s.memo ? ` <span class="hint" title="${esc(s.memo)}">📝</span>` : ''}</td>
+      <td>${fmtDate(s.order_date) || '<span class="hint">-</span>'}</td><td>${who(s.created_by)}</td><td class="hint">${fmtDate((s.created_at || '').slice(0, 10))}${s.exported_at ? ' <span title="엑셀 추출함">📥</span>' : ''}</td>
+      <td><button type="button" class="ox ${s.sent ? 'on' : ''}" data-sent="${s.id}" title="누르면 발송 완료/발송 전이 바뀝니다">${s.sent ? `발송 완료 ${fmtDate((s.sent_at || '').slice(0, 10)).slice(5)}` : '발송 전'}</button></td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+function bindView(){
+  bindSort(sort, renderView, { recipient: 'asc', product: 'asc', category: 'asc', created_by: 'asc' });
+  document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button, input')) return; openEdit(tr.dataset.id); });
+  document.querySelectorAll('[data-pick]').forEach(cb => cb.onchange = () => { if (cb.checked) picked.add(cb.dataset.pick); else picked.delete(cb.dataset.pick); render(); });
+  const pa = $('#pickAll'); if (pa) pa.onchange = () => { const ids = listOf().map(s => s.id); if (pa.checked) ids.forEach(i => picked.add(i)); else ids.forEach(i => picked.delete(i)); render(); };
+  document.querySelectorAll('[data-sent]').forEach(b => b.onclick = async e => { e.stopPropagation(); const s = S().find(x => x.id === b.dataset.sent); await saveRow('samples', { ...s, sent: !s.sent, sent_at: !s.sent ? nowIso() : null, updated_by: me }); });
+}
+
+/* 물류 양식 그대로 엑셀 추출 (발송 전만, 체크한 것이 있으면 그것만) */
+function exportXlsx(){
+  if (typeof XLSX === 'undefined') { toast('엑셀 도구를 불러오지 못했습니다. 새로고침 후 다시 시도하세요', true); return; }
+  const list = S().filter(s => !s.sent && (!picked.size || picked.has(s.id))).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  if (!list.length) { toast('추출할 발송 전 건이 없습니다', true); return; }
+  const rows = [COLS.map(c => c[1])];
+  list.forEach(s => rows.push([s.product_name || (PRESETS[s.product] || {}).name || s.product, s.option_name || (PRESETS[s.product] || {}).option || '', s.qty, s.recipient || '', fmtPhone(s.phone), s.zip || '', s.address || '', s.address2 || '', s.pay_type || '', s.pay_method || '', s.order_date ? fmtDate(s.order_date) : '', s.country || '대한민국', s.category || '']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 44 }, { wch: 60 }, { wch: 6 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
+  for (let r = 1; r < rows.length; r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 5 })]; if (c) c.t = 's'; }   // 우편번호 앞 0 유지
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '샘플발송');
+  XLSX.writeFile(wb, `샘플발송_${todayStr().replace(/-/g, '')}_${list.length}건.xlsx`);
+  const now = nowIso();
+  (async () => { for (const s of list) await saveRow('samples', { ...s, exported_at: now, updated_by: me }); })();
+  openModal(`${modalHead('엑셀 추출 완료')}<div class="mb"><div>발송 전 <b>${list.length}건</b>을 엑셀 파일로 내려받았습니다. 물류에 올린 뒤 이 건들을 <b>발송 완료</b>로 바꿀까요?</div><div class="hint">나중에 바꾸려면 각 줄의 "발송 전" 버튼을 누르면 됩니다.</div></div>
+    <div class="mf"><button class="btn" data-close>나중에</button><button class="btn primary" id="markSent">${list.length}건 발송 완료로</button></div>`);
+  $('#markSent').onclick = async () => { closeModal(); for (const s of list) await saveRow('samples', { ...s, sent: true, sent_at: now, exported_at: now, updated_by: me }); picked = new Set(); toast(`${list.length}건을 발송 완료로 표시했습니다`); };
+}
+
+/* 등록·수정 창 */
+function openEdit(id){
+  const s0 = id ? S().find(x => x.id === id) : null;
+  const d = s0 || { product: filter.product || PRODUCTS[0], qty: 1, recipient: '', phone: '', zip: '', address: '', address2: '', pay_type: '', pay_method: '', order_date: '', country: '대한민국', category: CATS[0], memo: '', sent: false };
+  const preset = PRESETS[d.product] || {};
+  openModal(`${modalHead(s0 ? '샘플 발송 정보' : '샘플 발송 등록', s0 && s0.sent ? tag('발송 완료', '#dcfce7', '#15803d', true) : '')}
+    <div class="mb">
+      <div class="f4">
+        <div class="f"><label>제품 *</label><select id="sProd">${PRODUCTS.map(p => `<option ${d.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>수량</label><input type="number" id="sQty" value="${d.qty}" min="1" max="99"></div>
+        <div class="f"><label>구분</label><input id="sCat" list="catList" value="${esc(d.category || '')}"><datalist id="catList">${[...new Set([...CATS, ...S().map(s => s.category)])].filter(Boolean).map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      </div>
+      <div class="hint" id="sPreset">엑셀에 들어갈 상품명: ${esc(d.product_name || preset.name || '')}</div>
+      <div class="f3">
+        <div class="f"><label>수령인 *</label><input id="sName" value="${esc(d.recipient || '')}"></div>
+        <div class="f"><label>휴대전화 *</label><input id="sPhone" inputmode="tel" value="${esc(d.phone || '')}" placeholder="010-0000-0000"></div>
+        <div class="f"><label>우편번호</label><input id="sZip" inputmode="numeric" value="${esc(d.zip || '')}" placeholder="5자리"></div>
+      </div>
+      <div class="f"><label>주소 *</label><input id="sAddr" value="${esc(d.address || '')}" placeholder="도로명 주소 (동·호수까지 한 칸에 적어도 됩니다)"></div>
+      <div class="f"><label>상세 주소</label><input id="sAddr2" value="${esc(d.address2 || '')}"></div>
+      <div class="f3">
+        <div class="f"><label>발주일</label><input type="date" id="sDate" value="${esc(d.order_date || '')}"></div>
+        <div class="f"><label>배송국가</label><input id="sCountry" value="${esc(d.country || '대한민국')}"></div>
+        <div class="f"><label>결제구분 / 결제수단</label><div style="display:flex;gap:4px"><input id="sPayT" value="${esc(d.pay_type || '')}" placeholder="결제구분" style="flex:1"><input id="sPayM" value="${esc(d.pay_method || '')}" placeholder="결제수단" style="flex:1"></div></div>
+      </div>
+      <details><summary class="hint" style="cursor:pointer">엑셀 상품명 직접 고치기 (보통 안 건드려도 됩니다)</summary>
+        <div class="f" style="margin-top:6px"><label>주문상품명</label><input id="sPName" value="${esc(d.product_name || preset.name || '')}"></div>
+        <div class="f"><label>주문상품명(옵션포함)</label><input id="sOName" value="${esc(d.option_name || preset.option || '')}"></div></details>
+      <div class="f"><label>메모 (왜 보내는지, 요청자 등)</label><textarea id="sMemo" style="min-height:60px">${esc(d.memo || '')}</textarea></div>
+      ${s0 ? `<div class="hint">등록: ${esc(s0.created_by || '')} ${fmtDateTime(s0.created_at)}${s0.exported_at ? ` · 엑셀 추출: ${fmtDateTime(s0.exported_at)}` : ''}${s0.sent_at ? ` · 발송 완료: ${fmtDateTime(s0.sent_at)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf">${s0 ? '<button class="btn danger left" id="sDelete">삭제</button>' : ''}${s0 ? `<button class="btn" id="sToggle">${s0.sent ? '발송 전으로 되돌리기' : '발송 완료로'}</button>` : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="sSave">${s0 ? '저장' : '등록'}</button></div>`, { wide: true });
+  $('#sName').focus();
+  $('#sProd').onchange = () => { const p = PRESETS[$('#sProd').value] || {}; $('#sPName').value = p.name || ''; $('#sOName').value = p.option || ''; $('#sPreset').textContent = '엑셀에 들어갈 상품명: ' + (p.name || ''); };
+  $('#sPhone').oninput = () => { $('#sPhone').value = fmtPhone($('#sPhone').value.replace(/\D/g, '').slice(0, 11)) || $('#sPhone').value; };
+  $('#sSave').onclick = async () => {
+    const recipient = $('#sName').value.trim(), phone = $('#sPhone').value.trim(), address = $('#sAddr').value.trim();
+    if (!recipient) { $('#sName').focus(); toast('수령인을 입력하세요', true); return; }
+    if (!phone) { $('#sPhone').focus(); toast('휴대전화를 입력하세요', true); return; }
+    if (!address) { $('#sAddr').focus(); toast('주소를 입력하세요', true); return; }
+    const row = { id: s0 ? s0.id : uid(), product: $('#sProd').value, product_name: $('#sPName').value.trim() || null, option_name: $('#sOName').value.trim() || null, qty: Number($('#sQty').value) || 1,
+      recipient, phone, zip: $('#sZip').value.trim() || null, address, address2: $('#sAddr2').value.trim() || null, pay_type: $('#sPayT').value.trim() || null, pay_method: $('#sPayM').value.trim() || null,
+      order_date: $('#sDate').value || null, country: $('#sCountry').value.trim() || '대한민국', category: $('#sCat').value.trim() || null, memo: $('#sMemo').value.trim() || null,
+      sent: s0 ? s0.sent : false, sent_at: s0 ? s0.sent_at : null, exported_at: s0 ? s0.exported_at : null, created_by: s0 ? s0.created_by : me, created_at: s0 ? s0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('samples', row); toast(s0 ? '저장했습니다' : `${recipient}님 샘플 발송을 등록했습니다`);
+  };
+  const tg = $('#sToggle'); if (tg) tg.onclick = async () => { closeModal(); await saveRow('samples', { ...s0, sent: !s0.sent, sent_at: !s0.sent ? nowIso() : null, updated_by: me }); };
+  const del = $('#sDelete'); if (del) del.onclick = async () => { if (confirm(`${s0.recipient} 건을 삭제할까요?`)) { closeModal(); await removeRow('samples', s0.id); toast('삭제했습니다'); } };
+}
+
+/* 여러 명 붙여넣기: 엑셀·시트에서 "수령인 [탭] 전화 [탭] 우편번호 [탭] 주소" 줄들을 복사해 붙여넣음 */
+function openBulk(){
+  openModal(`${modalHead('여러 명 한 번에 등록')}
+    <div class="mb">
+      <div class="f3">
+        <div class="f"><label>제품</label><select id="bProd">${PRODUCTS.map(p => `<option>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>수량 (모두 같게)</label><input type="number" id="bQty" value="1" min="1"></div>
+        <div class="f"><label>구분</label><input id="bCat" list="catList2" value="${CATS[0]}"><datalist id="catList2">${CATS.map(c => `<option value="${c}">`).join('')}</datalist></div>
+      </div>
+      <div class="f"><label>붙여넣기 (한 줄에 한 명: 수령인, 휴대전화, 우편번호, 주소 순서. 시트에서 복사하면 됩니다)</label><textarea id="bText" class="bulk" placeholder="김재은\t010-5279-6478\t11780\t경기 의정부시 금신로 276 112동 2204호\n이가희\t010-8107-1989\t44721\t울산 남구 삼산중로 15 4층"></textarea></div>
+      <div class="hint">탭 대신 쉼표로 나눠도 됩니다. 우편번호가 없으면 "수령인, 전화, 주소" 세 칸만 있어도 됩니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="bSave">등록</button></div>`, { wide: true });
+  $('#bText').focus();
+  $('#bSave').onclick = async () => {
+    const lines = $('#bText').value.split('\n').map(l => l.trim()).filter(Boolean); if (!lines.length) { toast('붙여넣은 내용이 없습니다', true); return; }
+    const prod = $('#bProd').value, qty = Number($('#bQty').value) || 1, cat = $('#bCat').value.trim() || null, rows = [], bad = [];
+    for (const l of lines) {
+      const c = (l.includes('\t') ? l.split('\t') : l.split(/\s*,\s*/)).map(x => x.trim());
+      if (c.length < 3) { bad.push(l); continue; }
+      const hasZip = c.length >= 4 && /^\d{5}$/.test(c[2].replace(/-/g, ''));
+      const [recipient, phone] = c; const zip = hasZip ? c[2] : null; const address = (hasZip ? c.slice(3) : c.slice(2)).join(' ').trim();
+      if (!recipient || !phone || !address) { bad.push(l); continue; }
+      rows.push({ id: uid(), product: prod, product_name: PRESETS[prod].name, option_name: PRESETS[prod].option, qty, recipient, phone: fmtPhone(phone), zip, address, address2: null, pay_type: null, pay_method: null, order_date: null, country: '대한민국', category: cat, memo: null, sent: false, sent_at: null, exported_at: null, created_by: me, created_at: nowIso(), updated_by: me });
+    }
+    if (!rows.length) { toast('읽을 수 있는 줄이 없습니다. 수령인, 전화, 주소 순서인지 확인하세요', true); return; }
+    closeModal(); for (const r of rows) await saveRow('samples', r);
+    toast(`${rows.length}명을 등록했습니다${bad.length ? ` (${bad.length}줄은 형식이 달라 건너뜀)` : ''}`);
+  };
+}
+
+boot({ icon: '📦', title: '비매출', tables: ['samples'], render, normalize });
+</script>
+</body>
+</html>
