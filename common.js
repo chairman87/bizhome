@@ -149,8 +149,10 @@ async function checkAccess(){
   accessState = 'checking';
   try {
     const rows = await store.load('menu');
-    const key = location.pathname.split('/').pop() + location.search;
-    const row = rows.find(r => r.href === key || r.href === decodeURIComponent(key));
+    const params = new URLSearchParams(location.search); params.delete('v'); params.delete('t');   // 캐시용 꼬리표는 무시
+    const qs = decodeURIComponent(params.toString());
+    const key = location.pathname.split('/').pop() + (qs ? '?' + qs : '');
+    const row = rows.find(r => decodeURIComponent(r.href || '') === key);
     const allowed = row && Array.isArray(row.allowed) ? row.allowed : [];
     accessState = (allowed.length && !isAdmin() && !allowed.includes(me)) ? 'denied' : 'ok';
   } catch { accessState = 'ok'; }
