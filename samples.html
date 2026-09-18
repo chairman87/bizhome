@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609181612">
-<script src="common.js?v=202609181612"></script>
+<link rel="stylesheet" href="common.css?v=202609181616">
+<script src="common.js?v=202609181616"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -39,6 +39,9 @@
   .f4{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3,.f4{grid-template-columns:1fr}}
   .sel{background:#fffbea}
+  .pickcell{cursor:pointer;text-align:center;width:44px;min-width:44px;padding:0 !important;user-select:none}
+  .pickcell:hover{background:#eff6ff}
+  .pickcell input{width:20px;height:20px;cursor:pointer;vertical-align:middle;margin:10px 12px}
   .catsel{display:flex;gap:2px;align-items:center;width:100%}
   .catsel select,.catsel input{flex:1;min-width:0}
   .catsel .back{border:1px solid var(--line2);background:#fff;border-radius:4px;padding:0 6px;height:30px;cursor:pointer;color:var(--fg2);flex:none}
@@ -146,7 +149,7 @@ function tableHtml(){
   const cols = [['product', '제품'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '휴대전화'], ['zip', '우편번호'], ['address', '주소'], ['category', '구분'], ['order_date', '발주일'], ['created_by', '등록'], ['created_at', '등록일']];
   const allPicked = list.length && list.every(s => picked.has(s.id));
   const catOpts = [...new Set([...CATS, ...S().map(x => x.category)])].filter(Boolean);
-  return `<div class="tablewrap"><table class="sm"><thead><tr><th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
+  return `<div class="tablewrap"><table class="sm"><thead><tr><th class="pickcell" id="pickAllCell" title="전체 선택"><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''}></th>${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
     ${view === 'todo' ? `<tr class="newrow"><td></td>
       <td><select id="nProd">${prodOpts(prodsFor(company).includes(lastNew.product) ? lastNew.product : prodsFor(company)[0], company)}</select></td>
       <td><input type="number" id="nQty" value="${lastNew.qty}" min="1" style="width:56px"></td>
@@ -158,7 +161,7 @@ function tableHtml(){
       <td colspan="3" class="hint">Enter 로 저장 · Tab 으로 칸 이동</td><td><button class="btn sm primary" id="nAdd">추가</button></td></tr>` : ''}
     ${!list.length ? `<tr><td colspan="12" class="hint" style="text-align:center;padding:16px">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '발송 전인 샘플이 없습니다. 위 노란 줄에 바로 입력해 보세요.'}</td></tr>` : ''}
     ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
-      <td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>
+      <td class="pickcell" data-pickcell="${s.id}" title="이 칸 아무 데나 누르면 체크됩니다"><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>
       <td><span class="co ${CO_CLS[coOf(s)] || ''}" title="회사">${esc(coOf(s).replace('(주)', ''))}</span> <select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${prodOpts(s.product, coOf(s))}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
       <td class="num" data-edit="qty" data-id="${s.id}">${s.qty}</td><td data-edit="recipient" data-id="${s.id}"><b>${esc(s.recipient || '')}</b></td><td data-edit="phone" data-id="${s.id}">${esc(fmtPhone(s.phone))}</td><td data-edit="zip" data-id="${s.id}">${esc(s.zip || '')}</td>
       <td class="addr" data-edit="address" data-id="${s.id}">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
@@ -200,6 +203,9 @@ function bindView(){
   document.querySelectorAll('select[data-prod]').forEach(sel => { sel.onclick = e => e.stopPropagation(); sel.onchange = async () => { const s = S().find(x => x.id === sel.dataset.prod); const p = PRESETS[sel.value]; await saveRow('samples', { ...s, product: sel.value, product_name: p.name, option_name: p.option, updated_by: me }); }; });
   document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button, input, select')) return; openEdit(tr.dataset.id); });
   document.querySelectorAll('[data-pick]').forEach(cb => cb.onchange = () => { if (cb.checked) picked.add(cb.dataset.pick); else picked.delete(cb.dataset.pick); render(); });
+  // 체크박스 칸 아무 데나 눌러도 체크되게 (칸 전체가 누르는 자리)
+  document.querySelectorAll('[data-pickcell]').forEach(td => td.onclick = e => { e.stopPropagation(); if (e.target.tagName === 'INPUT') return; const id = td.dataset.pickcell; if (picked.has(id)) picked.delete(id); else picked.add(id); render(); });
+  const pac = $('#pickAllCell'); if (pac) pac.onclick = e => { if (e.target.tagName === 'INPUT') return; const pa2 = $('#pickAll'); pa2.checked = !pa2.checked; pa2.onchange(); };
   const pa = $('#pickAll'); if (pa) pa.onchange = () => { const ids = listOf().map(s => s.id); if (pa.checked) ids.forEach(i => picked.add(i)); else ids.forEach(i => picked.delete(i)); render(); };
   document.querySelectorAll('[data-sent]').forEach(b => b.onclick = async e => { e.stopPropagation(); const s = S().find(x => x.id === b.dataset.sent); await saveRow('samples', { ...s, sent: !s.sent, sent_at: !s.sent ? nowIso() : null, updated_by: me }); });
 }
