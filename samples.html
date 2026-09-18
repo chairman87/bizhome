@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202609181350">
-<script src="common.js?v=202609181350"></script>
+<link rel="stylesheet" href="common.css?v=202609181612">
+<script src="common.js?v=202609181612"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -107,7 +107,7 @@ const VIEWS = () => [{ key: 'todo', label: '발송 전', badge: S().filter(s => 
 function render(){
   $('#app').innerHTML = headerHtml({ icon: '📦', title: '비매출', tabs: VIEWS(), active: view })
     + `<main class="wrap wrap-wide" style="max-width:1700px">${!DATA.samples ? `<div class="empty">비매출 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-samples.sql)을 실행하세요.' : ''}</div>` : `
-    <div class="actions"><button class="btn primary" id="newBtn2">＋ 샘플 발송 등록</button><button class="btn" id="bulkBtn" title="여러 명을 한 번에 붙여넣기">📋 여러 명 붙여넣기</button>
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 샘플 발송 등록</button><button class="btn" id="bulkBtn" title="여러 명을 한 번에 붙여넣기">📋 여러 명 붙여넣기</button><button class="btn" id="delBtn" style="color:var(--red);border-color:${picked.size ? 'var(--red)' : 'var(--line2)'}" ${picked.size ? '' : 'disabled'} title="왼쪽 체크박스로 고른 줄을 지웁니다">🗑 삭제${picked.size ? ` (${picked.size}건)` : ''}</button>
       ${view === 'todo' ? `<button class="btn" id="xlsBtn" style="background:#15803d;border-color:#15803d;color:#fff" ${S().some(s => !s.sent) ? '' : 'disabled'}>📥 엑셀 추출 (${company ? company.replace('(주)', '') + ' ' : ''}발송 전 ${picked.size ? picked.size + '건 선택' : '전체'}${!company ? ' · 회사별 파일' : ''})</button>` : ''}
       <input type="search" id="fq" placeholder="검색 (수령인, 전화, 주소)" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:200px">
       <select id="f_product"><option value="">제품: 전체</option>${prodOpts(filter.product, company)}</select>
@@ -118,6 +118,7 @@ function render(){
   const coTab = document.querySelector(`.tab[data-view="co:${company}"]`); if (coTab) coTab.classList.add('on');   // 회사 탭도 켜진 표시
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
   const bb = $('#bulkBtn'); if (bb) bb.onclick = openBulk;
+  const db = $('#delBtn'); if (db) db.onclick = deletePicked;
   const xb = $('#xlsBtn'); if (xb) xb.onclick = exportXlsx;
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   ['product', 'cat'].forEach(k => { const el = $('#f_' + k); if (el) el.onchange = () => { filter[k] = el.value; renderView(); }; });
@@ -145,7 +146,7 @@ function tableHtml(){
   const cols = [['product', '제품'], ['qty', '수량'], ['recipient', '수령인'], ['phone', '휴대전화'], ['zip', '우편번호'], ['address', '주소'], ['category', '구분'], ['order_date', '발주일'], ['created_by', '등록'], ['created_at', '등록일']];
   const allPicked = list.length && list.every(s => picked.has(s.id));
   const catOpts = [...new Set([...CATS, ...S().map(x => x.category)])].filter(Boolean);
-  return `<div class="tablewrap"><table class="sm"><thead><tr>${view === 'todo' ? `<th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>` : ''}${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
+  return `<div class="tablewrap"><table class="sm"><thead><tr><th><input type="checkbox" id="pickAll" ${allPicked ? 'checked' : ''} title="전체 선택"></th>${cols.map(([k, l]) => `<th data-sort="${k}" class="${k === 'qty' ? 'num' : ''}">${l}${sortArrow(sort, k)}</th>`).join('')}<th>발송</th></tr></thead><tbody>
     ${view === 'todo' ? `<tr class="newrow"><td></td>
       <td><select id="nProd">${prodOpts(prodsFor(company).includes(lastNew.product) ? lastNew.product : prodsFor(company)[0], company)}</select></td>
       <td><input type="number" id="nQty" value="${lastNew.qty}" min="1" style="width:56px"></td>
@@ -157,7 +158,7 @@ function tableHtml(){
       <td colspan="3" class="hint">Enter 로 저장 · Tab 으로 칸 이동</td><td><button class="btn sm primary" id="nAdd">추가</button></td></tr>` : ''}
     ${!list.length ? `<tr><td colspan="12" class="hint" style="text-align:center;padding:16px">${filter.q || filter.product || filter.cat ? '조건에 맞는 건이 없습니다.' : '발송 전인 샘플이 없습니다. 위 노란 줄에 바로 입력해 보세요.'}</td></tr>` : ''}
     ${list.map(s => `<tr class="row ${s.sent ? 'sent' : ''} ${picked.has(s.id) ? 'sel' : ''}" data-id="${s.id}">
-      ${view === 'todo' ? `<td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>` : ''}
+      <td><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>
       <td><span class="co ${CO_CLS[coOf(s)] || ''}" title="회사">${esc(coOf(s).replace('(주)', ''))}</span> <select class="prodsel" data-prod="${s.id}" title="제품 바꾸기">${prodOpts(s.product, coOf(s))}</select>${s.option_name && s.option_name !== (PRESETS[s.product] || {}).option ? ' <span class="hint" title="' + esc(s.option_name) + '">옵션 다름</span>' : ''}</td>
       <td class="num" data-edit="qty" data-id="${s.id}">${s.qty}</td><td data-edit="recipient" data-id="${s.id}"><b>${esc(s.recipient || '')}</b></td><td data-edit="phone" data-id="${s.id}">${esc(fmtPhone(s.phone))}</td><td data-edit="zip" data-id="${s.id}">${esc(s.zip || '')}</td>
       <td class="addr" data-edit="address" data-id="${s.id}">${esc(s.address || '')}${s.address2 ? ` <span class="hint">${esc(s.address2)}</span>` : ''}</td>
@@ -203,6 +204,16 @@ function bindView(){
   document.querySelectorAll('[data-sent]').forEach(b => b.onclick = async e => { e.stopPropagation(); const s = S().find(x => x.id === b.dataset.sent); await saveRow('samples', { ...s, sent: !s.sent, sent_at: !s.sent ? nowIso() : null, updated_by: me }); });
 }
 
+/* 체크한 줄 한 번에 삭제 */
+async function deletePicked(){
+  const list = S().filter(s => picked.has(s.id)); if (!list.length) { toast('왼쪽 체크박스로 지울 줄을 먼저 고르세요', true); return; }
+  const names = list.slice(0, 5).map(s => s.recipient).join(', ') + (list.length > 5 ? ` 외 ${list.length - 5}명` : '');
+  if (!confirm(`${list.length}건을 삭제할까요?
+(${names})
+삭제하면 되돌릴 수 없습니다.`)) return;
+  for (const s of list) await removeRow('samples', s.id);
+  picked = new Set(); render(); toast(`${list.length}건을 삭제했습니다`);
+}
 /* 물류 양식 그대로 엑셀 추출 (발송 전만, 체크한 것이 있으면 그것만) */
 function exportXlsx(){
   if (typeof XLSX === 'undefined') { toast('엑셀 도구를 불러오지 못했습니다. 새로고침 후 다시 시도하세요', true); return; }
