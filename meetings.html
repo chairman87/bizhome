@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회의록</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609171443">
+<script src="common.js?v=202609171443"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .month-h{margin:18px 0 8px;font-size:14px;font-weight:700;color:var(--fg2);display:flex;align-items:center;gap:8px}
+  .month-h .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .mt{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 16px;margin-bottom:10px;cursor:pointer;display:grid;grid-template-columns:90px 1fr auto;gap:12px;align-items:start}
+  .mt:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .mt .d{font-weight:700;font-size:14px}
+  .mt .d small{display:block;font-weight:400;color:var(--fg3);font-size:11px}
+  .mt .t{font-weight:700;font-size:15px;margin-bottom:4px}
+  .mt .sum{font-size:13px;color:var(--fg2);white-space:pre-wrap;max-height:60px;overflow:hidden}
+  .mt .meta{font-size:12px;color:var(--fg3);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .mt .side{text-align:right;font-size:12px;color:var(--fg3);white-space:nowrap}
+  .cat{font-size:12px;border-radius:4px;padding:1px 7px;white-space:nowrap;background:#e0e7ff;color:#3730a3}
+  .cat.c1{background:#dcfce7;color:#166534}.cat.c2{background:#fef3c7;color:#92400e}.cat.c3{background:#fce7f3;color:#9d174d}.cat.c4{background:#f1f5f9;color:#334155}
+  .todo{font-size:12px;color:var(--orange);font-weight:600}
+  /* 상세 보기 */
+  .view h1{font-size:20px;margin:0 0 4px}
+  .view .info{font-size:13px;color:var(--fg2);display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .sec{margin:14px 0 6px;font-size:13px;font-weight:700;color:var(--fg2);border-bottom:2px solid var(--line);padding-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+  .summary{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap}
+  .details{font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--fg);max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg)}
+  .acts{display:grid;gap:4px}
+  .acts label{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;border-radius:6px}
+  .acts label:hover{background:var(--bg2)}
+  .acts label.done{color:var(--fg3);text-decoration:line-through}
+  .acts .w{font-size:11px;color:var(--fg3);margin-left:auto;white-space:nowrap}
+  .f3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+  @media(max-width:640px){.f3{grid-template-columns:1fr}.mt{grid-template-columns:1fr}}
+  #mSummary{min-height:110px}
+  #mDetails{min-height:260px;font-size:13px}
+  .actrow{display:flex;gap:6px;margin-bottom:4px}
+  .actrow input{flex:1}
+  .actrow select{width:110px}
+  .actrow .rm{border:1px solid var(--line2);background:#fff;border-radius:4px;cursor:pointer;color:var(--fg3);padding:0 8px}
+  .pdfbox{margin-top:8px}
+  .pdfbox iframe{width:100%;height:600px;border:1px solid var(--line);border-radius:10px;background:#fff}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   회의록 — 회의마다 위에는 요약, 아래에는 상세 내용. 플라우드 녹음 요약 PDF·음성 파일 첨부
+   한 줄 = { title, meeting_date, start_time, attendees(text), category, summary(요약), details(상세),
+             actions[{text, who, due, done}], decisions(결정 사항), files(첨부: PDF·음성), plaud_url(플라우드 링크), memo,
+             created_by/at, updated_by/at }
+================================================================ */
+const CATS = ['주간회의', '제품·생산', '마케팅', '경영·재무', '기타'];
+const catCls = c => 'c' + Math.max(0, CATS.indexOf(c));
+const M = () => DATA.meetings || [];
+const monthOf = d => (d || '').slice(0, 7);
+const monthLabel = m => m ? `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월` : '날짜 없음';
+const dow = d => d ? ['일', '월', '화', '수', '목', '금', '토'][new Date(d + 'T00:00:00').getDay()] : '';
+const openActs = mt => (mt.actions || []).filter(a => !a.done).length;
+
+let view = LS.get('mt_view') || 'all';
+let q = '';
+
+function normalize(table, m){ return { ...m, actions: Array.isArray(m.actions) ? m.actions : [], files: Array.isArray(m.files) ? m.files : [] }; }
+const VIEWS = () => [{ key: 'all', label: '전체' }, ...CATS.map(c => ({ key: 'c:' + c, label: c })), null, { key: 'todo', label: '남은 할 일', badge: M().reduce((a, m) => a + openActs(m), 0) }];
+
+function render(){
+  const list = M().filter(m => (view === 'all' || (view === 'todo' ? openActs(m) > 0 : m.category === view.slice(2)))
+    && (!q || [m.title, m.summary, m.details, m.attendees, m.decisions].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))))
+    .sort((a, b) => String(b.meeting_date || '').localeCompare(String(a.meeting_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  $('#app').innerHTML = headerHtml({ icon: '📝', title: '회의록', tabs: VIEWS(), active: view })
+    + `<main class="wrap" style="max-width:1000px">${!DATA.meetings ? `<div class="empty">회의록 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-meetings.sql)을 실행하세요.' : ''}</div>` : `
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 회의록 작성</button>
+      <input type="search" id="fq" placeholder="검색 (제목, 요약, 내용, 참석자)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:240px">
+      <span class="count">${list.length}건</span></div>
+    <div class="hint" style="margin-bottom:8px">플라우드로 녹음한 회의는 <b>요약</b>을 위 칸에, <b>전체 내용(트랜스크립트)</b>을 아래 칸에 붙여 넣고, 플라우드가 만든 PDF·음성 파일을 첨부하면 됩니다.</div>
+    ${list.length ? listHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'todo' ? '남은 할 일이 없습니다.' : '아직 회의록이 없습니다.<br><b>＋ 회의록 작성</b>으로 첫 회의를 남겨 보세요.'}</div>`}`}</main>`;
+  bindHeader(k => { view = k; LS.set('mt_view', k); render(); }, null, m => `작성 ${M().filter(x => x.created_by === m.name).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('.mt[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
+}
+function listHtml(list){
+  const months = [...new Set(list.map(m => monthOf(m.meeting_date)))];
+  return months.map(mo => `<div class="month-h">${monthLabel(mo)} <span class="n">${list.filter(m => monthOf(m.meeting_date) === mo).length}건</span></div>
+    ${list.filter(m => monthOf(m.meeting_date) === mo).map(m => `<div class="mt" data-id="${m.id}">
+      <div class="d">${m.meeting_date ? fmtDate(m.meeting_date).slice(5) : '-'}<small>${dow(m.meeting_date)}${m.start_time ? ' ' + esc(m.start_time) : ''}</small></div>
+      <div><div class="t">${esc(m.title)}</div><div class="sum">${esc(m.summary || '(요약 없음)')}</div>
+        <div class="meta"><span class="cat ${catCls(m.category)}">${esc(m.category || '기타')}</span>${m.attendees ? `<span>👥 ${esc(m.attendees)}</span>` : ''}${m.files.length ? `<span>📎 ${m.files.length}</span>` : ''}${openActs(m) ? `<span class="todo">할 일 ${openActs(m)}개 남음</span>` : (m.actions.length ? '<span>✓ 할 일 완료</span>' : '')}</div></div>
+      <div class="side">${esc(m.created_by || '')}</div></div>`).join('')}`).join('');
+}
+
+/* 상세 보기: 위 요약, 아래 상세 */
+function openView(id){
+  const m = M().find(x => x.id === id); if (!m) return;
+  const pdf = m.files.find(f => /\.pdf$/i.test(f.name || ''));
+  const audio = m.files.find(f => /\.(mp3|m4a|wav|ogg)$/i.test(f.name || ''));
+  openModal(`${modalHead('회의록', `<span class="cat ${catCls(m.category)}">${esc(m.category || '기타')}</span>`)}
+    <div class="mb view">
+      <h1>${esc(m.title)}</h1>
+      <div class="info"><span>📅 ${fmtDate(m.meeting_date)} (${dow(m.meeting_date)})${m.start_time ? ' ' + esc(m.start_time) : ''}</span>${m.attendees ? `<span>👥 ${esc(m.attendees)}</span>` : ''}${m.plaud_url ? `<a href="${esc(m.plaud_url)}" target="_blank" rel="noopener">🎙️ 플라우드에서 열기</a>` : ''}</div>
+      <div class="sec">요약</div>
+      <div class="summary">${esc(m.summary || '요약이 없습니다.')}</div>
+      ${m.decisions ? `<div class="sec">결정 사항</div><div class="summary" style="background:#f0fdf4;border-color:#bbf7d0">${esc(m.decisions)}</div>` : ''}
+      ${m.actions.length ? `<div class="sec">할 일 <span class="hint">${m.actions.filter(a => a.done).length}/${m.actions.length} 완료</span></div>
+        <div class="acts">${m.actions.map((a, i) => `<label class="${a.done ? 'done' : ''}"><input type="checkbox" data-act="${i}" ${a.done ? 'checked' : ''}> ${esc(a.text)}${a.who ? ` <span class="chip" style="font-size:11px">${esc(a.who)}</span>` : ''}${a.due ? `<span class="w">${fmtDate(a.due)}까지</span>` : ''}</label>`).join('')}</div>` : ''}
+      ${m.files.length ? `<div class="sec">첨부 파일</div>${filesHtml(m.files)}${audio ? `<audio controls src="${esc(audio.url)}" style="width:100%;margin-top:8px"></audio>` : ''}` : ''}
+      <div class="sec">상세 내용 <span class="hint">녹음 전체 내용 · 논의 흐름</span></div>
+      <div class="details">${m.details ? esc(m.details) : '<span class="hint">상세 내용이 없습니다.</span>'}</div>
+      ${pdf ? `<div class="sec">PDF 미리보기 <a class="hint" href="${esc(pdf.url)}?download=${encodeURIComponent(pdf.name)}" download>내려받기</a></div><div class="pdfbox"><iframe src="${esc(pdf.url)}#toolbar=0"></iframe></div>` : ''}
+      <div class="hint" style="margin-top:10px">작성: ${esc(m.created_by || '')} ${fmtDateTime(m.created_at)}${m.updated_by ? ` · 수정: ${esc(m.updated_by)} ${fmtDateTime(m.updated_at)}` : ''}</div>
+    </div>
+    <div class="mf">${m.created_by === me || isAdmin() ? '<button class="btn danger left" id="vDel">삭제</button>' : ''}<button class="btn" id="vEdit">수정</button><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  document.querySelectorAll('[data-act]').forEach(cb => cb.onchange = async () => { const actions = m.actions.map((a, i) => i === Number(cb.dataset.act) ? { ...a, done: cb.checked, done_by: cb.checked ? me : null } : a); await saveRow('meetings', { ...m, actions, updated_by: me }); openView(m.id); });
+  $('#vEdit').onclick = () => { closeModal(); openEdit(m.id); };
+  const del = $('#vDel'); if (del) del.onclick = async () => { if (confirm(`"${m.title}" 회의록을 삭제할까요? 첨부 파일도 지워집니다.`)) { closeModal(); for (const f of m.files) if (f.path) deleteFile(f.path); await removeRow('meetings', m.id); toast('삭제했습니다'); } };
+}
+
+/* 작성·수정 */
+function openEdit(id){
+  const m0 = id ? M().find(x => x.id === id) : null;
+  const d = m0 || { title: '', meeting_date: todayStr(), start_time: '', attendees: '', category: CATS[0], summary: '', details: '', decisions: '', actions: [], files: [], plaud_url: '', memo: '' };
+  const at = attachBox('mtFiles', d.files, 'meetings', { rename: true });
+  let actions = d.actions.map(a => ({ ...a }));
+  const actRows = () => actions.map((a, i) => `<div class="actrow"><input data-ai="${i}" data-k="text" value="${esc(a.text || '')}" placeholder="할 일"><select data-ai="${i}" data-k="who"><option value="">담당</option>${memberOptions(a.who)}</select><input type="date" data-ai="${i}" data-k="due" value="${esc(a.due || '')}" style="width:140px"><button type="button" class="rm" data-rm="${i}" title="빼기">✕</button></div>`).join('');
+  openModal(`${modalHead(m0 ? '회의록 수정' : '회의록 작성')}
+    <div class="mb">
+      <div class="f"><label>회의 제목 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="예: 9월 3주차 주간회의" maxlength="120"></div>
+      <div class="f3">
+        <div class="f"><label>참석자</label><input id="mAtt" value="${esc(d.attendees || '')}" placeholder="예: 박봉수, 홍주, 김상우"></div>
+        <div class="f"><label>일자</label><input type="date" id="mDate" value="${esc(d.meeting_date || '')}"></div>
+        <div class="f"><label>시간 / 구분</label><div style="display:flex;gap:4px"><input type="time" id="mTime" value="${esc(d.start_time || '')}" style="width:110px"><select id="mCat" style="flex:1">${CATS.map(c => `<option ${d.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>
+      </div>
+      <div class="f"><label>요약 <span class="hint">(위에 보이는 부분 · 플라우드 요약을 붙여 넣으면 됩니다)</span></label><textarea id="mSummary" placeholder="핵심 내용 3~7줄">${esc(d.summary || '')}</textarea></div>
+      <div class="f"><label>결정 사항</label><textarea id="mDec" style="min-height:60px" placeholder="이번 회의에서 확정한 것">${esc(d.decisions || '')}</textarea></div>
+      <div class="f"><label>할 일 <span class="hint">(담당·기한을 정해 두면 위 "남은 할 일" 탭에 모입니다)</span></label><div id="actList">${actRows()}</div><button type="button" class="btn sm" id="actAdd">＋ 할 일 추가</button></div>
+      <div class="f"><label>상세 내용 <span class="hint">(아래에 보이는 부분 · 녹음 전체 내용, 논의 흐름)</span></label><textarea id="mDetails" placeholder="플라우드의 전체 내용(트랜스크립트)이나 자세한 논의 내용을 붙여 넣으세요">${esc(d.details || '')}</textarea></div>
+      <div class="f"><label>첨부 (플라우드 PDF, 녹음 파일, 자료)</label>${at.html}</div>
+      <div class="f"><label>플라우드 링크 (있으면)</label><input id="mPlaud" value="${esc(d.plaud_url || '')}" placeholder="https://..."></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="mSave">${m0 ? '저장' : '등록'}</button></div>`, { wide: true });
+  at.bind();
+  $('#mTitle').focus();
+  const syncActs = () => { document.querySelectorAll('[data-ai]').forEach(el => { actions[Number(el.dataset.ai)][el.dataset.k] = el.value; }); };
+  const redraw = () => { syncActs(); $('#actList').innerHTML = actRows(); bindActs(); };
+  const bindActs = () => { document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { syncActs(); actions.splice(Number(b.dataset.rm), 1); redraw(); }); };
+  $('#actAdd').onclick = () => { syncActs(); actions.push({ text: '', who: '', due: '', done: false }); redraw(); const last = document.querySelector(`[data-ai="${actions.length - 1}"][data-k="text"]`); if (last) last.focus(); };
+  bindActs();
+  $('#mSave').onclick = async () => {
+    const title = $('#mTitle').value.trim(); if (!title) { $('#mTitle').focus(); toast('회의 제목을 입력하세요', true); return; }
+    syncActs();
+    const row = { id: m0 ? m0.id : uid(), title, meeting_date: $('#mDate').value || null, start_time: $('#mTime').value || null, attendees: $('#mAtt').value.trim() || null, category: $('#mCat').value,
+      summary: $('#mSummary').value.trim() || null, decisions: $('#mDec').value.trim() || null, details: $('#mDetails').value.trim() || null,
+      actions: actions.filter(a => (a.text || '').trim()).map(a => ({ text: a.text.trim(), who: a.who || null, due: a.due || null, done: !!a.done })), files: at.files, plaud_url: $('#mPlaud').value.trim() || null, memo: null,
+      created_by: m0 ? m0.created_by : me, created_at: m0 ? m0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('meetings', row); toast(m0 ? '저장했습니다' : '회의록을 등록했습니다');
+  };
+}
+
+boot({ icon: '📝', title: '회의록', tables: ['meetings'], render, normalize });
+</script>
+</body>
+</html>
