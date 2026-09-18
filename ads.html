@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609181616">
-<script src="common.js?v=202609181616"></script>
+<link rel="stylesheet" href="common.css?v=202609181942">
+<script src="common.js?v=202609181942"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -84,6 +84,9 @@ let sort = { key: 'date', dir: 'desc' };
 
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
 const editors = () => uniq(G().map(a => a.editor));
+/* 편집자 선택지는 이 5명만 (예전 영상에 다른 이름이 있으면 그 줄에서만 함께 보여 줌) */
+const EDITORS = ['상형', '수연', '채은', '예솔', '홍재'];
+const editorOpts = cur => `<option value="">편집자</option>` + [...EDITORS, ...(cur && !EDITORS.includes(cur) ? [cur] : [])].map(e => `<option ${cur === e ? 'selected' : ''}>${esc(e)}</option>`).join('');
 const metas = () => uniq(G().map(a => a.meta_account));
 const budgetKey = v => String(v || '').replace(/,/g, '').trim().toUpperCase();   // 예산 값 비교용 (10,000 = 10000, off = OFF)
 const budgets = () => [...new Set(G().map(a => budgetKey(a.meta_budget)).filter(Boolean))].sort((x, y) => (x === 'OFF') - (y === 'OFF') || Number(x) - Number(y));
@@ -125,7 +128,7 @@ function productHtml(p){
     <tr class="newrow">
       <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
-      <td class="c"><input id="nEditor" list="edList2" value="${esc(lastNew.editor)}" placeholder="편집자" style="width:70px"><datalist id="edList2">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c"><select id="nEditor" style="width:80px">${editorOpts(lastNew.editor)}</select></td>
       <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
@@ -236,7 +239,7 @@ function openAd(id, preset = {}){
       </div>
       <div class="f"><label>영상 타이틀 *</label><input id="aTitle" value="${esc(d.title)}" placeholder="예: 유산균 들어간 고체레몬즙(심포니)" maxlength="200"></div>
       <div class="f3">
-        <div class="f"><label>편집자</label><input id="aEditor" value="${esc(d.editor || '')}" list="edList" placeholder="예: 예솔"><datalist id="edList">${uniq([...editors(), ...members.map(m => m.name)]).map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
+        <div class="f"><label>편집자</label><select id="aEditor">${editorOpts(d.editor || '')}</select></div>
         <div class="f"><label>페이지명 (메타 계정)</label><input id="aMeta" value="${esc(d.meta_account || '')}" list="metaList" placeholder="예: Diet Beauty"><datalist id="metaList">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></div>
         <div class="f"><label>예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
       </div>
