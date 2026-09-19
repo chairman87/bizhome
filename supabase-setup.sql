@@ -188,3 +188,7 @@ alter table accounts add column if not exists company text;
 -- 제품 구분으로 알 수 있는 것은 미리 채움 (나머지는 화면에서 직접 선택)
 update accounts set company = '식이해법연구소' where company is null and group_name in ('레모너리', '서리맥스');
 update accounts set company = '피에이치뷰티' where company is null and (group_name = '흑생마' or (group_name = '광고 계정' and memo like '%사업자: 피에이치뷰티%'));
+
+
+-- 업무(tasks)에 '내 순서' 칸 추가: 내 업무 탭에서 줄을 끌어 순서를 바꾸면 여기에 저장됨
+alter table tasks add column if not exists sort_order double precision;

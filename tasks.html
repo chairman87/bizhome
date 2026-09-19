@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>업무요청/보고</title>
+<title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191427">
-<script src="common.js?v=202609191427"></script>
+<link rel="stylesheet" href="common.css?v=202609191432">
+<script src="common.js?v=202609191432"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -42,6 +42,14 @@
   #mMemo{min-height:180px}   /* 요청 내용 칸 높이 */
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .actions .btn{padding:9px 16px;font-size:14px}
+  /* 내 업무: 줄을 끌어서 순서 바꾸기 */
+  td.grip,th.grip{width:26px;padding-left:6px;padding-right:0;text-align:center;color:var(--fg3);font-size:15px;user-select:none}
+  tr.row[draggable=true]{cursor:grab}
+  tr.row[draggable=true]:hover td.grip{color:var(--fg)}
+  tr.row.dragging{opacity:.35}
+  tr.row.drop-before td{box-shadow:inset 0 3px 0 var(--blue)}
+  tr.row.drop-after td{box-shadow:inset 0 -3px 0 var(--blue)}
+  .orderbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--fg2)}
 </style>
 </head>
 <body>
@@ -51,7 +59,7 @@
 
 <script>
 /* ================================================================
-   업무요청/보고
+   업무 (요청·보고)
    흐름: 요청자가 업무 요청(담당자 지정) → 담당자가 [진행 보고](진행률+내용)
          → 100% 보고하면 "보고완료" → 요청자가 [완료처리] 또는 [보완 요청]
 ================================================================ */
@@ -67,6 +75,9 @@ const T = () => (DATA.tasks || []).filter(visibleTask);
 let view = 'received';   // 화면을 열면 항상 '내 업무'부터 (탭을 바꿔도 다음에 열 때는 다시 내 업무)
 let filter = { q: '', person: '', status: '', hideDone: true };
 let sort = { key: 'due_date', dir: 'asc' };
+let sortMine = { key: 'manual', dir: 'asc' };   // 내 업무 탭은 끌어서 정한 '내 순서'가 기본 (열 제목을 누르면 그 열로 정렬)
+const curSort = () => view === 'received' ? sortMine : sort;
+const isManual = () => view === 'received' && sortMine.key === 'manual';
 const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 let expanded = {};
 
@@ -164,7 +175,7 @@ function openRevise(id){
 function render(){
   // 등록·요청 버튼은 오른쪽 구석 대신 표 바로 위 왼쪽에 둠 (누르기 편하게)
   const actions = `<div class="actions"><button class="btn primary" id="selfBtn" title="내가 직접 할 일을 등록">＋ 내 업무 등록</button><button class="btn primary" id="reqBtn" style="background:#6d28d9;border-color:#6d28d9" title="다른 사람에게 업무 요청">＋ 업무 요청</button></div>`;
-  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무요청/보고', tabs: VIEWS(), active: view })
+  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무', tabs: VIEWS(), active: view })
     + `<main class="wrap">${actions}${view === 'all' ? statsHtml() : ''}${view !== 'calendar' ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
   bindHeader(k => { view = k; render(); }, null, m => `진행 중 ${T().filter(t => t.assignee === m.name && !isDone(t)).length}건`);
   $('#selfBtn').onclick = () => openTask(null, { assignee: me, self: true });
@@ -224,7 +235,28 @@ function renderView(){
   const c = document.querySelector('.toolbar .count'); if (c) c.innerHTML = countText();
   bindView();
 }
-const sortTasks = list => sortBy(list, sort, { status: s => STATUSES.indexOf(s), priority: p => PRIORITIES.indexOf(p), progress: p => Number(p) || 0 });
+/* 내 순서: sort_order 가 작은 것부터. 아직 순서가 없는 새 업무는 맨 위, 완료된 업무는 맨 아래 */
+const ord = t => isDone(t) ? Infinity : t.sort_order == null ? -Infinity : Number(t.sort_order);
+const manualSort = list => list.slice().sort((a, b) => (ord(a) - ord(b)) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+/* 끌어다 놓은 업무를 target 앞(또는 뒤)으로 옮기고, 바뀐 줄만 순서를 다시 저장 */
+async function moveTask(id, targetId, after){
+  if (!id || id === targetId) return;
+  const all = manualSort(T().filter(t => t.assignee === me && !isDone(t)));
+  const from = all.findIndex(t => t.id === id); if (from < 0) return;
+  const [it] = all.splice(from, 1);
+  let to = all.findIndex(t => t.id === targetId); if (to < 0) return; if (after) to++;
+  all.splice(to, 0, it);
+  const changed = [];
+  all.forEach((t, i) => { const v = (i + 1) * 10; if (t.sort_order == null || Number(t.sort_order) !== v) { t.sort_order = v; changed.push(t); } });
+  renderView();
+  try {
+    await Promise.all(changed.map(async t => {
+      if (store.client) { const { error } = await store.client.from('tasks').update({ sort_order: t.sort_order }).eq('id', t.id); if (error) throw error; }
+      else await store.upsert('tasks', t);
+    }));
+  } catch (e) { toast('순서 저장 실패: ' + (e.message || e), true); reload(); }
+}
+const sortTasks = list => isManual() ? manualSort(list) : sortBy(list, curSort(), { status: s => STATUSES.indexOf(s), priority: p => PRIORITIES.indexOf(p), progress: p => Number(p) || 0 });
 
 /* 표 */
 const EMPTY = {
@@ -239,7 +271,8 @@ function tableHtml(list){
   if (view !== 'received') cols.push(['assignee', '담당자']);
   if (view !== 'sent') cols.push(['created_by', '요청자']);
   cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률'], ['priority', '우선순위']);
-  const th = cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
+  const drag = isManual();
+  const th = (view === 'received' ? '<th class="grip"></th>' : '') + cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(curSort(), k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
   const rows = sortTasks(list).map(t => {
     const cells = {
       title: `<td><span class="title">${esc(t.title)}</span>${cmtHtml(t)}</td>`,
@@ -251,9 +284,11 @@ function tableHtml(list){
       progress: `<td>${progHtml(t)}</td>`,
       priority: `<td>${prHtml(t.priority) || '<span class="pr">보통</span>'}</td>`,
     };
-    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}">${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
+    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" ${drag && !isDone(t) ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" title="끌어서 순서 바꾸기">${drag && !isDone(t) ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
   }).join('');
-  return `<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  const bar = view !== 'received' ? '' : drag ? '<div class="orderbar">⠿ 줄을 <b>끌어서</b> 순서를 바꿀 수 있습니다. 바꾼 순서는 저장됩니다.</div>'
+    : '<div class="orderbar"><button class="btn sm" id="orderBtn">↕ 내 순서로 보기</button> 지금은 열 제목 기준으로 정렬되어 있습니다. 내 순서로 돌아가면 끌어서 순서를 바꿀 수 있습니다.</div>';
+  return `${bar}<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 /* 행 안의 처리 버튼: 담당자는 진행 보고, 요청자는 완료처리·보완 요청 */
 function actionButtons(t){
@@ -314,8 +349,18 @@ function calHtml(list){
 
 function bindView(){
   const v = $('#view');
-  bindSort(sort, renderView, { title: 'asc', assignee: 'asc', created_by: 'asc', due_date: 'asc', status: 'asc', priority: 'asc' });
+  bindSort(curSort(), renderView, { title: 'asc', assignee: 'asc', created_by: 'asc', due_date: 'asc', status: 'asc', priority: 'asc' });
   v.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button')) return; openTask(tr.dataset.id); });
+  const ob = $('#orderBtn'); if (ob) ob.onclick = () => { sortMine.key = 'manual'; sortMine.dir = 'asc'; renderView(); };
+  // 내 업무: 줄을 끌어서 순서 바꾸기 (줄의 위쪽 절반에 놓으면 그 앞, 아래쪽 절반이면 그 뒤)
+  let dragId = null;
+  const clearMarks = () => v.querySelectorAll('tr.drop-before, tr.drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+  v.querySelectorAll('tr.row[draggable=true]').forEach(tr => {
+    tr.ondragstart = e => { dragId = tr.dataset.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); tr.classList.add('dragging'); };
+    tr.ondragend = () => { dragId = null; tr.classList.remove('dragging'); clearMarks(); };
+    tr.ondragover = e => { if (!dragId || dragId === tr.dataset.id) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; clearMarks(); tr.classList.add(after ? 'drop-after' : 'drop-before'); };
+    tr.ondrop = e => { if (!dragId) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; const id = dragId; dragId = null; clearMarks(); moveTask(id, tr.dataset.id, after); };
+  });
   v.querySelectorAll('[data-report]').forEach(b => b.onclick = e => { e.stopPropagation(); openReport(b.dataset.report); });
   v.querySelectorAll('[data-fin]').forEach(b => b.onclick = e => { e.stopPropagation(); completeTask(b.dataset.fin); });
   v.querySelectorAll('[data-revise]').forEach(b => b.onclick = e => { e.stopPropagation(); openRevise(b.dataset.revise); });
@@ -396,6 +441,7 @@ function openTask(id, preset = {}){
       created_at: t ? t.created_at : nowIso(),
       completed_at: status === '완료' ? (t && t.completed_at) || nowIso() : null,
     };
+    if (t && t.sort_order != null) n.sort_order = n.assignee === t.assignee ? t.sort_order : null;   // 내 순서 유지 (담당자가 바뀌면 새 담당자 목록 맨 위로)
     if (status === '완료') n.progress = 100;
     if (!n.title) { $('#mTitle').focus(); toast('업무 내용을 입력하세요', true); return; }
     if (!t && !n.assignee) { $('#mAssignee').focus(); toast('담당자를 정해 주세요', true); return; }
@@ -416,7 +462,7 @@ function openTask(id, preset = {}){
   }
 }
 
-boot({ icon: '📝', title: '업무요청/보고', tables: ['tasks'], render, normalize });
+boot({ icon: '📝', title: '업무', tables: ['tasks'], render, normalize });
 </script>
 </body>
 </html>

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191427">
-<script src="common.js?v=202609191427"></script>
+<link rel="stylesheet" href="common.css?v=202609191432">
+<script src="common.js?v=202609191432"></script>
 <style>
   .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
   .dept{border-radius:10px;padding:10px}
@@ -87,7 +87,7 @@ const DEPT_COLORS = {
 /* 페이지에 연결할 수 있는 화면 목록. 새 화면을 만들면 여기에 한 줄 추가 */
 const SCREENS = [
   ['', '아직 없음 (준비 중)'],
-  ['tasks.html', '업무요청/보고'],
+  ['tasks.html', '업무'],
   ['rnr.html', '업무 분장'],
   ['leave.html', '연차/휴가 등록'],
   ['notices.html', '공지사항'],
@@ -111,7 +111,7 @@ const EMOJIS = ['📝','📋','📅','📆','🗓️','⏰','📊','📈','📉'
 /* 처음 한 번 넣는 기본 메뉴. 관리자가 "메뉴 편집"으로 얼마든지 추가·수정 가능 */
 const DEFAULT_MENU = [
   ['인사', 'orange', [['📅', '연차/휴가 등록', 'leave.html'], ['😎', '멤버 리스트', 'members']]],
-  ['업무지원', 'blue', [['📝', '업무요청/보고', 'tasks.html'], ['📋', '업무 분장', 'rnr.html']]],
+  ['업무지원', 'blue', [['📝', '업무', 'tasks.html'], ['📋', '업무 분장', 'rnr.html']]],
   ['총무', 'yellow', [['📢', '공지사항', 'notices.html'], ['🔐', '계정·구독 관리', 'accounts.html']]],
   ['마케팅', 'pink', [['🎬', '광고 영상 리스트', 'ads.html']]],
   ['사업관리', 'gray', [['🗂️', '프로젝트 관리', 'projects.html']]],
