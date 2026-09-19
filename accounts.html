@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191432">
-<script src="common.js?v=202609191432"></script>
+<link rel="stylesheet" href="common.css?v=202609191434">
+<script src="common.js?v=202609191434"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -71,7 +71,7 @@ const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]
 const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
 const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
-let view = LS.get('acc_view_' + DEPT) || 'all';
+let view = DEPT === '마케팅' ? 'all' : (LS.get('acc_view_' + DEPT) || 'all');   // 마케팅계정은 열 때마다 항상 '전체'부터 (운영계정은 마지막에 본 탭을 기억)
 let q = '';
 let shown = {};
 let sort = { key: 'group_name', dir: 'asc' };   // 처음 열면 구분 순서로 정렬
