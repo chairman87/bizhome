@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>공지사항</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609192040">
-<script src="common.js?v=202609192040"></script>
+<link rel="stylesheet" href="common.css?v=202609192051">
+<script src="common.js?v=202609192051"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
@@ -23,6 +23,8 @@
   .content a{word-break:break-all}
   .readers{font-size:12px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
   #nContent{min-height:220px}
+  .mon{padding:6px 14px;font-size:12px;font-weight:700;color:var(--fg2);background:var(--bg2);border-bottom:1px solid var(--line)}
+  .morebtn{display:block;width:100%;margin-top:10px;padding:10px}
 </style>
 </head>
 <body>
@@ -39,6 +41,10 @@ const N = () => (DATA.notices || []).slice().sort((a, b) => (b.pinned ? 1 : 0) -
 const isRead = n => (n.reads || []).includes(me);
 const unreadCount = () => N().filter(n => !isRead(n)).length;
 let q = '';
+let limit = 20;   // 처음에는 최근 20개만, '더 보기'를 누르면 20개씩 더
+const monthLabel = s => { if (!s) return '날짜 없음'; const d = new Date(s); return `${d.getFullYear()}년 ${d.getMonth() + 1}월`; };
+let lastMon = null;
+const monHead = n => { const g = n.pinned ? '📌 고정' : monthLabel(n.created_at); if (g === lastMon) return ''; lastMon = g; return `<div class="mon">${g}</div>`; };   // 월이 바뀌는 자리에 구분선
 
 function normalize(table, n){ return { ...n, reads: Array.isArray(n.reads) ? n.reads : [], pinned: !!n.pinned }; }
 /* 글 내용 속 인터넷 주소를 누를 수 있는 링크로 */
@@ -46,19 +52,21 @@ const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" targe
 
 function render(){
   const list = N().filter(n => !q || [n.title, n.content, n.created_by].some(v => (v || '').toLowerCase().includes(q.toLowerCase())));
+  const shown = list.slice(0, limit); lastMon = null;
   $('#app').innerHTML = headerHtml({ icon: '📢', title: '공지사항' }) + `<main class="wrap" style="max-width:1000px">
     <div class="actions">${isAdmin() ? '<button class="btn primary" id="newBtn2">＋ 공지 작성</button>' : ''}
       <input type="search" id="fq" placeholder="검색" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:200px">
       <span class="count">${list.length}건${unreadCount() ? ` · 안 읽음 ${unreadCount()}건` : ''}</span></div>
     ${!DATA.notices ? `<div class="empty">공지 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` :
-      list.length ? `<div class="list">${list.map(n => `<div class="n ${n.pinned ? 'pinned' : ''} ${isRead(n) ? '' : 'unread'}" data-id="${n.id}">
+      list.length ? `<div class="list">${shown.map(n => monHead(n) + `<div class="n ${n.pinned ? 'pinned' : ''} ${isRead(n) ? '' : 'unread'}" data-id="${n.id}">
         ${n.pinned ? '<span class="pin" title="고정">📌</span>' : ''}<span class="t">${esc(n.title)}</span>${isRead(n) ? '' : '<span class="new">NEW</span>'}
         ${isAdmin() ? `<span class="m" title="읽은 사람">👁 ${(n.reads || []).length}/${members.length}</span>` : ''}
-        <span class="m">${esc(n.created_by || '')} · ${fmtDate((n.created_at || '').slice(0, 10))}</span></div>`).join('')}</div>`
+        <span class="m">${esc(n.created_by || '')} · ${fmtDate((n.created_at || '').slice(0, 10))}</span></div>`).join('')}</div>${list.length > shown.length ? `<button class="btn morebtn" id="moreBtn">더 보기 (${list.length - shown.length}건 더 있음)</button>` : ''}`
       : `<div class="empty">${q ? '검색 결과가 없습니다.' : '아직 공지가 없습니다.' + (isAdmin() ? ' <b>＋ 공지 작성</b>으로 첫 공지를 올려 보세요.' : '')}</div>`}
   </main>`;
   bindHeader(() => {}, null, m => `안 읽은 공지 ${N().filter(n => !(n.reads || []).includes(m.name)).length}건`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const mb = $('#moreBtn'); if (mb) mb.onclick = () => { limit += 20; render(); };
   const fq = $('#fq'); fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('.n[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
 }

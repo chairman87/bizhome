@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>결정사항</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609192040">
-<script src="common.js?v=202609192040"></script>
+<link rel="stylesheet" href="common.css?v=202609192051">
+<script src="common.js?v=202609192051"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -27,6 +27,9 @@
   .allow label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)}
   .allow label:has(input:checked){background:#dbeafe;border-color:#93c5fd}
   #dReason{min-height:140px}
+  .mon{font-size:13px;font-weight:700;color:var(--fg2);margin:12px 2px 0;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .feed .mon:first-child{margin-top:0}
+  .morebtn{display:block;width:100%;margin-top:12px;padding:10px}
 </style>
 </head>
 <body>
@@ -56,6 +59,10 @@ const needMe = d => audience(d).includes(me) && !isRead(d);   // 내가 확인�
 const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 let view = 'all';
 let q = '';
+let limit = 20;   // 처음에는 최근 20개만, '더 보기'를 누르면 20개씩 더
+const monthLabel = s => s ? `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월` : '날짜 없음';
+let lastMon = null;
+const monHead = d => { const g = monthLabel(d.decided_at || (d.created_at || '').slice(0, 10)); if (g === lastMon) return ''; lastMon = g; return `<div class="mon">${g}</div>`; };   // 월이 바뀌는 자리에 구분선
 
 function normalize(table, d){ return { ...d, reads: Array.isArray(d.reads) ? d.reads : [], targets: Array.isArray(d.targets) ? d.targets : [] }; }
 
@@ -82,9 +89,10 @@ function feedHtml(){
   if (!DATA.decisions) return `<div class="empty">결정사항 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>`;
   const list = listOf(), admin = isAdmin();
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'todo' ? '확인할 결정사항이 없습니다. 모두 확인했습니다 👍' : '아직 결정사항이 없습니다.' + (admin ? ' <b>＋ 결정사항 쓰기</b>로 첫 글을 남겨 보세요.' : '')}</div>`;
-  return `<div class="feed">${list.map(d => {
+  const shown = list.slice(0, limit); lastMon = null;
+  return `<div class="feed">${shown.map(d => {
     const mine = audience(d).includes(me), read = isRead(d), pend = pending(d), aud = audience(d);
-    return `<article class="dc ${mine && !read ? 'unread' : ''}" data-id="${d.id}">
+    return monHead(d) + `<article class="dc ${mine && !read ? 'unread' : ''}" data-id="${d.id}">
       <div class="dhead">${topicHtml(d.topic)}${mine && !read ? '<span class="new">NEW</span>' : ''}<span class="sp"></span><span>${fmtDate(d.decided_at || (d.created_at || '').slice(0, 10))} · ${esc(d.created_by || '')}</span></div>
       <h3>${esc(d.title)}</h3>
       ${d.reason ? `<div class="reason">${linkify(d.reason)}</div>` : ''}
@@ -96,11 +104,12 @@ function feedHtml(){
         ${!mine ? '' : read ? '<span class="okd">✓ 확인했습니다</span>' : `<button class="btn sm primary" data-ok="${d.id}">확인했습니다</button>`}
       </div>
     </article>`;
-  }).join('')}</div>`;
+  }).join('')}</div>${list.length > shown.length ? `<button class="btn morebtn" id="moreBtn">더 보기 (${list.length - shown.length}건 더 있음)</button>` : ''}`;
 }
 function renderView(){ $('#view').innerHTML = feedHtml(); bindView(); }
 function bindView(){
   const c = $('#cnt'); if (c) { const todo = D().filter(needMe).length; c.textContent = `${listOf().length}건${todo ? ` · 확인할 것 ${todo}건` : ''}`; }
+  const mb = $('#moreBtn'); if (mb) mb.onclick = () => { limit += 20; renderView(); };
   document.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => confirmRead(b.dataset.ok));
   document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(b.dataset.edit));
 }
