@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>결정사항</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609192051">
-<script src="common.js?v=202609192051"></script>
+<link rel="stylesheet" href="common.css?v=202609192054">
+<script src="common.js?v=202609192054"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -100,7 +100,7 @@ function feedHtml(){
         <span>대상: ${TARGETS(d).length ? TARGETS(d).map(n => esc(n)).join(', ') : '전체'}</span>
         ${admin ? `<span title="${pend.length ? '아직 확인 안 함: ' + esc(pend.join(', ')) : '모두 확인했습니다'}">· 확인 ${aud.length - pend.length}/${aud.length}${pend.length ? ` <span class="hint">(안 함: ${esc(pend.join(', '))})</span>` : ' ✓'}</span>` : ''}
         <span class="sp"></span>
-        ${admin ? `<button class="btn sm" data-edit="${d.id}">수정</button>` : ''}
+        ${admin ? `<button class="btn sm" data-edit="${d.id}">수정</button><button class="btn sm danger" data-del="${d.id}">삭제</button>` : ''}
         ${!mine ? '' : read ? '<span class="okd">✓ 확인했습니다</span>' : `<button class="btn sm primary" data-ok="${d.id}">확인했습니다</button>`}
       </div>
     </article>`;
@@ -112,6 +112,7 @@ function bindView(){
   const mb = $('#moreBtn'); if (mb) mb.onclick = () => { limit += 20; renderView(); };
   document.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => confirmRead(b.dataset.ok));
   document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(b.dataset.edit));
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { const d = D().find(x => x.id === b.dataset.del); if (!d || !isAdmin()) return; if (confirm(`"${d.title}" 결정사항을 삭제할까요?`)) { await removeRow('decisions', d.id); toast('삭제했습니다'); } });
 }
 async function confirmRead(id){
   const d = D().find(x => x.id === id); if (!d || isRead(d)) return;
