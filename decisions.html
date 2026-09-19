@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>결정사항</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609192040">
+<script src="common.js?v=202609192040"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn.primary{padding:9px 16px;font-size:14px}
+  .feed{display:flex;flex-direction:column;gap:10px}
+  .dc{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:14px 16px}
+  .dc.unread{border-color:#93c5fd;background:#f5f9ff;box-shadow:inset 4px 0 0 var(--blue)}
+  .dc .dhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--fg2);margin-bottom:6px}
+  .dc .dhead .sp{flex:1}
+  .dc h3{margin:0;font-size:16px;line-height:1.45;word-break:break-word}
+  .dc .reason{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14px;color:var(--fg);margin-top:8px;padding:8px 10px;background:var(--bg2);border-radius:6px}
+  .dc .reason a{word-break:break-all}
+  .dc .dfoot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--fg2)}
+  .dc .dfoot .sp{flex:1}
+  .dc .okd{color:var(--green);font-weight:600}
+  .dc .who2{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  .new{background:var(--red);color:#fff;font-size:10px;border-radius:3px;padding:0 5px;font-weight:600}
+  .allow{display:flex;flex-wrap:wrap;gap:6px 8px;font-size:13px;padding:6px 0}
+  .allow label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)}
+  .allow label:has(input:checked){background:#dbeafe;border-color:#93c5fd}
+  #dReason{min-height:140px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   결정사항 — 대표(관리자)가 정한 것을 짧게 적어 팀에 공유. 팀원은 "확인했습니다"를 누름
+   공지사항(오래 가는 안내)과 달리, 그때그때 내린 결정을 날짜순으로 쌓아 두는 기록
+   한 글 = { title(결정 한 줄), reason(이유·배경), topic(관련), decided_at(결정일),
+             targets:[이름…](비어 있으면 전체), reads:[확인한 사람…], created_by, created_at }
+================================================================ */
+const TOPICS = ['회사 공통', '레모너리', '서리맥스', '흑생마', '식이해법연구소', '피에이치뷰티'];
+const TOPIC_COLOR = { '회사 공통': ['#e9e9e7', '#444444'], '레모너리': ['#fef3c7', '#92400e'], '서리맥스': ['#dcfce7', '#166534'], '흑생마': ['#e0e7ff', '#3730a3'], '식이해법연구소': ['#ccfbf1', '#115e59'], '피에이치뷰티': ['#ede9fe', '#5b21b6'] };
+const topicHtml = t => t ? tag(t, ...(TOPIC_COLOR[t] || ['#f1f5f9', '#334155']), true) : '';
+const READS = d => Array.isArray(d.reads) ? d.reads : [];
+const TARGETS = d => Array.isArray(d.targets) ? d.targets : [];
+const isRead = d => READS(d).includes(me);
+/* 대상이 정해진 글은 그 사람들과 쓴 사람, 관리자에게만 보임 */
+const canSee = d => isAdmin() || !TARGETS(d).length || TARGETS(d).includes(me) || d.created_by === me;
+const D = () => (DATA.decisions || []).filter(canSee).sort((a, b) => String(b.decided_at || '').localeCompare(String(a.decided_at || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const audience = d => TARGETS(d).length ? TARGETS(d) : members.map(m => m.name);   // 확인해야 하는 사람들
+const pending = d => audience(d).filter(n => !READS(d).includes(n));
+const needMe = d => audience(d).includes(me) && !isRead(d);   // 내가 확인해야 하는데 아직 안 한 글
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+let view = 'all';
+let q = '';
+
+function normalize(table, d){ return { ...d, reads: Array.isArray(d.reads) ? d.reads : [], targets: Array.isArray(d.targets) ? d.targets : [] }; }
+
+function render(){
+  const topics = TOPICS.filter(t => D().some(d => d.topic === t));
+  const tabs = [{ key: 'all', label: '전체' }, { key: 'todo', label: '확인할 것', badge: D().filter(needMe).length }, ...(topics.length ? [null, ...topics.map(t => ({ key: 't:' + t, label: t }))] : [])];
+  if (!tabs.some(t => t && t.key === view)) view = 'all';
+  $('#app').innerHTML = headerHtml({ icon: '✅', title: '결정사항', tabs, active: view }) + `<main class="wrap" style="max-width:900px">
+    <div class="actions">${isAdmin() ? '<button class="btn primary" id="newBtn2">＋ 결정사항 쓰기</button>' : ''}
+      <input type="search" id="fq" placeholder="검색 (결정, 이유, 관련)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:220px">
+      <span class="count" id="cnt"></span></div>
+    <div id="view">${feedHtml()}</div></main>`;
+  bindHeader(k => { view = k; render(); }, null, m => `확인 안 한 결정 ${(DATA.decisions || []).filter(d => audience(d).includes(m.name) && !READS(d).includes(m.name)).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const fq = $('#fq'); fq.oninput = () => { q = fq.value; renderView(); };
+  bindView();
+}
+function listOf(){
+  const s = q.trim().toLowerCase();
+  return D().filter(d => (view === 'all' || (view === 'todo' && needMe(d)) || (view.startsWith('t:') && d.topic === view.slice(2)))
+    && (!s || [d.title, d.reason, d.topic, d.created_by].some(v => (v || '').toLowerCase().includes(s))));
+}
+function feedHtml(){
+  if (!DATA.decisions) return `<div class="empty">결정사항 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>`;
+  const list = listOf(), admin = isAdmin();
+  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'todo' ? '확인할 결정사항이 없습니다. 모두 확인했습니다 👍' : '아직 결정사항이 없습니다.' + (admin ? ' <b>＋ 결정사항 쓰기</b>로 첫 글을 남겨 보세요.' : '')}</div>`;
+  return `<div class="feed">${list.map(d => {
+    const mine = audience(d).includes(me), read = isRead(d), pend = pending(d), aud = audience(d);
+    return `<article class="dc ${mine && !read ? 'unread' : ''}" data-id="${d.id}">
+      <div class="dhead">${topicHtml(d.topic)}${mine && !read ? '<span class="new">NEW</span>' : ''}<span class="sp"></span><span>${fmtDate(d.decided_at || (d.created_at || '').slice(0, 10))} · ${esc(d.created_by || '')}</span></div>
+      <h3>${esc(d.title)}</h3>
+      ${d.reason ? `<div class="reason">${linkify(d.reason)}</div>` : ''}
+      <div class="dfoot">
+        <span>대상: ${TARGETS(d).length ? TARGETS(d).map(n => esc(n)).join(', ') : '전체'}</span>
+        ${admin ? `<span title="${pend.length ? '아직 확인 안 함: ' + esc(pend.join(', ')) : '모두 확인했습니다'}">· 확인 ${aud.length - pend.length}/${aud.length}${pend.length ? ` <span class="hint">(안 함: ${esc(pend.join(', '))})</span>` : ' ✓'}</span>` : ''}
+        <span class="sp"></span>
+        ${admin ? `<button class="btn sm" data-edit="${d.id}">수정</button>` : ''}
+        ${!mine ? '' : read ? '<span class="okd">✓ 확인했습니다</span>' : `<button class="btn sm primary" data-ok="${d.id}">확인했습니다</button>`}
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+function renderView(){ $('#view').innerHTML = feedHtml(); bindView(); }
+function bindView(){
+  const c = $('#cnt'); if (c) { const todo = D().filter(needMe).length; c.textContent = `${listOf().length}건${todo ? ` · 확인할 것 ${todo}건` : ''}`; }
+  document.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => confirmRead(b.dataset.ok));
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(b.dataset.edit));
+}
+async function confirmRead(id){
+  const d = D().find(x => x.id === id); if (!d || isRead(d)) return;
+  await saveRow('decisions', { ...d, reads: [...READS(d), me] });
+  toast('확인했습니다');
+}
+
+/* 쓰기·수정 (관리자) */
+function openEdit(id){
+  if (!isAdmin()) { toast('관리자만 결정사항을 쓸 수 있습니다', true); return; }
+  const d = id ? D().find(x => x.id === id) : null;
+  const cur = d ? TARGETS(d) : [];
+  openModal(`${modalHead(d ? '결정사항 수정' : '결정사항 쓰기')}
+    <div class="mb">
+      <div class="f"><label>결정 한 줄 *</label><input id="dTitle" value="${esc(d ? d.title : '')}" maxlength="160" placeholder="예: 레모너리 9월 발주 8만 개, 단가 2,000원으로 확정"></div>
+      <div class="f"><label>이유·배경 (선택)</label><textarea id="dReason" placeholder="왜 이렇게 정했는지, 언제부터 적용되는지, 누가 무엇을 하면 되는지 2~3줄로 적어 주세요.">${esc(d ? d.reason || '' : '')}</textarea></div>
+      <div class="f2">
+        <div class="f"><label>관련</label><select id="dTopic"><option value="">(없음)</option>${TOPICS.map(t => `<option ${d && d.topic === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="f"><label>결정일</label><input type="date" id="dDate" value="${esc(d ? d.decided_at || '' : todayStr())}"></div>
+      </div>
+      <div class="f"><label>대상 (아무도 고르지 않으면 <b>전체</b>에게 보입니다)</label>
+        <div class="allow">${members.filter(m => m.name !== me).map(m => `<label><input type="checkbox" data-tg value="${esc(m.name)}" ${cur.includes(m.name) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('')}</div>
+        <div class="hint">대상을 고르면 그 사람들과 관리자에게만 보입니다.</div></div>
+      ${d ? '<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="dReset"> 내용이 바뀌었으니 <b>다시 확인</b>받기 (확인 기록을 지움)</label>' : ''}
+    </div>
+    <div class="mf">${d ? '<button class="btn danger left" id="dDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="dSave">${d ? '저장' : '올리기'}</button></div>`, { wide: true });
+  $('#dTitle').focus();
+  $('#dSave').onclick = async () => {
+    const title = $('#dTitle').value.trim(); if (!title) { $('#dTitle').focus(); toast('결정 한 줄을 입력하세요', true); return; }
+    const targets = [...document.querySelectorAll('[data-tg]:checked')].map(x => x.value);
+    const reset = $('#dReset') && $('#dReset').checked;
+    const row = { id: d ? d.id : uid(), title, reason: $('#dReason').value.trim() || null, topic: $('#dTopic').value || null, decided_at: $('#dDate').value || todayStr(), targets,
+      reads: d && !reset ? READS(d) : [me], created_by: d ? d.created_by : me, created_at: d ? d.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('decisions', row); toast(d ? '저장했습니다' : '결정사항을 올렸습니다');
+  };
+  const del = $('#dDel'); if (del) del.onclick = async () => { if (confirm(`"${d.title}" 결정사항을 삭제할까요?`)) { closeModal(); await removeRow('decisions', d.id); toast('삭제했습니다'); } };
+}
+
+let openedNew = false;   // 홈의 "＋ 결정사항 쓰기" 링크(#new)로 들어오면 쓰기 창을 바로 엶
+const render0 = render;
+render = function(){ render0(); if (location.hash === '#new' && !openedNew && me && isAdmin()) { openedNew = true; history.replaceState(null, '', location.pathname); openEdit(null); } };
+boot({ icon: '✅', title: '결정사항', tables: ['decisions'], render, normalize });
+</script>
+</body>
+</html>
