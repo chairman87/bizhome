@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191408">
-<script src="common.js?v=202609191408"></script>
+<link rel="stylesheet" href="common.css?v=202609191414">
+<script src="common.js?v=202609191414"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -55,14 +55,15 @@
    한 줄 = { group_name(구분), service, url, purpose, login_id, password, owner(담당자/구매자), shared_with(공유 사용자),
             fee(구독료), cycle(월/년/없음), billing_day(결제일), start_date, end_date(만료일), admin_only, memo }
 ================================================================ */
-const GROUP_ORDER = ['운영', '재무', '총무', '고객센터', '물류', '법무', '이메일·협업', '광고 계정', '레모너리', '서리맥스', '흑생마'];   // 탭 순서
+const GROUP_ORDER = ['운영', '재무', '총무', '고객센터', '물류', '법무', '이메일·협업', '광고 계정', '레모너리', '서리맥스', '흑생마', '기타'];   // 탭 순서 ('기타'는 안 쓰는 계정을 모아 두는 곳, 항상 맨 뒤)
+const ETC = '기타';
 const CYCLES = ['없음', '월', '년'];
 /* 총무 / 마케팅 두 화면이 같은 표를 나눠 씀: 구분(group_name)이 MARKETING_GROUPS 에 있으면 마케팅 > 계정관리, 나머지는 총무 > 계정관리 */
 const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
 /* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
-const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9' };
+const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9', '기타': 'c9' };
 const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
 const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
 const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
@@ -85,7 +86,7 @@ function normalize(table, a){ return { ...a, admin_only: !!a.admin_only, cycle: 
 /* ---------- 화면 ---------- */
 function render(){
   if (view === 'subs') view = 'all';
-  const tabs = [{ key: 'all', label: '전체' }, ...groups().map(g => ({ key: 'g:' + g, label: g }))];
+  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g }))];   // 운영계정의 '기타' 탭은 비어 있어도 항상 맨 뒤에
   if (!tabs.some(t => t && t.key === view)) view = 'all';
   $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
@@ -117,7 +118,7 @@ function tableHtml(){
     : sortBy(listOf(), sort, { fee: f => Number(f) || 0 });
   const showGroup = !view.startsWith('g:');
   const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', '목적'], ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
-  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
+  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'g:' + ETC ? '기타로 옮긴 계정이 없습니다.<br>안 쓰는 계정을 열어 <b>구분</b>을 <b>기타</b>로 바꾸면 여기로 모입니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
   return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       ${showGroup ? `<td><span class="grp ${grpCls(a.group_name)}">${esc(a.group_name || '-')}</span></td>` : ''}
