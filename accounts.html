@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191437">
-<script src="common.js?v=202609191437"></script>
+<link rel="stylesheet" href="common.css?v=202609192028">
+<script src="common.js?v=202609192028"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -110,7 +110,7 @@ function statsHtml(){
   return `<div class="stats">
     <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개</div></div>
     <div class="stat"><div class="l">비밀번호 비어 있음</div><div class="v ${all.filter(a => !a.password).length ? 'orange' : ''}">${all.filter(a => !a.password).length}개</div><div class="s">계정을 열어 넣어 두세요</div></div>
-    <div class="stat"><div class="l">${DEPT === '마케팅' ? '운영계정 (총무)' : '마케팅계정 (마케팅)'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '총무 > 운영계정' : '마케팅 > 마케팅계정'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
+    <div class="stat"><div class="l">${DEPT === '마케팅' ? '운영계정 (업무지원)' : '마케팅계정 (마케팅)'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '업무지원 > 운영계정' : '마케팅 > 마케팅계정'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
   </div>`;
 }
 function tableHtml(){
