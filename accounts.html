@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191422">
-<script src="common.js?v=202609191422"></script>
+<link rel="stylesheet" href="common.css?v=202609191427">
+<script src="common.js?v=202609191427"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -61,6 +61,8 @@ const CYCLES = ['없음', '월', '년'];
 /* 총무 / 마케팅 두 화면이 같은 표를 나눠 씀: 구분(group_name)이 MARKETING_GROUPS 에 있으면 마케팅 > 계정관리, 나머지는 총무 > 계정관리 */
 const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? '마케팅' : '총무';
 const PURPOSE_LABEL = DEPT === '마케팅' ? '매체' : '사업자';   // purpose 칸의 화면 이름 (운영계정=사업자, 마케팅계정=매체)
+const COMPANIES = ['식이해법연구소', '피에이치뷰티', '공용'];   // 마케팅계정의 사업자 선택지
+const COMP_CLS = { '식이해법연구소': 'c1', '피에이치뷰티': 'c3', '공용': 'c9' };
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
 /* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
@@ -91,7 +93,7 @@ function render(){
   if (!tabs.some(t => t && t.key === view)) view = 'all';
   $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
-      <input type="search" id="fq" placeholder="검색 (서비스, 아이디, ${PURPOSE_LABEL}, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
+      <input type="search" id="fq" placeholder="검색 (서비스, 아이디, ${PURPOSE_LABEL}${DEPT === '마케팅' ? ', 사업자' : ''}, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
       <span class="count" id="cnt"></span></div><div id="view">${tableHtml()}</div>`}</main>`;
   bindHeader(k => { view = k; LS.set('acc_view_' + DEPT, k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null, view.startsWith('g:') ? { group_name: view.slice(2) } : {});
@@ -101,7 +103,7 @@ function render(){
 function listOf(){
   const base = view.startsWith('g:') ? ALL().filter(a => a.group_name === view.slice(2)) : ALL();
   const s = q.trim().toLowerCase();
-  return base.filter(a => !s || [a.service, a.login_id, a.purpose, a.owner, a.memo, a.url, a.group_name, a.shared_with].some(v => (v || '').toLowerCase().includes(s)));
+  return base.filter(a => !s || [a.service, a.login_id, a.purpose, a.company, a.owner, a.memo, a.url, a.group_name, a.shared_with].some(v => (v || '').toLowerCase().includes(s)));
 }
 function statsHtml(){
   const all = ALL();
@@ -118,7 +120,7 @@ function tableHtml(){
     ? listOf().slice().sort((a, b) => { const d = ((order.indexOf(a.group_name) + 1 || 99) - (order.indexOf(b.group_name) + 1 || 99)) * (sort.dir === 'asc' ? 1 : -1); return d || String(a.service || '').localeCompare(String(b.service || ''), 'ko'); })
     : sortBy(listOf(), sort, { fee: f => Number(f) || 0 });
   const showGroup = !view.startsWith('g:');
-  const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', PURPOSE_LABEL], ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
+  const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', PURPOSE_LABEL], ...(DEPT === '마케팅' ? [['company', '사업자']] : []), ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'g:' + ETC ? '기타로 옮긴 계정이 없습니다.<br>안 쓰는 계정을 열어 <b>구분</b>을 <b>기타</b>로 바꾸면 여기로 모입니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
   return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
     ${list.map(a => `<tr class="row" data-id="${a.id}">
@@ -126,6 +128,7 @@ function tableHtml(){
       <td><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
       <td>${siteHtml(a.url)}</td>
       <td class="small">${esc(a.purpose || '')}</td>
+      ${DEPT === '마케팅' ? `<td>${a.company ? `<span class="grp ${COMP_CLS[a.company] || 'c9'}" style="font-size:12px;padding:2px 8px">${esc(a.company)}</span>` : '<span class="hint">-</span>'}</td>` : ''}
       <td><span class="mono">${esc(a.login_id || '')}</span>${a.login_id ? ` <button class="ib" data-copy="${esc(a.login_id)}">복사</button>` : ''}</td>
       <td>${pwHtml(a)}</td>
       <td>${who(a.owner)}</td>
@@ -156,7 +159,10 @@ function openEdit(id, preset = {}){
         <div class="f"><label>서비스 이름 *</label><input id="aService" value="${esc(d.service)}" placeholder="예: 네이버, 어도비" maxlength="60"></div>
         <div class="f"><label>${PURPOSE_LABEL}</label><input id="aPurpose" value="${esc(d.purpose || '')}" placeholder="${DEPT === '마케팅' ? '예: 메타 · 페이지' : '예: 식이해법연구소 · 레모너리'}" maxlength="80"></div>
       </div>
-      <div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: adobe.co.kr"></div>
+      ${DEPT === '마케팅' ? `<div class="f2">
+        <div class="f"><label>사업자</label><select id="aCompany"><option value="">(선택 안 함)</option>${COMPANIES.map(c => `<option ${d.company === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: adobe.co.kr"></div>
+      </div>` : `<div class="f"><label>접속 주소</label><input id="aUrl" value="${esc(d.url || '')}" placeholder="예: adobe.co.kr"></div>`}
       <div class="sec">로그인</div>
       <div class="f2">
         <div class="f"><label>아이디</label><input id="aId" value="${esc(d.login_id || '')}" autocomplete="off"></div>
@@ -187,6 +193,8 @@ function openEdit(id, preset = {}){
       login_id: $('#aId').value.trim() || null, password: $('#aPw').value.trim() || null, owner: $('#aOwner').value || null, shared_with: $('#aShared').value.trim() || null,
       admin_only: $('#aAdminOnly') ? $('#aAdminOnly').checked : !!(a && a.admin_only), memo: $('#aMemo').value.trim() || null,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
+    if ($('#aCompany')) row.company = $('#aCompany').value || null;   // 사업자 칸은 마케팅계정에서만
+    else if (a && a.company) row.company = a.company;
     closeModal(); await saveRow('accounts', row); toast(a ? '저장했습니다' : '계정을 추가했습니다');
   };
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
