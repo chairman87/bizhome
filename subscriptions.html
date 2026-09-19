@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구독관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609191434">
-<script src="common.js?v=202609191434"></script>
+<link rel="stylesheet" href="common.css?v=202609191437">
+<script src="common.js?v=202609191437"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -93,7 +93,7 @@ const pwHtml = s => `<span class="pw"><span class="mono">${s.password ? (shown[s
 /* 사용자: 이름을 쉼표로 나눠 팀원이면 아바타, 아니면 글자로 */
 const usersHtml = s => { const names = String(s.users || '').split(/[,·/]/).map(x => x.trim()).filter(Boolean); if (!names.length) return '<span class="hint">-</span>'; return names.map(n => members.some(m => m.name === n) ? who(n) : `<span class="chip none">${esc(n)}</span>`).join(' '); };
 
-let view = LS.get('sub_view') || 'all';
+let view = 'all';   // 열 때마다 항상 '전체' 탭부터
 let q = '';
 let sort = { key: 'category', dir: 'asc' };   // 처음 열면 구분 순서로 정렬
 
