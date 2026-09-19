@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609192054">
-<script src="common.js?v=202609192054"></script>
+<link rel="stylesheet" href="common.css?v=202609192112">
+<script src="common.js?v=202609192112"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -30,6 +30,12 @@
   .range{display:flex;align-items:center;gap:10px}
   .range input[type=range]{flex:1;padding:0}
   .range .pct{font-size:14px;font-weight:600;color:var(--fg);min-width:44px;text-align:right}
+  /* 진행률 4단계 버튼 (25·50·75·100). 고른 단계까지 파랗게 채워짐 */
+  .steps{display:flex;gap:6px;align-items:center}
+  .steps button{flex:1;padding:9px 0;border:1px solid var(--line2);background:var(--bg);border-radius:6px;font-size:14px;font-weight:600;color:var(--fg2)}
+  .steps button:hover{background:var(--bg3);color:var(--fg)}
+  .steps button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .steps .pct{font-size:14px;font-weight:600;color:var(--fg);min-width:44px;text-align:right}
   .quick{display:flex;gap:4px;flex-wrap:wrap}
   .quick button{border:1px solid var(--line2);background:var(--bg);border-radius:4px;padding:1px 8px;font-size:12px;color:var(--fg2)}
   .quick button:hover{background:var(--bg3);color:var(--fg)}
@@ -109,6 +115,16 @@ function normalize(table, t){
     files: Array.isArray(t.files) ? t.files : [],
   };
 }
+/* 진행률은 25·50·75·100 네 단계 중에서 고름. 값은 숨은 입력칸(id)에 들어가고, 지금 단계를 한 번 더 누르면 한 단계 내려감(0%까지) */
+const STEPS = [25, 50, 75, 100];
+const stepsHtml = (id, val) => `<div class="steps" data-steps="${id}"><input type="hidden" id="${id}" value="${val}">${STEPS.map(p => `<button type="button" data-step="${p}" class="${val >= p ? 'on' : ''}">${p}%</button>`).join('')}<span class="pct" id="${id}Pct">${val}%</span></div>`;
+function bindSteps(id, onChange){
+  const box = document.querySelector(`[data-steps="${id}"]`); if (!box) return () => {};
+  const inp = $('#' + id);
+  const paint = () => { box.querySelectorAll('[data-step]').forEach(b => b.classList.toggle('on', Number(inp.value) >= Number(b.dataset.step))); $('#' + id + 'Pct').textContent = inp.value + '%'; };
+  box.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const p = Number(b.dataset.step); inp.value = Number(inp.value) === p ? p - 25 : p; paint(); if (onChange) onChange(Number(inp.value)); });
+  return paint;
+}
 const log = (text, kind = 'log', progress, files) => ({ by: me, text, at: nowIso(), kind, ...(progress != null ? { progress } : {}), ...(files && files.length ? { files } : {}) });
 
 /* ---------- 저장 동작 ---------- */
@@ -132,15 +148,13 @@ function openReport(id){
     <div class="mb">
       <div><span class="title">${esc(t.title)}</span><div class="hint">${isSelf(t) ? '내 업무' : esc(t.created_by || '') + '님 요청'} · 마감 ${fmtDate(t.due_date) || '-'} · 현재 ${prog(t)}%</div></div>
       <div class="f"><label>진행률</label>
-        <div class="range"><input type="range" id="rProg" min="0" max="100" step="5" value="${prog(t)}"><span class="pct" id="rPct">${prog(t)}%</span></div>
-        <div class="quick">${[25, 50, 75, 100].map(p => `<button type="button" data-q="${p}">${p}%</button>`).join('')}</div></div>
+        ${stepsHtml('rProg', prog(t))}</div>
       <div class="f"><label>${isSelf(t) ? '메모 (선택)' : '보고 내용'}</label><textarea id="rText" placeholder="${isSelf(t) ? '진행 상황을 간단히 남겨 두면 나중에 기록으로 볼 수 있습니다' : '어디까지 했는지, 막힌 점, 필요한 것 등을 적어 주세요'}"></textarea>${rAt.html}</div>
       <div class="hint">${isSelf(t) ? '100%로 맞추면 바로 <b>완료</b> 처리됩니다.' : `100%로 보고하면 상태가 <b>보고완료</b>가 되고, 요청한 ${esc(t.created_by || '요청자')}님이 확인 후 완료 처리합니다.`}</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSend">${isSelf(t) ? '저장' : '보고하기'}</button></div>`);
-  const rp = $('#rProg'), pct = $('#rPct');
-  rp.oninput = () => pct.textContent = rp.value + '%';
-  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { rp.value = b.dataset.q; pct.textContent = rp.value + '%'; });
+  const rp = $('#rProg');
+  bindSteps('rProg');
   rAt.bind(); $('#rText').focus();
   $('#rSend').onclick = async () => {
     const p = Number(rp.value), text = $('#rText').value.trim();
@@ -166,7 +180,7 @@ function openRevise(id){
   $('#vSend').onclick = async () => {
     const text = $('#vText').value.trim(); if (!text) { $('#vText').focus(); toast('보완할 내용을 적어 주세요', true); return; }
     closeModal();
-    await saveRow('tasks', { ...t, status: '진행중', progress: Math.min(prog(t), 90), comments: [...(t.comments || []), log(text, 'revise', undefined, vAt.files)] });
+    await saveRow('tasks', { ...t, status: '진행중', progress: Math.min(prog(t), 75), comments: [...(t.comments || []), log(text, 'revise', undefined, vAt.files)] });
     toast('보완을 요청했습니다');
   };
 }
@@ -401,7 +415,7 @@ function openTask(id, preset = {}){
       </div>
       ${t ? `<div class="f2">
         <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-        <div class="f"><label>진행률</label><div class="range"><input type="range" id="mProg" min="0" max="100" step="5" value="${prog(d)}"><span class="pct" id="mPct">${prog(d)}%</span></div></div>
+        <div class="f"><label>진행률</label>${stepsHtml('mProg', prog(d))}</div>
       </div>` : ''}
       <div class="f"><label>${selfMode ? '내용 (자세한 설명, 참고 링크 등)' : '요청 내용 (자세한 설명, 참고 링크 등)'}</label><textarea id="mMemo">${esc(d.memo || '')}</textarea>${mAt.html}</div>
       ${t ? `<div class="comments"><h4>보고·기록 ${logs.length ? `(${logs.length})` : ''}</h4>
@@ -418,10 +432,10 @@ function openTask(id, preset = {}){
     </div>`);
   mAt.bind(); if (t) cAt.bind();
   $('#mTitle').focus();
-  const mProg = $('#mProg'), mPct = $('#mPct'), mStatus = $('#mStatus');
+  const mProg = $('#mProg'), mStatus = $('#mStatus');
   if (mProg) {
-    mProg.oninput = () => { mPct.textContent = mProg.value + '%'; const p = Number(mProg.value); if (p >= 100 && mStatus.value !== '완료') mStatus.value = '보고완료'; else if (p > 0 && p < 100 && (mStatus.value === '요청' || mStatus.value === '완료' || mStatus.value === '보고완료')) mStatus.value = '진행중'; };
-    mStatus.onchange = () => { if (mStatus.value === '완료') { mProg.value = 100; mPct.textContent = '100%'; } };
+    const paintM = bindSteps('mProg', p => { if (p >= 100 && mStatus.value !== '완료') mStatus.value = '보고완료'; else if (p > 0 && p < 100 && (mStatus.value === '요청' || mStatus.value === '완료' || mStatus.value === '보고완료')) mStatus.value = '진행중'; });
+    mStatus.onchange = () => { if (mStatus.value === '완료') { mProg.value = 100; paintM(); } };
   }
   const save = async (extra) => {
     const status = mStatus ? mStatus.value : '요청';
