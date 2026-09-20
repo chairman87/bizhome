@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609202058">
-<script src="common.js?v=202609202058"></script>
+<link rel="stylesheet" href="common.css?v=202609202136">
+<script src="common.js?v=202609202136"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -60,6 +60,12 @@
   tr.row.dragging{opacity:.35}
   tr.row.drop-before td{box-shadow:inset 0 3px 0 var(--blue)}
   tr.row.drop-after td{box-shadow:inset 0 -3px 0 var(--blue)}
+  .sechd{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 6px;display:flex;align-items:center;gap:6px}
+  .sechd span{font-weight:400;color:var(--fg3)}
+  .sechd.hi{color:var(--red);margin-top:4px}
+  .tablewrap.hiwrap{border-color:#f2c4c4}
+  .tablewrap.hiwrap thead th{background:#fff5f5}
+  table.tk td{overflow:hidden}
   .orderbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--fg2)}
 </style>
 </head>
@@ -78,7 +84,8 @@ const ST = { '요청': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8']
 const STATUSES = Object.keys(ST);
 const PRIORITIES = ['높음', '보통', '낮음'];
 const stHtml = s => tag(s, ...(ST[s] || ST['요청']), true);
-const prHtml = p => p === '높음' ? '<span class="pr high">! 높음</span>' : p === '낮음' ? '<span class="pr low">낮음</span>' : '';
+const prLabel = p => p === '보통' ? '중간' : p;   // 저장 값은 예전 그대로 '보통', 화면에는 '중간'
+const prHtml = p => p === '높음' ? '<span class="pr high">높음</span>' : p === '낮음' ? '<span class="pr low">낮음</span>' : '';
 /* 남이 스스로 등록한 '내 업무'(담당자=요청자)는 본인과 관리자만 볼 수 있음. 요청·요청받은 업무는 모두에게 보임 */
 const visibleTask = t => isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me;
 const T = () => (DATA.tasks || []).filter(visibleTask);
@@ -292,7 +299,7 @@ function tableHtml(list){
   cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률']);
   const drag = isManual();
   const th = (view === 'received' ? '<th class="grip"></th>' : '') + cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(curSort(), k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
-  const rows = sortTasks(list).map(t => {
+  const rowHtml = (t, grp) => {
     const cells = {
       title: `<td><span class="title">${esc(t.title)}</span>${cmtHtml(t)}</td>`,
       assignee: `<td>${who(t.assignee)}</td>`,
@@ -301,20 +308,37 @@ function tableHtml(list){
       created_at: `<td><span class="date" title="${fmtDateTime(t.created_at)}">${fmtDate((t.created_at || '').slice(0, 10)) || '-'}</span></td>`,
       status: `<td>${stTask(t)}</td>`,
       progress: `<td>${progHtml(t)}</td>`,
-      priority: `<td>${canPr(t) ? `<select class="prsel ${t.priority === '높음' ? 'high' : t.priority === '낮음' ? 'low' : ''}" data-pr="${t.id}" title="눌러서 우선순위 바꾸기">${PRIORITIES.map(x => `<option value="${x}" ${t.priority === x ? 'selected' : ''}>${x === '높음' ? '! 높음' : x}</option>`).join('')}</select>` : (prHtml(t.priority) || '<span class="pr">보통</span>')}</td>`,
+      priority: `<td>${canPr(t) ? `<select class="prsel ${t.priority === '높음' ? 'high' : t.priority === '낮음' ? 'low' : ''}" data-pr="${t.id}" title="눌러서 우선순위 바꾸기">${PRIORITIES.map(x => `<option value="${x}" ${t.priority === x ? 'selected' : ''}>${prLabel(x)}</option>`).join('')}</select>` : (prHtml(t.priority) || '<span class="pr">중간</span>')}</td>`,
     };
-    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" ${drag && !isDone(t) ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" title="끌어서 순서 바꾸기">${drag && !isDone(t) ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
-  }).join('');
+    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" data-grp="${grp}" ${drag && !isDone(t) ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" title="끌어서 순서 바꾸기">${drag && !isDone(t) ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
+  };
+  // 우선순위 '높음'(완료 제외)은 위쪽 표로 따로 뺌. 보관함은 나누지 않음
+  const sorted = sortTasks(list);
+  const hi = view === 'archive' ? [] : sorted.filter(t => t.priority === '높음' && !isDone(t));
+  const rest = sorted.filter(t => !hi.includes(t));
+  const tbl = (arr, grp) => `<div class="tablewrap ${grp === 'hi' ? 'hiwrap' : ''}"><table class="tk" style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${arr.map(t => rowHtml(t, grp)).join('')}</tbody></table></div>`;
   const bar = view !== 'received' ? '' : drag ? '<div class="orderbar">⠿ 줄을 <b>끌어서</b> 순서를 바꿀 수 있습니다. 바꾼 순서는 저장됩니다.</div>'
     : '<div class="orderbar"><button class="btn sm" id="orderBtn">↕ 내 순서로 보기</button> 지금은 열 제목 기준으로 정렬되어 있습니다. 내 순서로 돌아가면 끌어서 순서를 바꿀 수 있습니다.</div>';
-  return `${bar}<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  if (!hi.length) return bar + tbl(rest, 'rest');
+  return `${bar}<div class="sechd hi">🔥 우선순위 높음 <span>${hi.length}건</span></div>${tbl(hi, 'hi')}`
+    + (rest.length ? `<div class="sechd">그 외 업무 <span>${rest.length}건</span></div>${tbl(rest, 'rest')}` : '');
+}
+/* 위아래 두 표의 칸 너비를 똑같이 맞춤 (각 칸은 두 표 중 넓은 쪽 기준, 넘치는 만큼은 업무 칸에서 줄임) */
+function alignTables(){
+  const tbs = [...document.querySelectorAll('#view table.tk')]; if (tbs.length < 2) return;
+  const W = tbs[0].getBoundingClientRect().width, w = [];
+  tbs.forEach(tb => [...tb.rows[0].cells].forEach((c, i) => { w[i] = Math.max(w[i] || 0, c.getBoundingClientRect().width); }));
+  const ti = [...tbs[0].rows[0].cells].findIndex(c => c.dataset.sort === 'title');
+  const sum = w.reduce((a, b) => a + b, 0); if (ti >= 0) w[ti] = Math.max(180, w[ti] - (sum - W));
+  const total = w.reduce((a, b) => a + b, 0);
+  tbs.forEach(tb => { tb.style.tableLayout = 'fixed'; tb.style.width = '100%'; [...tb.rows[0].cells].forEach((c, i) => { c.style.width = (w[i] / total * 100) + '%'; }); });
 }
 /* 표에서 우선순위를 바로 바꿀 수 있는 사람: 담당자, 요청자, 관리자 (완료된 업무는 제외) */
 const canPr = t => !isDone(t) && (t.assignee === me || t.created_by === me || isAdmin());
 async function setPriority(id, priority){
   const t = T().find(x => x.id === id); if (!t || !PRIORITIES.includes(priority) || t.priority === priority) return;
-  await saveRow('tasks', { ...t, priority, comments: [...(t.comments || []), log(`우선순위 변경: ${t.priority} → ${priority}`)] });
-  toast(`우선순위를 "${priority}"(으)로 바꿨습니다`);
+  await saveRow('tasks', { ...t, priority, comments: [...(t.comments || []), log(`우선순위 변경: ${prLabel(t.priority)} → ${prLabel(priority)}`)] });
+  toast(`우선순위를 "${prLabel(priority)}"(으)로 바꿨습니다`);
 }
 /* 행 안의 처리 버튼: 담당자는 진행 보고, 요청자는 완료처리·보완 요청 */
 function actionButtons(t){
@@ -375,18 +399,19 @@ function calHtml(list){
 
 function bindView(){
   const v = $('#view');
+  alignTables();
   bindSort(curSort(), renderView, { title: 'asc', assignee: 'asc', created_by: 'asc', due_date: 'asc', status: 'asc', priority: 'asc' });
   v.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, select')) return; openTask(tr.dataset.id); });
   v.querySelectorAll('[data-pr]').forEach(sel => { sel.onclick = e => e.stopPropagation(); sel.onchange = () => setPriority(sel.dataset.pr, sel.value); });
   const ob = $('#orderBtn'); if (ob) ob.onclick = () => { sortMine.key = 'manual'; sortMine.dir = 'asc'; renderView(); };
   // 내 업무: 줄을 끌어서 순서 바꾸기 (줄의 위쪽 절반에 놓으면 그 앞, 아래쪽 절반이면 그 뒤)
-  let dragId = null;
+  let dragId = null, dragGrp = null;   // 끌기는 같은 표(높음 / 그 외) 안에서만
   const clearMarks = () => v.querySelectorAll('tr.drop-before, tr.drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
   v.querySelectorAll('tr.row[draggable=true]').forEach(tr => {
-    tr.ondragstart = e => { dragId = tr.dataset.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); tr.classList.add('dragging'); };
+    tr.ondragstart = e => { dragId = tr.dataset.id; dragGrp = tr.dataset.grp; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); tr.classList.add('dragging'); };
     tr.ondragend = () => { dragId = null; tr.classList.remove('dragging'); clearMarks(); };
-    tr.ondragover = e => { if (!dragId || dragId === tr.dataset.id) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; clearMarks(); tr.classList.add(after ? 'drop-after' : 'drop-before'); };
-    tr.ondrop = e => { if (!dragId) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; const id = dragId; dragId = null; clearMarks(); moveTask(id, tr.dataset.id, after); };
+    tr.ondragover = e => { if (!dragId || dragId === tr.dataset.id || dragGrp !== tr.dataset.grp) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; clearMarks(); tr.classList.add(after ? 'drop-after' : 'drop-before'); };
+    tr.ondrop = e => { if (!dragId || dragGrp !== tr.dataset.grp) return; e.preventDefault(); const r = tr.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; const id = dragId; dragId = null; clearMarks(); moveTask(id, tr.dataset.id, after); };
   });
   v.querySelectorAll('[data-report]').forEach(b => b.onclick = e => { e.stopPropagation(); openReport(b.dataset.report); });
   v.querySelectorAll('[data-fin]').forEach(b => b.onclick = e => { e.stopPropagation(); completeTask(b.dataset.fin); });
@@ -420,7 +445,7 @@ function openTask(id, preset = {}){
       <div class="f"><label>업무 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="무엇을 해야 하나요?" maxlength="200"></div>
       <div class="f2">
         <div class="f"><label>담당자 (누가 할 일인가요)</label><select id="mAssignee"><option value="">미정</option>${memberOptions(d.assignee)}</select></div>
-        <div class="f"><label>우선순위</label><select id="mPriority">${PRIORITIES.map(p => `<option ${d.priority === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>우선순위</label><select id="mPriority">${PRIORITIES.map(p => `<option value="${p}" ${d.priority === p ? 'selected' : ''}>${prLabel(p)}</option>`).join('')}</select></div>
       </div>
       <div class="f2">
         <div class="f"><label>시작일</label><input type="date" id="mStart" value="${esc(d.start_date || '')}"></div>
