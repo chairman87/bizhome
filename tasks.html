@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609202136">
-<script src="common.js?v=202609202136"></script>
+<link rel="stylesheet" href="common.css?v=202609202139">
+<script src="common.js?v=202609202139"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -337,7 +337,7 @@ function alignTables(){
 const canPr = t => !isDone(t) && (t.assignee === me || t.created_by === me || isAdmin());
 async function setPriority(id, priority){
   const t = T().find(x => x.id === id); if (!t || !PRIORITIES.includes(priority) || t.priority === priority) return;
-  await saveRow('tasks', { ...t, priority, comments: [...(t.comments || []), log(`우선순위 변경: ${prLabel(t.priority)} → ${prLabel(priority)}`)] });
+  await saveRow('tasks', { ...t, priority });   // 우선순위 변경은 보고 기록(💬)에 남기지 않음
   toast(`우선순위를 "${prLabel(priority)}"(으)로 바꿨습니다`);
 }
 /* 행 안의 처리 버튼: 담당자는 진행 보고, 요청자는 완료처리·보완 요청 */
