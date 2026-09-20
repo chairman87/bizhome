@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201311">
-<script src="common.js?v=202609201311"></script>
+<link rel="stylesheet" href="common.css?v=202609201314">
+<script src="common.js?v=202609201314"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -127,7 +127,7 @@ const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
 const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑' };
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
-let view = LS.get('ads_view') || PRODUCTS[0];
+let view = 'month';   // 들어오면 항상 월별 현황부터 (예전에는 마지막에 보던 탭을 기억했음)
 const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', budget: '', gstate: '', google: '', status: '' });   // 기본: 메타 운영중만
 let filter = freshFilter();
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
