@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201254">
-<script src="common.js?v=202609201254"></script>
+<link rel="stylesheet" href="common.css?v=202609201255">
+<script src="common.js?v=202609201255"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -97,7 +97,7 @@ let sort = { key: 'date', dir: 'desc' };
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
 const editors = () => uniq(G().map(a => a.editor));
 /* 편집자 선택지는 이 5명만 (예전 영상에 다른 이름이 있으면 그 줄에서만 함께 보여 줌) */
-const EDITORS = ['상형', '수연', '채은', '예솔', '홍재'];
+const EDITORS = ['상형', '수연', '예솔', '채은', '홍재'];
 const editorOpts = cur => `<option value="">편집자</option>` + [...EDITORS, ...(cur && !EDITORS.includes(cur) ? [cur] : [])].map(e => `<option ${cur === e ? 'selected' : ''}>${esc(e)}</option>`).join('');
 const metas = () => uniq(G().map(a => a.meta_account));
 const budgetKey = v => String(v || '').replace(/,/g, '').trim().toUpperCase();   // 예산 값 비교용 (10,000 = 10000, off = OFF)
@@ -158,7 +158,7 @@ function productHtml(p){
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인도 자동으로 들어옵니다.</div>
     </div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
-      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
+      const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
       const [fk, opts] = HF, cur = filter[fk];
       return `<th class="c"><select data-hf="${fk}" title="${l}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
