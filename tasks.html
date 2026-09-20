@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201824">
-<script src="common.js?v=202609201824"></script>
+<link rel="stylesheet" href="common.css?v=202609202056">
+<script src="common.js?v=202609202056"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -281,10 +281,10 @@ const EMPTY = {
 };
 function tableHtml(list){
   if (!list.length) return `<div class="empty">${filter.q || filter.person || filter.status ? '조건에 맞는 업무가 없습니다.' : EMPTY[view]}</div>`;
-  const cols = [['title', '업무']];
+  const cols = [['title', '업무'], ['priority', '우선순위']];   // 우선순위는 업무 바로 오른쪽
   if (view !== 'received') cols.push(['assignee', '담당자']);
   if (view !== 'sent') cols.push(['created_by', '요청자']);
-  cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률'], ['priority', '우선순위']);
+  cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률']);
   const drag = isManual();
   const th = (view === 'received' ? '<th class="grip"></th>' : '') + cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(curSort(), k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
   const rows = sortTasks(list).map(t => {
