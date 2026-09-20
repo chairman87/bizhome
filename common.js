@@ -280,10 +280,11 @@ const who = name => name ? `<span class="chip">${avatar(name)}${esc(fullName(nam
 const memberOptions = sel => members.map(m => `<option ${sel === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
 
 let loginPick = '';   // 로그인 화면에서 고른 이름
-/* 로그인 화면의 이름 순서: 직급 높은 순 → 같은 직급 안에서는 관리자가 정한 순서. 직급이 없는 사람은 뒤쪽 */
+/* 로그인 화면의 이름 순서: 직급 높은 순 → 같은 직급(또는 직급 없음) 안에서는 입사일 빠른 순 → 입사일도 없으면 관리자가 정한 순서로 맨 뒤 */
 const RANKS = ['회장', '대표', '부대표', '사장', '전무', '상무', '이사', '본부장', '실장', '팀장', '부장', '차장', '과장', '대리', '주임', '사원', '인턴'];
 const rankOf = m => { const i = RANKS.indexOf(String(m.title || '').trim()); return i >= 0 ? i : (m.title ? RANKS.length : RANKS.length + 1); };   // 목록에 없는 직급은 직급 없는 사람 바로 앞
-const byRank = list => list.map((m, i) => [m, i]).sort((a, b) => rankOf(a[0]) - rankOf(b[0]) || a[1] - b[1]).map(x => x[0]);
+const hireOf = m => m.hire_date || '9999-12-31';
+const byRank = list => list.map((m, i) => [m, i]).sort((a, b) => rankOf(a[0]) - rankOf(b[0]) || hireOf(a[0]).localeCompare(hireOf(b[0])) || a[1] - b[1]).map(x => x[0]);
 function renderLogin(){
   const picked = members.find(m => m.name === loginPick);
   document.body.classList.add('login-bg');
