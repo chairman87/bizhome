@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201245">
-<script src="common.js?v=202609201245"></script>
+<link rel="stylesheet" href="common.css?v=202609201247">
+<script src="common.js?v=202609201247"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
   table.ads{min-width:1000px}
-  /* 제목 줄(정렬·필터): 진한 남색 배경, 큰 글자, 높은 칸 */
-  table.ads th{text-align:center;background:#1e3a8a;color:#fff;font-size:14px;font-weight:600;padding:11px 8px;border-bottom:2px solid #172554}
-  table.ads th[data-sort]:hover{color:#fff;background:#1d4ed8}
-  table.ads th .arrow{color:#bfdbfe}
+  /* 제목 줄(정렬·필터): 연한 노란색 배경, 큰 글자, 높은 칸 */
+  table.ads th{text-align:center;background:#fffbea;color:#292524;font-size:14px;font-weight:600;padding:11px 8px;border-bottom:2px solid #e0c25a}
+  table.ads th[data-sort]:hover{color:#292524;background:#fef3c7}
+  table.ads th .arrow{color:#b45309}
   table.ads td{padding:5px 8px;font-size:13px}
   td.c{text-align:center;white-space:nowrap}
   td.ttl{font-weight:500;min-width:220px}
@@ -22,8 +22,8 @@
   .off{background:#e5e5e5;color:#444;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
   .del{background:#fee2e2;color:#b91c1c;padding:0 8px;border-radius:3px;font-weight:600;font-size:12px}
   .run{background:#dcfce7;color:#15803d;padding:0 8px;border-radius:3px;font-size:12px}
-  tr.newrow td{background:#fffbea;padding:4px 6px}
-  tr.newrow input,tr.newrow select{width:100%;border:1px solid #e0c25a;border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff}
+  tr.newrow td{background:transparent;padding:4px 6px}
+  tr.newrow input,tr.newrow select{width:100%;border:1px solid var(--line2);border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff}
   tr.newrow input:focus,tr.newrow select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
   [data-edit]{cursor:text}
   [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
@@ -53,9 +53,9 @@
   .ox.on{background:#dcfce7;border-color:#86efac;color:#15803d}
   .stf{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px}
   .stf .lb{font-size:12px;color:var(--fg2);margin-right:2px}
-  th select[data-hf]{border:1px solid #3b82f6;border-radius:6px;font:inherit;font-size:14px;font-weight:600;padding:5px 8px;background:#1d4ed8;color:#fff;cursor:pointer;min-width:120px}
-  th select[data-hf]:hover{background:#2563eb}
-  th select[data-hf].on{background:#facc15;border-color:#facc15;color:#1e3a8a}
+  th select[data-hf]{border:1px solid #e0c25a;border-radius:6px;font:inherit;font-size:14px;font-weight:600;padding:5px 8px;background:#fff;color:#292524;cursor:pointer;min-width:120px}
+  th select[data-hf]:hover{background:#fffdf3;border-color:#ca8a04}
+  th select[data-hf].on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
   .stf button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--fg2)}
   .stf button b{font-weight:600;color:var(--fg)}
   .stf button.on{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -153,7 +153,7 @@ function productHtml(p){
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
-    <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다. <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고(<b>메타</b>·<b>구글 운영</b> 열도 자동), 메타에 새로 만든 캠페인(이름: 게재일_타이틀_편집자)도 자동으로 들어옵니다.</div>
+    <div class="hint" style="margin-bottom:8px">제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다. <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고(<b>메타</b>·<b>구글 운영</b> 열도 자동), 메타에 새로 만든 캠페인(이름: 게재일_타이틀_편집자)도 자동으로 들어옵니다.</div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
       const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
@@ -172,7 +172,7 @@ function productHtml(p){
       <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
