@@ -280,6 +280,10 @@ const who = name => name ? `<span class="chip">${avatar(name)}${esc(fullName(nam
 const memberOptions = sel => members.map(m => `<option ${sel === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
 
 let loginPick = '';   // 로그인 화면에서 고른 이름
+/* 로그인 화면의 이름 순서: 직급 높은 순 → 같은 직급 안에서는 관리자가 정한 순서. 직급이 없는 사람은 뒤쪽 */
+const RANKS = ['회장', '대표', '부대표', '사장', '전무', '상무', '이사', '본부장', '실장', '팀장', '부장', '차장', '과장', '대리', '주임', '사원', '인턴'];
+const rankOf = m => { const i = RANKS.indexOf(String(m.title || '').trim()); return i >= 0 ? i : (m.title ? RANKS.length : RANKS.length + 1); };   // 목록에 없는 직급은 직급 없는 사람 바로 앞
+const byRank = list => list.map((m, i) => [m, i]).sort((a, b) => rankOf(a[0]) - rankOf(b[0]) || a[1] - b[1]).map(x => x[0]);
 function renderLogin(){
   const picked = members.find(m => m.name === loginPick);
   document.body.classList.add('login-bg');
@@ -291,7 +295,7 @@ function renderLogin(){
     ${pageName ? `<div class="page-tag">${esc(APP.icon || '')} ${esc(pageName)}</div>` : ''}
     <p class="guide">${members.length ? (picked ? `<b>${esc(picked.name)}</b>님, 비밀번호를 입력하세요` : '본인 이름을 선택하세요') : '아직 팀원이 없습니다. 첫 팀원(본인) 이름을 등록하세요'}</p>
     ${connError ? `<p class="err">저장소 연결 오류: ${esc(connError)}</p>` : ''}
-    <div class="names">${members.map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}${m.title ? `<span class="hint" style="font-weight:400">${esc(m.title)}</span>` : ''}</button>`).join('')}</div>
+    <div class="names">${byRank(members).map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}${m.title ? `<span class="hint" style="font-weight:400">${esc(m.title)}</span>` : ''}</button>`).join('')}</div>
     ${picked ? `<div class="pwrow"><input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
     <p class="hint">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 새 비밀번호를 정하게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
     ${members.length ? (picked ? '' : '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>') : `<div class="pwrow"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
