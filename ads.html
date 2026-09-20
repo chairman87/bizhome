@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201247">
-<script src="common.js?v=202609201247"></script>
+<link rel="stylesheet" href="common.css?v=202609201250">
+<script src="common.js?v=202609201250"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -153,7 +153,10 @@ function productHtml(p){
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
-    <div class="hint" style="margin-bottom:8px">제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다. <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고(<b>메타</b>·<b>구글 운영</b> 열도 자동), 메타에 새로 만든 캠페인(이름: 게재일_타이틀_편집자)도 자동으로 들어옵니다.</div>
+    <div class="hint" style="margin-bottom:8px;line-height:1.7">
+      <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
+      <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인도 자동으로 들어옵니다.</div>
+    </div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
       const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
