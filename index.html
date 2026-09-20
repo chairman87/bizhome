@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201351">
-<script src="common.js?v=202609201351"></script>
+<link rel="stylesheet" href="common.css?v=202609201440">
+<script src="common.js?v=202609201440"></script>
 <style>
-  .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;align-items:start}
-  .dept{border-radius:10px;padding:10px}
+  /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
+  .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
+  .dept{border-radius:10px;padding:10px;flex:1 1 250px;max-width:350px;min-width:0}
+  .depts .adddept{flex:1 1 250px;max-width:350px;width:auto}
+  @media(max-width:640px){.dept,.depts .adddept{max-width:none}}
   .dept h2{margin:4px 6px 10px;font-size:14px;display:flex;align-items:center;gap:6px}
   .dept h2 .nm{padding:2px 8px;border-radius:4px}
   .dept h2 .n{font-weight:400;color:var(--fg2);flex:1}
