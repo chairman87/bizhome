@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609192112">
-<script src="common.js?v=202609192112"></script>
+<link rel="stylesheet" href="common.css?v=202609201211">
+<script src="common.js?v=202609201211"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -60,6 +60,17 @@
   .stf button b{font-weight:600;color:var(--fg)}
   .stf button.on{background:var(--blue);border-color:var(--blue);color:#fff}
   .stf button.on b{color:#fff}
+  /* 메타 자동 반영 안내 줄 */
+  .sync{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;font-size:13px;color:#1e3a8a}
+  .sync .top{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .sync .chip{background:#fff;border:1px solid #bfdbfe;border-radius:999px;padding:1px 9px;font-size:12px}
+  .sync .chip b{font-weight:700}
+  .sync .chip.warn{border-color:#fca5a5;color:#b91c1c}
+  .sync a{color:var(--blue);cursor:pointer;margin-left:auto}
+  .sync .det{margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .sync .det h4{margin:0 0 3px;font-size:12px;color:#1e3a8a}
+  .sync .det div div{font-size:12px;color:var(--fg);line-height:1.5}
+  .lk{font-size:10px;opacity:.55;margin-left:3px;cursor:help}
 </style>
 </head>
 <body>
@@ -93,7 +104,7 @@ const budgets = () => [...new Set(G().map(a => budgetKey(a.meta_budget)).filter(
 const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(String(b).replace(/,/g, '')); return isNaN(n) ? esc(b) : n.toLocaleString('ko-KR'); };
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
 const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
-function normalize(table, a){ return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중', google: !!a.google }; }
+function normalize(table, a){ if (table !== 'ads') return a; return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중', google: !!a.google }; }
 
 /* ---------- 화면 ---------- */
 function render(){
@@ -102,6 +113,23 @@ function render(){
     + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : productHtml(view)}</main>`;
   bindHeader(k => { view = k; LS.set('ads_view', k); render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
   bindView();
+}
+
+/* 메타 자동 반영 안내: 매일 오전 10시에 ADS-SYNC 프로그램이 메타 캠페인의 예산·켜짐/꺼짐을 읽어 이 표에 맞추고, 바뀐 점을 ads_sync 표에 남김 */
+let syncOpen = false;
+function syncHtml(p){
+  const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
+  if (!last) return '';
+  const S = last.summary || {}, of = k => (S[k] || []).filter(x => x.product === p), won = v => /^\d+$/.test(v || '') ? Number(v).toLocaleString('ko-KR') : esc(v || '');
+  const nw = of('new'), off = of('off'), on = of('on'), bd = of('budget'), chk = [...of('lost').map(x => ({ ...x, why: '표에는 운영중인데 메타에서 못 찾음' })), ...of('kept')];
+  const who = x => `${esc(x.title)}${x.editor ? ' / ' + esc(x.editor) : ''}`;
+  const box = (t, list, f) => list.length ? `<div><h4>${t} ${list.length}</h4>${list.map(x => `<div>${f(x)}</div>`).join('')}</div>` : '';
+  const any = nw.length + off.length + on.length + bd.length + chk.length;
+  return `<div class="sync"><div class="top"><b>🔗 메타 자동 반영</b><span>마지막 ${fmtDateTime(last.synced_at)}</span>
+      ${any ? '' : '<span>· 바뀐 점 없음</span>'}
+      ${nw.length ? `<span class="chip">새 영상 <b>${nw.length}</b></span>` : ''}${off.length ? `<span class="chip">OFF 됨 <b>${off.length}</b></span>` : ''}${on.length ? `<span class="chip">다시 켜짐 <b>${on.length}</b></span>` : ''}${bd.length ? `<span class="chip">예산 변경 <b>${bd.length}</b></span>` : ''}${chk.length ? `<span class="chip warn">확인 필요 <b>${chk.length}</b></span>` : ''}
+      ${any ? `<a id="syncTg">${syncOpen ? '접기 ▴' : '자세히 ▾'}</a>` : ''}</div>
+    ${any && syncOpen ? `<div class="det">${box('새 영상', nw, x => `${who(x)} · 예산 ${won(x.budget)}`)}${box('OFF 됨', off, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('다시 켜짐', on, who)}${box('예산 변경', bd, x => `${who(x)}: ${won(x.from)} → <b>${won(x.to)}</b>`)}${box('확인 필요', chk, x => `${who(x)} <span style="color:#b91c1c">(${esc(x.why || '')})</span>`)}</div>` : ''}</div>`;
 }
 
 /* 제품별 표 */
@@ -114,11 +142,11 @@ function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
   const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
   const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
-  return `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
+  return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
       <span class="count">${(filter.editor || filter.meta || filter.budget || filter.status) ? `<b>${[filter.editor, filter.meta, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
-    <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
+    <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다. <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인(이름: 게재일_타이틀_편집자)도 자동으로 들어옵니다.</div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
       const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
@@ -142,7 +170,7 @@ function productHtml(p){
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
       <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
-      <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}</td>
+      <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 예산과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
       <td class="c"><select data-status="${a.id}" style="border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px">${STATUSES.map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
@@ -192,6 +220,7 @@ function monthHtml(){
 }
 
 function bindView(){
+  const tg = $('#syncTg'); if (tg) tg.onclick = () => { syncOpen = !syncOpen; render(); };
   const ab = $('#addBtn'); if (ab) ab.onclick = () => openAd(null, { product: view });
   const na = $('#nAdd'); if (na) {
     na.onclick = addFromRow;
@@ -264,7 +293,7 @@ function openAd(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.title}" 을(를) 목록에서 삭제할까요?`)) { closeModal(); await removeRow('ads', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🎬', title: '광고 영상 리스트', tables: ['ads'], render, normalize });
+boot({ icon: '🎬', title: '광고 영상 리스트', tables: ['ads', 'ads_sync'], render, normalize });
 </script>
 </body>
 </html>
