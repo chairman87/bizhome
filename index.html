@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201504">
-<script src="common.js?v=202609201504"></script>
+<link rel="stylesheet" href="common.css?v=202609201516">
+<script src="common.js?v=202609201516"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -171,6 +171,7 @@ function render(){
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
     'docs.html': docs.filter(d => d.expire_date && dayDiff(d.expire_date) <= 30).length,   // 유효기간 30일 내(지난 것 포함)
+    'comments.html': (DATA.ad_comments || []).filter(c => c.flag && !c.ok_by && !c.hidden && !c.deleted).length,   // 보이는 상태의 이상 의심 댓글 (숨기거나 '문제없음' 하면 빠짐)
     'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
@@ -445,7 +446,7 @@ function openDecision(id){
   const ok = $('#dOk'); if (ok) ok.onclick = () => { closeModal(); confirmDecision(id); };
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'decisions', 'accounts', 'subscriptions', 'payments', 'docs'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'decisions', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments'], render });
 </script>
 </body>
 </html>

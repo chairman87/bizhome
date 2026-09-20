@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>댓글 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201504">
-<script src="common.js?v=202609201504"></script>
+<link rel="stylesheet" href="common.css?v=202609201516">
+<script src="common.js?v=202609201516"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -29,6 +29,10 @@
   .br{font-size:11px;border-radius:4px;padding:1px 8px;font-weight:700;white-space:nowrap}
   .br.b-레모너리{background:#dbeafe;color:#1d4ed8} .br.b-서리맥스{background:#dcfce7;color:#15803d} .br.b-흑생마{background:#ede9fe;color:#6d28d9}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:1px}
+  .cm.warn{border-color:#f87171;background:#fff5f5;box-shadow:0 0 0 1px #fecaca inset}
+  .wflag{font-size:12px;font-weight:700;color:#b91c1c;background:#fee2e2;border-radius:4px;padding:1px 8px}
+  .okd{font-size:11px;color:var(--fg3)}
+  .chip-f.warn{border-color:#f87171;color:#b91c1c;font-weight:600} .chip-f.warn.on{background:#dc2626;border-color:#dc2626;color:#fff}
   .pf{font-size:11px;border-radius:999px;padding:1px 8px;font-weight:600}
   .pf.fb{background:#e8f0fe;color:#1a56c4} .pf.ig{background:#fde8f3;color:#b0186b}
   .st{font-size:11px;border-radius:4px;padding:1px 7px;font-weight:600;white-space:nowrap}
@@ -67,7 +71,9 @@ const watchOn = () => { const w = (DATA.ad_comment_sync || []).find(r => r.id ==
 const brand = p => `<span class="br b-${esc(p || '')}">${esc(p || '')}</span>`;
 /* 댓글별 가장 최근 요청 (대기 중이거나 실패한 것을 화면에 보여 주려고) */
 function latestActs(){ const m = {}; ACTS().forEach(a => { if (!m[a.comment_id] && a.status !== '취소') m[a.comment_id] = a; }); return m; }
-const needLook = () => CM().filter(c => !c.deleted && !c.hidden).length;
+/* 이상 댓글 의심: 대표 PC 가 의심 단어로 표시(flag)했고, 아직 보이는 상태이며, 아무도 '문제없음' 처리를 안 한 것 (홈 메뉴의 숫자 배지와 같은 기준) */
+const isWarn = c => !!c.flag && !c.ok_by && !c.hidden && !c.deleted;
+const needLook = () => CM().filter(isWarn).length;
 
 function render(){
   const tabs = [{ key: 'list', label: '댓글 전체', badge: needLook() || '' }, { key: 'log', label: '처리 기록' }];
@@ -77,6 +83,7 @@ function render(){
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => request(b.dataset.id, b.dataset.act));
   document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => cancel(b.dataset.cancel));
+  document.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => markOk(b.dataset.ok));
 }
 
 function syncHtml(){
@@ -84,25 +91,25 @@ function syncHtml(){
   const mins = Math.round((Date.now() - new Date(s.synced_at)) / 60000), old = mins > 90, sm = s.summary || {};
   const on = watchOn();
   return `<div class="info ${old || !on ? 'old' : ''}">${on ? '<span class="dot" style="background:#16a34a"></span><b>즉시 처리 켜짐</b> · 버튼을 누르면 몇 초 안에 메타에 반영됩니다.' : '<span class="dot" style="background:#dc2626"></span><b>즉시 처리 꺼짐</b> (대표 PC 가 꺼져 있거나 감시 프로그램이 멈춤) · 요청은 쌓여 있다가 PC 가 켜지면 반영됩니다.'}
-    <b>숨기기는 언제든 되돌릴 수 있지만 삭제는 되돌릴 수 없습니다.</b> · 새 댓글은 10분마다 읽어 옵니다 (마지막 ${fmtDateTime(s.synced_at).slice(5)}, ${mins < 1 ? '방금' : mins < 60 ? mins + '분 전' : Math.round(mins / 60) + '시간 전'})
+    <b>숨기기는 언제든 되돌릴 수 있지만 삭제는 되돌릴 수 없습니다.</b> · 새 댓글은 30분마다 읽어 오고, 의심 단어가 있으면 <b>⚠ 이상 의심</b>으로 표시됩니다 (마지막 ${fmtDateTime(s.synced_at).slice(5)}, ${mins < 1 ? '방금' : mins < 60 ? mins + '분 전' : Math.round(mins / 60) + '시간 전'})
     ${isAdmin() && (sm.problems || []).length ? `<details><summary>읽지 못한 곳 ${sm.problems.length}건 (관리자에게만 보임)</summary>${sm.problems.map(p => `<div>· ${esc(p)}</div>`).join('')}</details>` : ''}</div>`;
 }
 
 function listHtml(){
   const acts = latestActs();
   const mine = CM();
-  const cnt = { visible: mine.filter(c => !c.deleted && !c.hidden).length, hidden: mine.filter(c => !c.deleted && c.hidden).length, deleted: mine.filter(c => c.deleted).length, all: mine.length };
+  const cnt = { warn: mine.filter(isWarn).length, visible: mine.filter(c => !c.deleted && !c.hidden).length, hidden: mine.filter(c => !c.deleted && c.hidden).length, deleted: mine.filter(c => c.deleted).length, all: mine.length };
   const ql = q.trim().toLowerCase();
-  const list = mine.filter(c => filt === 'all' || (filt === 'deleted' ? c.deleted : !c.deleted && (filt === 'hidden') === !!c.hidden))
+  const list = mine.filter(c => filt === 'all' || (filt === 'warn' ? isWarn(c) : filt === 'deleted' ? c.deleted : !c.deleted && (filt === 'hidden') === !!c.hidden))
     .filter(c => !ql || [c.body, c.campaign, c.author, c.page, c.product].some(v => (v || '').toLowerCase().includes(ql)))
-    .sort((a, b) => String(b.posted_at || '').localeCompare(String(a.posted_at || '')));
+    .sort((a, b) => (isWarn(b) - isWarn(a)) || String(b.posted_at || '').localeCompare(String(a.posted_at || '')));   // 이상 의심이 맨 위
   /* 캠페인(영상)별로 묶되, 최근 댓글이 달린 영상이 위로 */
   const groups = []; list.forEach(c => { let g = groups.find(x => x.k === c.campaign && x.product === c.product); if (!g) groups.push(g = { k: c.campaign, product: c.product, page: c.page, items: [] }); g.items.push(c); });
-  const F = [['visible', '보이는 댓글'], ['hidden', '숨긴 댓글'], ['deleted', '삭제됨'], ['all', '전체']];
-  return `<div class="actions">${F.map(([k, l]) => `<button class="chip-f ${filt === k ? 'on' : ''}" data-f="${k}">${l} ${cnt[k]}</button>`).join('')}
+  const F = [['warn', '⚠ 이상 의심'], ['visible', '보이는 댓글'], ['hidden', '숨긴 댓글'], ['deleted', '삭제됨'], ['all', '전체']];
+  return `<div class="actions">${F.map(([k, l]) => `<button class="chip-f ${k === 'warn' && cnt.warn ? 'warn' : ''} ${filt === k ? 'on' : ''}" data-f="${k}">${l} ${cnt[k]}</button>`).join('')}
       <input type="search" id="fq" placeholder="댓글·영상·브랜드 검색" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:200px;margin-left:auto"></div>
     ${list.length ? groups.map(g => `<div class="grp">${brand(g.product)} 🎬 ${esc(g.k || '(캠페인 이름 없음)')} <span class="pg">${esc(g.page || '')} · ${g.items.length}개</span></div>` + g.items.map(c => cardHtml(c, acts[c.id])).join('')).join('')
-      : `<div class="empty">${ql ? '검색 결과가 없습니다.' : filt === 'visible' ? '지금 보이는 댓글이 없습니다. 👍' : '해당하는 댓글이 없습니다.'}</div>`}`;
+      : `<div class="empty">${ql ? '검색 결과가 없습니다.' : filt === 'warn' ? '이상 의심 댓글이 없습니다. 👍' : filt === 'visible' ? '지금 보이는 댓글이 없습니다. 👍' : '해당하는 댓글이 없습니다.'}</div>`}`;
 }
 
 function cardHtml(c, a){
@@ -112,8 +119,10 @@ function cardHtml(c, a){
   if (c.deleted) side += `<div class="hint" style="text-align:right">${esc(c.deleted_note || '')}</div>`;
   else if (pending) side += `<div class="wait">⏳ <b>${ACT_LABEL[a.action]}</b> 처리 중…<br>${esc(a.requested_by || '')} · ${fmtDateTime(a.created_at).slice(5)}</div><button class="btn sm" data-cancel="${a.id}">요청 취소</button>`;
   else side += `<div class="row">${c.hidden ? `<button class="btn sm" data-act="unhide" data-id="${esc(c.id)}">다시 보이기</button>` : `<button class="btn sm primary" data-act="hide" data-id="${esc(c.id)}">숨기기</button>`}<button class="btn sm danger" data-act="delete" data-id="${esc(c.id)}">삭제</button></div>${failed ? `<div class="fail">⚠ 지난 ${ACT_LABEL[a.action]} 요청 실패: ${esc(a.error || '')}</div>` : ''}`;
-  return `<div class="cm ${c.deleted ? 'del' : c.hidden ? 'hid' : ''}"><div class="main">
-      <div class="meta">${brand(c.product)}<span class="pf ${c.platform === '인스타' ? 'ig' : 'fb'}">${esc(c.platform || '')}</span>${c.is_reply ? '<span>↳ 답글</span>' : ''}${c.author ? `<b>${esc(c.author)}</b>` : ''}<span>${esc(c.posted_at || '')}</span>${c.likes ? `<span>♥ ${c.likes}</span>` : ''}${c.link ? `<a href="${esc(c.link)}" target="_blank" rel="noopener">메타에서 보기 ↗</a>` : ''}</div>
+  const warn = isWarn(c);
+  if (warn && !pending) side += `<button class="btn sm" data-ok="${esc(c.id)}" title="잘못 잡힌 경우: 배지에서 빼고 그대로 둡니다">문제없음</button>`;
+  return `<div class="cm ${c.deleted ? 'del' : c.hidden ? 'hid' : warn ? 'warn' : ''}"><div class="main">
+      <div class="meta">${brand(c.product)}<span class="pf ${c.platform === '인스타' ? 'ig' : 'fb'}">${esc(c.platform || '')}</span>${c.is_reply ? '<span>↳ 답글</span>' : ''}${c.author ? `<b>${esc(c.author)}</b>` : ''}<span>${esc(c.posted_at || '')}</span>${c.likes ? `<span>♥ ${c.likes}</span>` : ''}${c.link ? `<a href="${esc(c.link)}" target="_blank" rel="noopener">메타에서 보기 ↗</a>` : ''}${warn ? `<span class="wflag">⚠ 이상 의심: ${esc(c.flag)}</span>` : c.flag && c.ok_by && !c.hidden && !c.deleted ? `<span class="okd">✓ ${esc(c.ok_by)} 문제없음 처리</span>` : ''}</div>
       <div class="cbody ${c.body ? '' : 'none'}">${c.body ? esc(c.body) : '(글 없이 사진·스티커만 있는 댓글)'}</div></div>
     <div class="side">${side}</div></div>`;
 }
@@ -133,6 +142,10 @@ async function request(id, action){
   if (action === 'delete' && !confirm(`이 댓글을 삭제할까요?\n\n"${(c.body || '(글 없음)').slice(0, 100)}"\n\n삭제는 되돌릴 수 없습니다. 애매하면 "숨기기"를 쓰세요.`)) return;
   await saveRow('ad_comment_actions', { id: uid(), comment_id: id, action, requested_by: me, status: '대기', body: c.body || '', created_at: nowIso() });
   toast(watchOn() ? `${ACT_LABEL[action]} 처리 중… 몇 초 안에 반영됩니다` : `${ACT_LABEL[action]} 요청을 넣었습니다 · 대표 PC 가 켜지면 반영됩니다`);
+}
+async function markOk(id){
+  const c = CM().find(x => x.id === id); if (!c) return;
+  await saveRow('ad_comments', { ...c, ok_by: me }); toast('문제없음으로 표시했습니다 (배지에서 빠집니다)');
 }
 async function cancel(actId){
   const a = (DATA.ad_comment_actions || []).find(x => x.id === actId); if (!a || a.status !== '대기') { toast('이미 처리된 요청입니다', true); return; }

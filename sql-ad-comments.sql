@@ -51,3 +51,7 @@ create policy "team_all" on ad_comment_sync for all using (true) with check (tru
 alter publication supabase_realtime add table ad_comments;
 alter publication supabase_realtime add table ad_comment_actions;
 alter publication supabase_realtime add table ad_comment_sync;
+
+-- 2026-09-20 추가: 이상 댓글 표시 (대표 PC 가 의심 단어로 flag 를 채움, 화면의 "문제없음" 버튼이 ok_by 에 이름을 적음)
+alter table ad_comments add column if not exists flag text;
+alter table ad_comments add column if not exists ok_by text;
