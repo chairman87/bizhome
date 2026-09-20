@@ -4,6 +4,7 @@ alter table ads add column if not exists meta_campaign_id text;          -- 짝�
 alter table ads add column if not exists meta_synced_at  timestamptz;    -- 마지막으로 메타 값이 반영된 시각
 alter table ads add column if not exists meta_state       text;           -- 메타에서 실제로 켜져 있는지: 운영중 / OFF (화면의 "메타" 열, 비어 있으면 미연결)
 alter table ads add column if not exists google_state     text;           -- 구글애즈에서 실제로 켜져 있는지: 운영중 / OFF (화면의 "구글 운영" 열, 비어 있으면 구글 캠페인 없음)
+alter table ads add column if not exists google_budget    text;           -- 구글애즈 하루 예산: 켜져 있는 캠페인들의 합(원, 부가세 별도). 꺼져 있으면 비어 있음
 
 create table if not exists ads_sync (
   id        uuid primary key,
