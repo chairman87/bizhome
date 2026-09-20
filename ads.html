@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609202309">
-<script src="common.js?v=202609202309"></script>
+<link rel="stylesheet" href="common.css?v=202609202317">
+<script src="common.js?v=202609202317"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -258,29 +258,32 @@ let budOpen = '';   // 펼쳐 본 편집자
 function budgetHtml(){
   const won = v => Math.round(v).toLocaleString('ko-KR'), num = v => /^\d+$/.test(budgetKey(v)) ? Number(budgetKey(v)) : 0, dash = '<span style="color:var(--fg3)">–</span>';
   // m = 메타 일예산(메타 운영중일 때만), g = 구글 일예산(구글 운영중일 때만, 부가세 별도)
-  const live = G().map(a => ({ ...a, m: a.meta_state === '운영중' ? num(a.meta_budget) : 0, g: a.google_state === '운영중' ? num(a.google_budget) : 0 })).filter(a => a.m + a.g > 0);
+  // 메타 예산은 다시 mo = 제작영상(직접 만든 영상) / mp = 파트너스(타이틀이 "파트너스"로 시작)로 나눠 보여 줌
+  const isPt = a => String(a.title || '').replace(/\s/g, '').startsWith('파트너스');
+  const live = G().map(a => ({ ...a, m: a.meta_state === '운영중' ? num(a.meta_budget) : 0, g: a.google_state === '운영중' ? num(a.google_budget) : 0 })).filter(a => a.m + a.g > 0)
+    .map(a => ({ ...a, pt: isPt(a), mo: isPt(a) ? 0 : a.m, mp: isPt(a) ? a.m : 0 }));
   if (!live.length) return `<div class="empty">메타·구글에서 운영중인 영상이 없습니다.</div>`;
   const sum = (list, k) => list.reduce((t, a) => t + (k ? a[k] : a.m + a.g), 0);
-  const M = sum(live, 'm'), Gg = sum(live, 'g'), T = M + Gg;
+  const M = sum(live, 'm'), MO = sum(live, 'mo'), MP = sum(live, 'mp'), Gg = sum(live, 'g'), T = M + Gg;
   const byEd = {};
   live.forEach(a => { const e = a.editor || '편집자 미지정'; (byEd[e] = byEd[e] || []).push(a); });
-  const rank = Object.entries(byEd).map(([e, list]) => ({ e, list: list.sort((x, y) => (y.m + y.g) - (x.m + x.g)), m: sum(list, 'm'), g: sum(list, 'g') })).sort((x, y) => (y.m + y.g) - (x.m + x.g));
+  const rank = Object.entries(byEd).map(([e, list]) => ({ e, list: list.sort((x, y) => (y.m + y.g) - (x.m + x.g)), m: sum(list, 'm'), mo: sum(list, 'mo'), mp: sum(list, 'mp'), g: sum(list, 'g') })).sort((x, y) => (y.m + y.g) - (x.m + x.g));
   const max = rank[0].m + rank[0].g;
   const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
   const bars = r => `<span class="bar m ${r.g ? 'cut' : ''}" style="width:${Math.max(1, Math.round(r.m / max * 70))}%" title="메타 ${won(r.m)}"></span>${r.g ? `<span class="bar g" style="width:${Math.max(1, Math.round(r.g / max * 70))}%" title="구글 ${won(r.g)}"></span>` : ''}`;
   return `<div class="bsum">
-      <div class="k"><div class="t">${LOGO['메타']} 운영중 일예산</div><div class="v">${won(M)}<small>원/일</small></div><div class="s">영상 ${live.filter(a => a.m).length}개</div></div>
+      <div class="k"><div class="t">${LOGO['메타']} 운영중 일예산</div><div class="v">${won(M)}<small>원/일</small></div><div class="s">제작영상 ${won(MO)} (${live.filter(a => a.mo).length}개) · 파트너스 ${won(MP)} (${live.filter(a => a.mp).length}개)</div></div>
       <div class="k"><div class="t">${LOGO['구글']} 운영중 일예산</div><div class="v">${won(Gg)}<small>원/일</small></div><div class="s">영상 ${live.filter(a => a.g).length}개 · 부가세 별도</div></div>
       <div class="k big"><div class="t">메타 + 구글 합계</div><div class="v">${won(T)}<small>원/일</small></div><div class="s">영상 ${live.length}개</div></div>
       ${PRODUCTS.map(p => { const l = live.filter(a => a.product === p); return `<div class="k"><div class="t">${p}</div><div class="v" style="font-size:16px">${won(sum(l))}</div><div class="s">메타 ${won(sum(l, 'm'))}${sum(l, 'g') ? ` · 구글 ${won(sum(l, 'g'))}` : ''}</div></div>`; }).join('')}
     </div>
-    <div class="hint" style="margin-bottom:8px">메타·구글 광고 관리자에서 <b>지금 켜져 있는 영상</b>의 <b>하루 예산</b>을 편집자별로 더해 합계가 큰 순서로 보여 줍니다${last ? ` (자동 반영 ${fmtDateTime(last.synced_at)} 기준)` : ''}. 구글 예산은 부가세 별도 금액입니다. 편집자 줄을 누르면 그 사람의 운영중 영상이 펼쳐집니다.</div>
-    <div class="tablewrap"><table class="bud"><thead><tr><th>순위</th><th class="l">편집자</th><th>영상 수</th><th>${LOGO['메타']} 예산</th><th>${LOGO['구글']} 예산</th><th>합계</th><th class="l">비중 <span style="font-weight:400;font-size:11px;color:#57534e">(파랑 메타 · 초록 구글)</span></th></tr></thead><tbody>
+    <div class="hint" style="margin-bottom:8px">메타·구글 광고 관리자에서 <b>지금 켜져 있는 영상</b>의 <b>하루 예산</b>을 편집자별로 더해 합계가 큰 순서로 보여 줍니다. 메타 예산은 <b>제작영상</b>(직접 만든 영상)과 <b>파트너스</b>(타이틀이 "파트너스"로 시작하는 영상)로 나눠 적었습니다${last ? ` (자동 반영 ${fmtDateTime(last.synced_at)} 기준)` : ''}. 구글 예산은 부가세 별도 금액입니다. 편집자 줄을 누르면 그 사람의 운영중 영상이 펼쳐집니다.</div>
+    <div class="tablewrap"><table class="bud"><thead><tr><th>순위</th><th class="l">편집자</th><th>영상 수</th><th>${LOGO['메타']} 제작영상</th><th>${LOGO['메타']} 파트너스</th><th>${LOGO['구글']} 예산</th><th>합계</th><th class="l">비중 <span style="font-weight:400;font-size:11px;color:#57534e">(파랑 메타 · 초록 구글)</span></th></tr></thead><tbody>
     ${rank.map((r, i) => `<tr class="ed" data-ed="${esc(r.e)}"><td class="rk">${i + 1}</td><td class="l nm">${esc(r.e)} <span style="font-weight:400;color:var(--fg3);font-size:11px">${budOpen === r.e ? '▴' : '▾'}</span></td><td>${r.list.length}</td>
-        <td class="mg">${r.m ? won(r.m) : dash}</td><td class="mg">${r.g ? won(r.g) : dash}</td><td class="tot">${won(r.m + r.g)}</td>
+        <td class="mg">${r.mo ? won(r.mo) : dash}</td><td class="mg">${r.mp ? won(r.mp) : dash}</td><td class="mg">${r.g ? won(r.g) : dash}</td><td class="tot">${won(r.m + r.g)}</td>
         <td class="sh">${bars(r)}${((r.m + r.g) / T * 100).toFixed(1)}%</td></tr>
-      ${budOpen === r.e ? `<tr class="det"><td colspan="7"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}</span><span class="amt">${a.g ? `메타 ${a.m ? won(a.m) : '–'} · 구글 ${won(a.g)} = ` : ''}<b>${won(a.m + a.g)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
-    <tr class="sumrow"><td></td><td class="l">합계</td><td>${live.length}</td><td>${won(M)}</td><td>${won(Gg)}</td><td class="tot">${won(T)}</td><td class="sh">메타 ${(M / T * 100).toFixed(1)}% · 구글 ${(Gg / T * 100).toFixed(1)}%</td></tr>
+      ${budOpen === r.e ? `<tr class="det"><td colspan="8"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}</span><span class="amt">${a.g ? `메타 ${a.m ? won(a.m) : '–'} · 구글 ${won(a.g)} = ` : ''}<b>${won(a.m + a.g)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
+    <tr class="sumrow"><td></td><td class="l">합계</td><td>${live.length}</td><td>${won(MO)}</td><td>${won(MP)}</td><td>${won(Gg)}</td><td class="tot">${won(T)}</td><td class="sh">메타 ${(M / T * 100).toFixed(1)}% · 구글 ${(Gg / T * 100).toFixed(1)}%</td></tr>
     </tbody></table></div>`;
 }
 
