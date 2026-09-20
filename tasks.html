@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609202139">
-<script src="common.js?v=202609202139"></script>
+<link rel="stylesheet" href="common.css?v=202609202146">
+<script src="common.js?v=202609202146"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -66,6 +66,8 @@
   .tablewrap.hiwrap{border-color:#f2c4c4}
   .tablewrap.hiwrap thead th{background:#fff5f5}
   table.tk td{overflow:hidden}
+  /* 제목 더블클릭 → 그 자리에서 고치기 */
+  .tedit{font:inherit;font-weight:500;width:100%;min-width:160px;padding:3px 6px;border:1px solid var(--blue);border-radius:4px;background:var(--bg);color:var(--fg)}
   .orderbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--fg2)}
 </style>
 </head>
@@ -301,7 +303,7 @@ function tableHtml(list){
   const th = (view === 'received' ? '<th class="grip"></th>' : '') + cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(curSort(), k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
   const rowHtml = (t, grp) => {
     const cells = {
-      title: `<td><span class="title">${esc(t.title)}</span>${cmtHtml(t)}</td>`,
+      title: `<td><span class="title" ${isDone(t) ? '' : `data-title="${t.id}" title="더블클릭하면 제목을 바로 고칠 수 있습니다"`}>${esc(t.title)}</span>${cmtHtml(t)}</td>`,
       assignee: `<td>${who(t.assignee)}</td>`,
       created_by: `<td>${who(t.created_by)}</td>`,
       due_date: `<td>${dueHtml(t.due_date, isDone(t))}</td>`,
@@ -332,6 +334,24 @@ function alignTables(){
   const sum = w.reduce((a, b) => a + b, 0); if (ti >= 0) w[ti] = Math.max(180, w[ti] - (sum - W));
   const total = w.reduce((a, b) => a + b, 0);
   tbs.forEach(tb => { tb.style.tableLayout = 'fixed'; tb.style.width = '100%'; [...tb.rows[0].cells].forEach((c, i) => { c.style.width = (w[i] / total * 100) + '%'; }); });
+}
+/* 제목을 그 자리에서 고치기: Enter·다른 곳 누르기 = 저장, Esc = 취소 (기록에는 남기지 않음) */
+function editTitle(sp){
+  const t = T().find(x => x.id === sp.dataset.title); if (!t || isDone(t)) return;
+  const tr = sp.closest('tr'), wasDrag = tr && tr.getAttribute('draggable');
+  if (tr) tr.removeAttribute('draggable');   // 고치는 동안에는 줄 끌기를 꺼야 글자를 마우스로 고를 수 있음
+  const inp = document.createElement('input'); inp.className = 'tedit'; inp.value = t.title; inp.maxLength = 200;
+  sp.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = async save => {
+    if (done) return; done = true;
+    const title = inp.value.trim();
+    if (save && title && title !== t.title) { await saveRow('tasks', { ...t, title }); toast('제목을 바꿨습니다'); }
+    else { if (save && !title) toast('제목은 비울 수 없습니다', true); if (tr && wasDrag) tr.setAttribute('draggable', wasDrag); renderView(); }
+  };
+  inp.onclick = e => e.stopPropagation();
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
+  inp.onblur = () => finish(true);
 }
 /* 표에서 우선순위를 바로 바꿀 수 있는 사람: 담당자, 요청자, 관리자 (완료된 업무는 제외) */
 const canPr = t => !isDone(t) && (t.assignee === me || t.created_by === me || isAdmin());
@@ -401,7 +421,14 @@ function bindView(){
   const v = $('#view');
   alignTables();
   bindSort(curSort(), renderView, { title: 'asc', assignee: 'asc', created_by: 'asc', due_date: 'asc', status: 'asc', priority: 'asc' });
-  v.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, select')) return; openTask(tr.dataset.id); });
+  // 제목은 한 번 누르면 업무 창, 더블클릭하면 그 자리에서 고치기 → 제목 위에서는 한 번 누름을 잠깐 기다렸다가 처리
+  let clickTimer = null;
+  v.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => {
+    if (e.target.closest('button, select, input')) return;
+    if (e.target.closest('[data-title]')) { clearTimeout(clickTimer); clickTimer = setTimeout(() => openTask(tr.dataset.id), 280); return; }
+    openTask(tr.dataset.id);
+  });
+  v.querySelectorAll('[data-title]').forEach(sp => sp.ondblclick = e => { e.stopPropagation(); clearTimeout(clickTimer); editTitle(sp); });
   v.querySelectorAll('[data-pr]').forEach(sel => { sel.onclick = e => e.stopPropagation(); sel.onchange = () => setPriority(sel.dataset.pr, sel.value); });
   const ob = $('#orderBtn'); if (ob) ob.onclick = () => { sortMine.key = 'manual'; sortMine.dir = 'asc'; renderView(); };
   // 내 업무: 줄을 끌어서 순서 바꾸기 (줄의 위쪽 절반에 놓으면 그 앞, 아래쪽 절반이면 그 뒤)
