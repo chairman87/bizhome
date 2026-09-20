@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201301">
-<script src="common.js?v=202609201301"></script>
+<link rel="stylesheet" href="common.css?v=202609201305">
+<script src="common.js?v=202609201305"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -76,6 +76,29 @@
   .sync .det{margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
   .sync .det h4{margin:0 0 3px;font-size:12px;color:#1e3a8a}
   .sync .det div div{font-size:12px;color:var(--fg);line-height:1.5}
+  /* 예산 현황 */
+  .bsum{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .bsum .k{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;min-width:170px}
+  .bsum .k .t{font-size:12px;color:var(--fg2)}
+  .bsum .k .v{font-size:20px;font-weight:700;margin-top:2px}
+  .bsum .k .v small{font-size:12px;font-weight:500;color:var(--fg2);margin-left:4px}
+  table.bud{min-width:760px}
+  table.bud th{background:#fffbea;color:#292524;font-size:13px;font-weight:600;padding:9px 10px;border-bottom:2px solid #e0c25a;text-align:right;white-space:nowrap}
+  table.bud th.l,table.bud td.l{text-align:left}
+  table.bud td{padding:8px 10px;font-size:14px;text-align:right;white-space:nowrap}
+  table.bud tr.ed{cursor:pointer}
+  table.bud tr.ed:hover td{background:var(--bg2)}
+  table.bud td.rk{text-align:center;font-weight:700;width:44px;color:var(--fg2)}
+  table.bud tr.ed:nth-child(-n+3) td.rk{color:#b45309}
+  table.bud td.nm{font-weight:700}
+  table.bud td.tot{font-weight:700;font-size:15px}
+  table.bud .bar{display:inline-block;height:10px;border-radius:5px;background:#0866FF;vertical-align:middle;margin-right:8px;min-width:2px}
+  table.bud td.sh{width:34%;text-align:left;color:var(--fg2);font-size:12px}
+  table.bud tr.sumrow td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
+  table.bud tr.det td{background:var(--bg2);text-align:left;white-space:normal;padding:6px 10px 12px 54px}
+  .vlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px 18px;font-size:12px}
+  .vlist div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:2px 0}
+  .vlist div span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lk{font-size:10px;opacity:.55;margin-left:3px;cursor:help}
 </style>
 </head>
@@ -128,9 +151,9 @@ function normalize(table, a){ if (table !== 'ads') return a; return { ...a, prod
 
 /* ---------- 화면 ---------- */
 function render(){
-  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }];
+  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }, { key: 'budget', label: '예산 현황' }];
   $('#app').innerHTML = headerHtml({ icon: '🎬', title: '광고 영상 리스트', tabs, active: view })
-    + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : productHtml(view)}</main>`;
+    + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : view === 'budget' ? budgetHtml() : productHtml(view)}</main>`;
   bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
   bindView();
 }
@@ -220,6 +243,33 @@ async function addFromRow(){
   const t = $('#nTitle'); if (t) t.focus();
 }
 
+/* 예산 현황: 메타에서 실제 운영중인 영상의 일예산을 편집자별로 합계 → 큰 순서 (예산·운영 여부는 매일 오전 10시에 메타에서 자동 반영된 값) */
+let budOpen = '';   // 펼쳐 본 편집자
+function budgetHtml(){
+  const won = v => Math.round(v).toLocaleString('ko-KR');
+  const live = G().filter(a => a.meta_state === '운영중' && /^\d+$/.test(budgetKey(a.meta_budget))).map(a => ({ ...a, b: Number(budgetKey(a.meta_budget)) }));
+  const total = live.reduce((t, a) => t + a.b, 0);
+  const byEd = {};
+  live.forEach(a => { const e = a.editor || '편집자 미지정'; (byEd[e] = byEd[e] || []).push(a); });
+  const rank = Object.entries(byEd).map(([e, list]) => ({ e, list: list.sort((x, y) => y.b - x.b), sum: list.reduce((t, a) => t + a.b, 0) })).sort((x, y) => y.sum - x.sum);
+  const max = rank.length ? rank[0].sum : 1;
+  const pSum = (list, p) => list.filter(a => a.product === p).reduce((t, a) => t + a.b, 0);
+  const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
+  if (!live.length) return `<div class="empty">메타에서 운영중인 영상이 없습니다.</div>`;
+  return `<div class="bsum">
+      <div class="k"><div class="t">메타 운영중 일예산 합계</div><div class="v">${won(total)}<small>원/일</small></div></div>
+      ${PRODUCTS.map(p => `<div class="k"><div class="t">${p}</div><div class="v">${won(pSum(live, p))}<small>${live.filter(a => a.product === p).length}개</small></div></div>`).join('')}
+    </div>
+    <div class="hint" style="margin-bottom:8px">메타 광고 관리자에서 <b>지금 켜져 있는 영상</b>의 <b>하루 예산</b>을 편집자별로 더한 값입니다${last ? ` (메타 반영 ${fmtDateTime(last.synced_at)} 기준)` : ''}. 편집자 줄을 누르면 그 사람의 운영중 영상이 예산 큰 순서로 펼쳐집니다.</div>
+    <div class="tablewrap"><table class="bud"><thead><tr><th>순위</th><th class="l">편집자</th><th>일예산 합계</th><th class="l">비중</th><th>영상 수</th><th>영상당 평균</th>${PRODUCTS.map(p => `<th>${p}</th>`).join('')}</tr></thead><tbody>
+    ${rank.map((r, i) => `<tr class="ed" data-ed="${esc(r.e)}"><td class="rk">${i + 1}</td><td class="l nm">${esc(r.e)} <span style="font-weight:400;color:var(--fg3);font-size:11px">${budOpen === r.e ? '▴' : '▾'}</span></td><td class="tot">${won(r.sum)}</td>
+        <td class="sh"><span class="bar" style="width:${Math.max(1, Math.round(r.sum / max * 70))}%"></span>${(r.sum / total * 100).toFixed(1)}%</td><td>${r.list.length}</td><td>${won(r.sum / r.list.length)}</td>
+        ${PRODUCTS.map(p => `<td>${pSum(r.list, p) ? won(pSum(r.list, p)) : '<span style="color:var(--fg3)">–</span>'}</td>`).join('')}</tr>
+      ${budOpen === r.e ? `<tr class="det"><td colspan="${6 + PRODUCTS.length}"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}</span><b>${won(a.b)}</b></div>`).join('')}</div></td></tr>` : ''}`).join('')}
+    <tr class="sumrow"><td></td><td class="l">합계</td><td class="tot">${won(total)}</td><td class="sh">100%</td><td>${live.length}</td><td>${won(total / live.length)}</td>${PRODUCTS.map(p => `<td>${won(pSum(live, p))}</td>`).join('')}</tr>
+    </tbody></table></div>`;
+}
+
 /* 월별 현황: 제품별·제작자별 개수 + 월~금 달력 */
 function monthHtml(){
   const [y, m] = month.split('-').map(Number);
@@ -265,6 +315,8 @@ function bindView(){
   document.querySelectorAll('[data-google]').forEach(b => b.onclick = async e => { e.stopPropagation(); const a = G().find(x => x.id === b.dataset.google); await saveRow('ads', { ...a, google: !a.google, updated_by: me }); });   // 구글 O/X 토글
   document.querySelectorAll('select[data-status]').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { const a = G().find(x => x.id === s.dataset.status); await saveRow('ads', { ...a, status: s.value, updated_by: me }); }; });
   document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = e => { e.stopPropagation(); inlineEdit(el); });
+  document.querySelectorAll('table.bud tr.ed').forEach(tr => tr.onclick = () => { budOpen = budOpen === tr.dataset.ed ? '' : tr.dataset.ed; render(); });
+  document.querySelectorAll('table.bud [data-open]').forEach(d => d.onclick = e => { e.stopPropagation(); openAd(d.dataset.open); });
   const mp = $('#mPrev'); if (mp) {
     const shift = n => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); month = ymd(d).slice(0, 7); render(); };
     mp.onclick = () => shift(-1); $('#mNext').onclick = () => shift(1); $('#mToday').onclick = () => { month = todayStr().slice(0, 7); render(); };
