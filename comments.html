@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>댓글 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609201457">
+<script src="common.js?v=202609201457"></script>
+<style>
+  .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
+  .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+  .info details{margin-top:4px;color:var(--fg2)} .info summary{cursor:pointer}
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .chip-f{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 13px;font-size:13px;cursor:pointer;color:var(--fg2)}
+  .chip-f.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;font-weight:600}
+  .grp{margin:18px 0 6px;font-size:13px;font-weight:700;color:var(--fg2);display:flex;gap:8px;align-items:center}
+  .grp .pg{font-weight:500;color:var(--fg3)}
+  .cm{display:flex;gap:12px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px}
+  .cm.hid{background:var(--bg2)} .cm.hid .cbody{color:var(--fg2)}
+  .cm.del{opacity:.6} .cm.del .cbody{text-decoration:line-through}
+  .cm .main{flex:1;min-width:0}
+  .cm .meta{font-size:12px;color:var(--fg3);margin-bottom:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .cm .meta b{color:var(--fg2);font-weight:600}
+  .cm .cbody{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+  .cm .cbody.none{color:var(--fg3);font-style:italic}
+  .cm .side{flex:none;display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:150px}
+  .cm .side .row{display:flex;gap:6px}
+  .pf{font-size:11px;border-radius:999px;padding:1px 8px;font-weight:600}
+  .pf.fb{background:#e8f0fe;color:#1a56c4} .pf.ig{background:#fde8f3;color:#b0186b}
+  .st{font-size:11px;border-radius:4px;padding:1px 7px;font-weight:600;white-space:nowrap}
+  .st.v{background:#dcfce7;color:#166534} .st.h{background:#e5e7eb;color:#4b5563} .st.d{background:#fee2e2;color:#b91c1c}
+  .wait{font-size:12px;color:#92400e;background:#fffbea;border:1px solid #e0c25a;border-radius:6px;padding:3px 8px;text-align:right;line-height:1.5}
+  .fail{font-size:12px;color:#b91c1c;text-align:right;max-width:220px;line-height:1.4}
+  .btn.sm{padding:4px 10px;font-size:12px}
+  .logt{width:100%;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg);font-size:13px}
+  .logt th{background:#fffbea;text-align:left;padding:7px 10px;font-size:12px;border-bottom:1px solid #e0c25a;white-space:nowrap}
+  .logt td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  @media(max-width:640px){ .cm{flex-direction:column} .cm .side{align-items:flex-start;flex-direction:row;flex-wrap:wrap;min-width:0} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   댓글 관리 — 메타(페이스북·인스타) 광고에 달린 댓글을 브랜드별로 보고, 숨기기/다시 보이기/삭제를 "요청"하는 화면
+   · 댓글(ad_comments)은 대표 PC 의 META-COMMENTS\sync.py 가 메타에서 읽어 와 채움 (이 화면은 읽기만)
+   · 버튼을 누르면 ad_comment_actions 에 요청 한 줄이 쌓이고, sync.py 가 다음 실행 때 메타에 반영한 뒤 결과(완료/실패)를 적음
+   · 메타 접속 키는 이 화면·저장소 어디에도 없음
+================================================================ */
+const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
+const ACT_LABEL = { hide: '숨기기', unhide: '다시 보이기', delete: '삭제' };
+let view = '레모너리';      // 탭: 브랜드 3개 + 'log'(처리 기록)
+let filt = 'visible';       // visible / hidden / deleted / all
+let q = '';
+
+const CM = () => DATA.ad_comments || [];
+const ACTS = () => (DATA.ad_comment_actions || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const lastSync = () => (DATA.ad_comment_sync || []).find(r => r.id === 'last');
+/* 댓글별 가장 최근 요청 (대기 중이거나 실패한 것을 화면에 보여 주려고) */
+function latestActs(){ const m = {}; ACTS().forEach(a => { if (!m[a.comment_id] && a.status !== '취소') m[a.comment_id] = a; }); return m; }
+const needLook = p => CM().filter(c => c.product === p && !c.deleted && !c.hidden).length;
+
+function render(){
+  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: needLook(p) || '' })), null, { key: 'log', label: '처리 기록' }];
+  $('#app').innerHTML = headerHtml({ icon: '💬', title: '댓글 관리', tabs, active: view }) + `<main class="wrap" style="max-width:1000px">${!DATA.ad_comments ? `<div class="empty">댓글 저장 표가 아직 없습니다.${isAdmin() ? ' sql-ad-comments.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : (syncHtml() + (view === 'log' ? logHtml() : listHtml()))}</main>`;
+  bindHeader(k => { view = k; render(); window.scrollTo(0, 0); }, null, null);
+  document.querySelectorAll('.chip-f').forEach(b => b.onclick = () => { filt = b.dataset.f; render(); });
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => request(b.dataset.id, b.dataset.act));
+  document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => cancel(b.dataset.cancel));
+}
+
+function syncHtml(){
+  const s = lastSync(); if (!s) return `<div class="info old">아직 한 번도 동기화되지 않았습니다.</div>`;
+  const mins = Math.round((Date.now() - new Date(s.synced_at)) / 60000), old = mins > 90, sm = s.summary || {};
+  return `<div class="info ${old ? 'old' : ''}">🔄 마지막으로 메타에서 읽어 온 시각 <b>${fmtDateTime(s.synced_at)}</b> (${mins < 1 ? '방금' : mins < 60 ? mins + '분 전' : Math.round(mins / 60) + '시간 전'})${old ? ' — 오래됐습니다. 대표 PC 가 꺼져 있을 수 있어요.' : ''}
+    · 버튼을 누르면 <b>요청</b>으로 쌓이고, 다음 동기화 때 메타에 반영됩니다. <b>숨기기는 언제든 되돌릴 수 있지만 삭제는 되돌릴 수 없습니다.</b>
+    ${isAdmin() && (sm.problems || []).length ? `<details><summary>읽지 못한 곳 ${sm.problems.length}건 (관리자에게만 보임)</summary>${sm.problems.map(p => `<div>· ${esc(p)}</div>`).join('')}</details>` : ''}</div>`;
+}
+
+function listHtml(){
+  const acts = latestActs();
+  const mine = CM().filter(c => c.product === view);
+  const cnt = { visible: mine.filter(c => !c.deleted && !c.hidden).length, hidden: mine.filter(c => !c.deleted && c.hidden).length, deleted: mine.filter(c => c.deleted).length, all: mine.length };
+  const ql = q.trim().toLowerCase();
+  const list = mine.filter(c => filt === 'all' || (filt === 'deleted' ? c.deleted : !c.deleted && (filt === 'hidden') === !!c.hidden))
+    .filter(c => !ql || [c.body, c.campaign, c.author, c.page].some(v => (v || '').toLowerCase().includes(ql)))
+    .sort((a, b) => String(b.posted_at || '').localeCompare(String(a.posted_at || '')));
+  /* 캠페인(영상)별로 묶되, 최근 댓글이 달린 영상이 위로 */
+  const groups = []; list.forEach(c => { let g = groups.find(x => x.k === c.campaign); if (!g) groups.push(g = { k: c.campaign, page: c.page, items: [] }); g.items.push(c); });
+  const F = [['visible', '보이는 댓글'], ['hidden', '숨긴 댓글'], ['deleted', '삭제됨'], ['all', '전체']];
+  return `<div class="actions">${F.map(([k, l]) => `<button class="chip-f ${filt === k ? 'on' : ''}" data-f="${k}">${l} ${cnt[k]}</button>`).join('')}
+      <input type="search" id="fq" placeholder="댓글·영상 검색" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:200px;margin-left:auto"></div>
+    ${list.length ? groups.map(g => `<div class="grp">🎬 ${esc(g.k || '(캠페인 이름 없음)')} <span class="pg">${esc(g.page || '')} · ${g.items.length}개</span></div>` + g.items.map(c => cardHtml(c, acts[c.id])).join('')).join('')
+      : `<div class="empty">${ql ? '검색 결과가 없습니다.' : filt === 'visible' ? '지금 보이는 댓글이 없습니다. 👍' : '해당하는 댓글이 없습니다.'}</div>`}`;
+}
+
+function cardHtml(c, a){
+  const pending = a && a.status === '대기', failed = a && a.status === '실패';
+  const st = c.deleted ? `<span class="st d">삭제됨</span>` : c.hidden ? `<span class="st h">숨김</span>` : `<span class="st v">보임</span>`;
+  let side = st;
+  if (c.deleted) side += `<div class="hint" style="text-align:right">${esc(c.deleted_note || '')}</div>`;
+  else if (pending) side += `<div class="wait">⏳ <b>${ACT_LABEL[a.action]}</b> 요청됨<br>${esc(a.requested_by || '')} · ${fmtDateTime(a.created_at).slice(5)}</div><button class="btn sm" data-cancel="${a.id}">요청 취소</button>`;
+  else side += `<div class="row">${c.hidden ? `<button class="btn sm" data-act="unhide" data-id="${esc(c.id)}">다시 보이기</button>` : `<button class="btn sm primary" data-act="hide" data-id="${esc(c.id)}">숨기기</button>`}<button class="btn sm danger" data-act="delete" data-id="${esc(c.id)}">삭제</button></div>${failed ? `<div class="fail">⚠ 지난 ${ACT_LABEL[a.action]} 요청 실패: ${esc(a.error || '')}</div>` : ''}`;
+  return `<div class="cm ${c.deleted ? 'del' : c.hidden ? 'hid' : ''}"><div class="main">
+      <div class="meta"><span class="pf ${c.platform === '인스타' ? 'ig' : 'fb'}">${esc(c.platform || '')}</span>${c.is_reply ? '<span>↳ 답글</span>' : ''}${c.author ? `<b>${esc(c.author)}</b>` : ''}<span>${esc(c.posted_at || '')}</span>${c.likes ? `<span>♥ ${c.likes}</span>` : ''}${c.link ? `<a href="${esc(c.link)}" target="_blank" rel="noopener">메타에서 보기 ↗</a>` : ''}</div>
+      <div class="cbody ${c.body ? '' : 'none'}">${c.body ? esc(c.body) : '(글 없이 사진·스티커만 있는 댓글)'}</div></div>
+    <div class="side">${side}</div></div>`;
+}
+
+function logHtml(){
+  const byId = {}; CM().forEach(c => byId[c.id] = c);
+  const rows = ACTS().slice(0, 200);
+  return rows.length ? `<table class="logt"><thead><tr><th>요청 시각</th><th>누가</th><th>무엇을</th><th>브랜드 · 영상</th><th>댓글</th><th>결과</th></tr></thead><tbody>${rows.map(a => { const c = byId[a.comment_id] || {};
+    return `<tr><td style="white-space:nowrap">${fmtDateTime(a.created_at)}</td><td style="white-space:nowrap">${esc(a.requested_by || '')}</td><td style="white-space:nowrap">${ACT_LABEL[a.action] || esc(a.action)}</td><td>${esc(c.product || '')} · ${esc(c.campaign || '')}</td><td>${esc((a.body || c.body || '').slice(0, 80))}</td>
+      <td style="white-space:nowrap">${a.status === '완료' ? '<span class="st v">완료</span>' : a.status === '실패' ? `<span class="st d" title="${esc(a.error || '')}">실패</span>` : a.status === '취소' ? '<span class="st h">취소</span>' : '<span class="st" style="background:#fffbea;color:#92400e">대기</span>'}</td></tr>`; }).join('')}</tbody></table>
+    <div class="hint" style="margin-top:8px">최근 200건까지 보입니다.</div>` : `<div class="empty">아직 처리 기록이 없습니다.</div>`;
+}
+
+async function request(id, action){
+  const c = CM().find(x => x.id === id); if (!c) return;
+  if (latestActs()[id] && latestActs()[id].status === '대기') { toast('이미 요청이 들어가 있습니다', true); return; }
+  if (action === 'delete' && !confirm(`이 댓글을 삭제할까요?\n\n"${(c.body || '(글 없음)').slice(0, 100)}"\n\n삭제는 되돌릴 수 없습니다. 애매하면 "숨기기"를 쓰세요.`)) return;
+  await saveRow('ad_comment_actions', { id: uid(), comment_id: id, action, requested_by: me, status: '대기', body: c.body || '', created_at: nowIso() });
+  toast(`${ACT_LABEL[action]} 요청을 넣었습니다 · 다음 동기화 때 반영됩니다`);
+}
+async function cancel(actId){
+  const a = (DATA.ad_comment_actions || []).find(x => x.id === actId); if (!a || a.status !== '대기') { toast('이미 처리된 요청입니다', true); return; }
+  await saveRow('ad_comment_actions', { ...a, status: '취소' }); toast('요청을 취소했습니다');
+}
+
+boot({ icon: '💬', title: '댓글 관리', tables: ['ad_comments', 'ad_comment_actions', 'ad_comment_sync'], render });
+</script>
+</body>
+</html>
