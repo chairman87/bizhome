@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201211">
-<script src="common.js?v=202609201211"></script>
+<link rel="stylesheet" href="common.css?v=202609201223">
+<script src="common.js?v=202609201223"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -89,7 +89,7 @@ const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑'
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
 let view = LS.get('ads_view') || PRODUCTS[0];
-let filter = { q: '', editor: '', meta: '', budget: '', google: '', status: '' };
+let filter = { q: '', editor: '', meta: '', mstate: '', budget: '', google: '', status: '' };
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let sort = { key: 'date', dir: 'desc' };
 
@@ -103,6 +103,9 @@ const budgetKey = v => String(v || '').replace(/,/g, '').trim().toUpperCase();  
 const budgets = () => [...new Set(G().map(a => budgetKey(a.meta_budget)).filter(Boolean))].sort((x, y) => (x === 'OFF') - (y === 'OFF') || Number(x) - Number(y));
 const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(String(b).replace(/,/g, '')); return isNaN(n) ? esc(b) : n.toLocaleString('ko-KR'); };
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
+const MSTATES = ['운영중', 'OFF', '미연결'];
+const mstateOf = a => a.meta_state === '운영중' || a.meta_state === 'OFF' ? a.meta_state : '미연결';   // 메타에서 실제로 켜져 있는지 (매일 10시 자동 반영)
+const mstateHtml = a => { const m = mstateOf(a); return m === '운영중' ? '<span class="run">운영중</span>' : m === 'OFF' ? '<span class="off">OFF</span>' : '<span style="color:var(--fg3)" title="메타 캠페인과 아직 연결되지 않은 줄입니다. 새로 넣은 줄은 다음 날 오전 10시에 자동으로 연결됩니다.">–</span>'; };
 const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
 function normalize(table, a){ if (table !== 'ads') return a; return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중', google: !!a.google }; }
 
@@ -136,19 +139,19 @@ function syncHtml(p){
 function listOf(p){
   const q = filter.q.trim().toLowerCase();
   return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
-    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
   const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '메타'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
-      <span class="count">${(filter.editor || filter.meta || filter.budget || filter.status) ? `<b>${[filter.editor, filter.meta, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
+      <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px">맨 위 <b>노란 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다. <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인(이름: 게재일_타이틀_편집자)도 자동으로 들어옵니다.</div>
     <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
-      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
+      const HF = { editor: ['editor', editors()], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
       if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
       const [fk, opts] = HF, cur = filter[fk];
       return `<th class="c"><select data-hf="${fk}" title="${l}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}: 전체</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
@@ -158,18 +161,20 @@ function productHtml(p){
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
       <td class="c"><select id="nEditor" style="width:80px">${editorOpts(lastNew.editor)}</select></td>
       <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c hint" title="메타 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
       <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>
       <td class="c"><select id="nStatus" title="새로 넣을 영상의 상태 (걸러 보기는 위 '상태 보기' 버튼)">${STATUSES.map(s => `<option ${s === (filter.status || '운영중') ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="9" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.budget || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="10" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
       <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
+      <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
       <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 예산과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
@@ -229,7 +234,7 @@ function bindView(){
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
   document.querySelectorAll('[data-fs]').forEach(b => b.onclick = e => { e.preventDefault(); filter.status = (b.tagName === 'BUTTON' && b.dataset.fs === filter.status) ? '' : b.dataset.fs; render(); });   // 상태 버튼: 누르면 걸리고 다시 누르면 풀림
   document.querySelectorAll('select[data-hf]').forEach(h => { h.onclick = e => e.stopPropagation(); h.onchange = () => { filter[h.dataset.hf] = h.value; render(); }; });   // 열 머리 필터
-  const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.budget = filter.status = ''; render(); };
+  const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.mstate = filter.budget = filter.google = filter.status = ''; render(); };
   bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
   document.querySelectorAll('[data-google]').forEach(b => b.onclick = async e => { e.stopPropagation(); const a = G().find(x => x.id === b.dataset.google); await saveRow('ads', { ...a, google: !a.google, updated_by: me }); });   // 구글 O/X 토글

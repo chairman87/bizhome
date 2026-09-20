@@ -2,6 +2,7 @@
 -- (매일 오전 10시에 ADS-SYNC\ads_sync.py 가 메타 캠페인의 예산·켜짐/꺼짐을 읽어 ads 표에 맞춤)
 alter table ads add column if not exists meta_campaign_id text;          -- 짝지은 메타 캠페인 번호
 alter table ads add column if not exists meta_synced_at  timestamptz;    -- 마지막으로 메타 값이 반영된 시각
+alter table ads add column if not exists meta_state       text;           -- 메타에서 실제로 켜져 있는지: 운영중 / OFF (화면의 "메타" 열, 비어 있으면 미연결)
 
 create table if not exists ads_sync (
   id        uuid primary key,
