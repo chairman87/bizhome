@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201255">
-<script src="common.js?v=202609201255"></script>
+<link rel="stylesheet" href="common.css?v=202609201258">
+<script src="common.js?v=202609201258"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -16,6 +16,13 @@
   table.ads th[data-sort]:hover{color:#292524;background:#fef3c7}
   table.ads th .arrow{color:#b45309}
   table.ads td{padding:5px 8px;font-size:13px}
+  /* 묶음 제목 줄: 메타(페이지명·운영여부·예산) / 틱톡 / 구글 */
+  table.ads th.grp{padding:5px 8px;font-size:13px;font-weight:700;letter-spacing:.08em;border-bottom:1px solid #e0c25a}
+  table.ads th.g-meta{background:#dbeafe;color:#1e3a8a}
+  table.ads th.g-tt{background:#e7e5e4;color:#1c1917}
+  table.ads th.g-gg{background:#dcfce7;color:#166534}
+  table.ads th.gl{border-left:2px solid #e0c25a}
+  table.ads tbody td:nth-child(4),table.ads tbody td:nth-child(7),table.ads tbody td:nth-child(8),table.ads.g tbody td:nth-child(10){border-left:2px solid var(--line)}
   td.c{text-align:center;white-space:nowrap}
   td.ttl{font-weight:500;min-width:220px}
   td.note{color:var(--fg2);font-size:12px;max-width:260px;white-space:pre-wrap;word-break:break-word}
@@ -149,7 +156,7 @@ function listOf(p){
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google_state', '구글 운영'], ['google', '구글'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google_state', '운영여부'], ['google', '구글'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
@@ -157,12 +164,19 @@ function productHtml(p){
       <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인도 자동으로 들어옵니다.</div>
     </div>
-    <div class="tablewrap"><table class="ads"><thead><tr>${cols.map(([k, l]) => {
-      const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']], status: ['status', STATUSES] }[k];   // 열 머리 필터: [filter 키, 선택지]
-      if (!HF) return `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`;
-      const [fk, opts] = HF, cur = filter[fk];
-      return `<th class="c"><select data-hf="${fk}" title="${l}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
-    }).join('')}</tr></thead><tbody>
+    <div class="tablewrap"><table class="ads ${hasGoogle(p) ? 'g' : ''}"><thead>${(() => {
+      const GROUP = { meta_account: '메타', meta_state: '메타', meta_budget: '메타', tiktok: '틱톡', google_state: '구글', google: '구글' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg' };
+      const th = ([k, l], attr = '', cls = '') => {
+        const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']] }[k];   // 열 머리 필터: [filter 키, 선택지]
+        if (!HF) return `<th data-sort="${k}" class="${cls}" ${attr}>${l}${sortArrow(sort, k)}</th>`;
+        const [fk, opts] = HF, cur = filter[fk], name = GROUP[k] === '구글' && k === 'google_state' ? '구글 운영여부' : l;
+        return `<th class="c ${cls}" ${attr}><select data-hf="${fk}" title="${name}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
+      };
+      const first = (c, i) => i === 0 || GROUP[cols[i - 1][0]] !== GROUP[c[0]];   // 묶음의 첫 열인지
+      const top = cols.map((c, i) => !GROUP[c[0]] ? th(c, 'rowspan="2"', i && GROUP[cols[i - 1][0]] ? 'gl' : '') : first(c, i) ? `<th class="grp gl ${GCLS[GROUP[c[0]]]}" colspan="${cols.filter(x => GROUP[x[0]] === GROUP[c[0]]).length}">${GROUP[c[0]]}</th>` : '').join('');
+      const sub = cols.map((c, i) => GROUP[c[0]] ? th(c, '', first(c, i) ? 'gl' : '') : '').join('');
+      return `<tr>${top}</tr><tr>${sub}</tr>`;
+    })()}</thead><tbody>
     <tr class="newrow">
       <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
