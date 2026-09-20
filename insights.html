@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>마케팅 인사이트</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609201351">
+<script src="common.js?v=202609201351"></script>
+<style>
+  .wrap-doc{max-width:980px}
+  .lead{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;margin-bottom:16px}
+  .lead h1{margin:0 0 6px;font-size:22px}
+  .lead .meta{font-size:12px;color:var(--fg2);margin-bottom:10px}
+  .lead p{margin:6px 0;font-size:14px;line-height:1.7}
+  .terms{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .terms span{background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;color:var(--fg2)}
+  .terms b{color:var(--fg)}
+  .ins{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+  .ins .no{display:inline-block;background:#fffbea;border:1px solid #e0c25a;color:#92400e;border-radius:999px;font-size:12px;font-weight:700;padding:1px 10px;margin-bottom:8px}
+  .ins h2{margin:0 0 6px;font-size:18px;line-height:1.4}
+  .ins .sum{font-size:14px;line-height:1.75;color:var(--fg);margin:0 0 12px}
+  .ins table{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:10px 0}
+  .ins th{background:#fffbea;color:#292524;font-size:12px;font-weight:600;padding:7px 10px;text-align:left;border-bottom:1px solid #e0c25a;white-space:nowrap}
+  .ins td{font-size:13px;padding:7px 10px;border-bottom:1px solid var(--line)}
+  .ins tr:last-child td{border-bottom:0}
+  .ins td.n,.ins th.n{text-align:right;white-space:nowrap}
+  .ins tr.avg td{background:var(--bg2);color:var(--fg2);font-size:12px}
+  .ins .cap{font-size:12px;color:var(--fg2);font-weight:600;margin:14px 0 0}
+  .good{background:#dcfce7;color:#166534;border-radius:4px;padding:1px 7px;font-size:12px;font-weight:600;white-space:nowrap}
+  .bad{background:#fee2e2;color:#b91c1c;border-radius:4px;padding:1px 7px;font-size:12px;font-weight:600;white-space:nowrap}
+  .mid{background:var(--bg2);color:var(--fg2);border-radius:4px;padding:1px 7px;font-size:12px;white-space:nowrap}
+  .p-레{color:#1d4ed8}.p-서{color:#15803d}.p-흑{color:#6d28d9}
+  .todo{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:14px;line-height:1.75;color:#1e3a8a}
+  .todo b.t{display:block;font-size:12px;letter-spacing:.04em;margin-bottom:2px}
+  .check{background:var(--bg);border:2px solid #e0c25a;border-radius:var(--radius);padding:16px 20px;margin-bottom:16px}
+  .check h2{margin:0 0 8px;font-size:17px}
+  .check li{font-size:14px;line-height:1.9}
+  .foot{font-size:12px;color:var(--fg2);text-align:center;margin:18px 0 30px;line-height:1.7}
+  .who{display:inline-block;font-size:11px;border:1px solid var(--line2);border-radius:999px;padding:0 8px;margin-left:6px;color:var(--fg2);vertical-align:middle;font-weight:500}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   마케팅 인사이트 — 광고 성과에서 "영상·파트너스 제작에 도움이 되는 것"만 뽑아 팀에 공유하는 화면
+   · 금액(지출·예산·CPA), 편집자별 비교, 예산 판단(증액·중단)은 싣지 않음. 효율(ROAS)도 숫자 대신 "평균보다 높음/낮음"으로만 표시.
+   · 새 기간의 보고서는 REPORTS 맨 앞에 하나 추가하면 위쪽 탭으로 나뉨.
+================================================================ */
+const G_ = '<span class="good">평균보다 높음</span>', B_ = '<span class="bad">평균보다 낮음</span>', M_ = '<span class="mid">평균 수준</span>';
+const P = c => `<b class="p-${c}">(${c})</b>`;
+const REPORTS = [{
+  key: '2026-08-09', label: '2026년 8~9월',
+  title: '8~9월 광고 영상에서 배운 것',
+  meta: '자료: 메타 광고 관리자 2026-08-01 ~ 09-19 · 레모너리 90개 · 서리맥스 68개 · 흑생마 10개 영상 · 정리 2026-09-20',
+  lead: ['두 달 동안 메타에서 돌린 영상 168개의 실제 성과(노출·클릭·구매)를 영상 단위로 묶어 봤습니다. <b>어떤 영상을 만들면 좋을지</b>에 도움이 되는 내용만 추렸습니다.'],
+  terms: [['클릭률', '광고를 본 사람 중 눌러 본 비율'], ['전환율', '눌러 본 사람 중 실제로 산 비율'], ['효율', '광고비 대비 매출. 브랜드 평균과 비교해 표시']],
+  items: [
+    { who: '전체', h: '히트작 하나가 전부를 바꿉니다',
+      sum: '레모너리는 영상 <b>90개 중 8개</b>, 서리맥스는 <b>68개 중 9개</b>가 광고의 절반을 책임지고 있습니다. 그리고 지금도 주력은 상반기에 터졌던 영상의 <b>수정본</b>입니다. 8~9월에 새로 만든 78개 가운데 크게 자란 영상은 3개였습니다.',
+      rows: { head: ['8~9월 신작 중 크게 자란 영상', '브랜드', '특징'], body: [[`두 그룹의 비교`, P('레'), '두 집단을 나눠 결과를 비교'], [`지윤씨의 변화`, P('레'), '실제 인물의 전후 변화'], [`전세계가 주목하는 (수정본)`, P('서'), '기존 히트작을 고쳐 다시 올림']] },
+      todo: '새 영상 10개를 고르게 만드는 것보다 <b>1개를 제대로 터뜨리는 것</b>이 훨씬 큽니다. 이미 검증된 히트작을 <b>새 각도로 변주</b>(다른 인물·다른 도입·다른 길이)하는 것도 좋은 방법입니다.' },
+    { who: '영상 제작', h: '터지는 공식은 "기간 + 비교" 실험 스토리',
+      sum: '세 브랜드 모두 <b>같은 형식</b>이 1등 자리에 있습니다. 제목에 <b>숫자와 기간</b>이 있고, <b>전과 후를 비교</b>해 보여 주고, <b>실제 인물</b>이 나옵니다.',
+      rows: { head: ['영상', '브랜드', '성적'], body: [['10주동안 레몬', P('레'), '레모너리 전체 1위'], ['10주동안서리태', P('서'), '서리맥스 4위'], ['10일 동안 흑생마', P('흑'), `흑생마 1위 · 효율도 ${G_}`], ['두 그룹의 비교', P('레'), `8월 신작 1위 · 효율 ${G_}`], ['지윤씨의 변화 · 2주동안같이먹으면', P('레'), '8월 신작 2·3위']] },
+      todo: '기획할 때 <b>"얼마 동안, 누가, 어떻게 달라졌나"</b> 한 줄로 설명되는지 먼저 확인해 보세요. 설명이 되면 이 공식에 들어맞는 영상입니다.' },
+    { who: '영상 제작', h: '많이 클릭되는 영상 ≠ 많이 팔리는 영상',
+      sum: '가장 잘 팔린 영상들은 의외로 <b>클릭률이 낮습니다</b>. 대신 누른 사람 <b>10명 중 1명이 삽니다</b>. 살 마음이 있는 사람만 누르게 만드는 영상이라는 뜻입니다. 반대로 <b>혈당·뱃살·나잇살</b>처럼 증상을 자극하는 도입부는 클릭과 시청은 가장 잘 끌었지만 구매로는 덜 이어졌습니다. 이런 소재는 <b>질병 예방·치료 오인</b>으로 수정 대상이 되기도 쉽습니다.',
+      rows: { head: ['잘 팔린 영상', '브랜드', '클릭률', '전환율', '효율'], num: [2, 3], body: [['왜 입소문인지 (심포니)', P('레'), '0.58%', '14.6%', G_], ['평범한 직장인', P('레'), '0.36%', '7.9%', G_], ['인간에게먹히면', P('레'), '0.68%', '10.0%', M_], ['요즘 대세', P('서'), '1.30%', '5.6%', G_], ['속부터채워요', P('서'), '1.06%', '5.5%', G_], ['발효 서리태 잔소리', P('서'), '1.10%', '5.2%', G_]],
+        avg: [['레모너리 평균', '', '0.98%', '7.3%', ''], ['서리맥스 평균', '', '1.54%', '3.8%', ''], ['증상 자극형 소재 평균 (레모너리 5개)', '', '1.4%', '6.8%', B_]] },
+      todo: '도입부에서 <b>겁을 주기</b>보다 <b>"나도 저렇게 되고 싶다"</b>, <b>"이건 믿을 만하다"</b>를 주는 쪽이 팔립니다. 후기·입소문·일상 속 사용 장면이 그 역할을 합니다. 클릭률이 낮게 나와도 걱정하지 마세요. 전환율이 높으면 좋은 영상입니다.' },
+    { who: '파트너스', h: '팔로워 수보다 "진짜 후기 같은가"',
+      sum: '레모너리에서는 <b>파트너스 영상이 가장 효율 좋은 형식</b>입니다. 그런데 성과는 팔로워 수와 상관이 없었습니다. <b>팔로워 800명</b>인 크리에이터가 3만 명대보다 잘 팔았습니다. 잘 된 영상의 공통점은 <b>담백한 실사용 후기</b>라는 것, 그리고 클릭률은 낮지만 전환율이 10% 안팎이라는 것입니다. 반대로 도입이 화려해 클릭률이 2~3%까지 나왔던 영상들은 전환율이 1~3%에 그쳐 효율이 가장 낮았습니다.',
+      rows: { head: ['잘 된 파트너스 영상', '팔로워', '클릭률', '전환율', '효율'], num: [1, 2, 3], body: [['김하연', '809', '0.61%', '10.5%', G_], ['듀이빈', '9,000', '0.67%', '10.3%', G_], ['서다흰', '2,000', '0.74%', '10.8%', G_], ['문건주', '26,000', '0.53%', '10.0%', G_], ['이지홍', '52,000', '0.67%', '10.2%', G_]] },
+      todo: '섭외할 때 팔로워 수보다 <b>"평소 일상·후기를 자연스럽게 말하는 사람인가"</b>를 먼저 봐 주세요. 가이드를 줄 때도 자극적인 도입보다 <b>먹게 된 계기 → 실제로 먹는 모습 → 느낀 변화</b> 순서의 담백한 구성이 좋습니다. 서리맥스는 파트너스가 아직 평균 수준이라, 잘 되는 형태를 계속 찾아보는 단계입니다.' },
+  ],
+  check: ['"얼마 동안 · 누가 · 어떻게 달라졌나"가 한 줄로 설명되나요?', '도입부가 증상으로 겁을 주고 있지 않나요? (혈당·뱃살·질병 연상 → 구매로도 덜 이어지고 수정 대상이 되기 쉬움)', '실제 사람, 실제로 먹는 장면이 들어가 있나요?', '이미 터졌던 영상의 변주로 만들 수 있는 아이디어인가요?', '(파트너스) 팔로워 수가 아니라 후기의 자연스러움으로 골랐나요?'],
+  foot: '효율은 메타가 추적한 자사몰 구매 기준이며, 영상끼리 비교하기 위한 상대 지표입니다. 9월에 올린 영상은 아직 자료가 적어 참고로만 봐 주세요.<br>영상별 운영 상태는 <a href="ads.html" style="color:var(--blue)">광고 영상 리스트</a>에서 볼 수 있습니다.',
+}];
+let view = REPORTS[0].key;
+
+function table(r){
+  if (!r) return '';
+  const num = r.num || [];
+  const tr = (cells, cls = '') => `<tr class="${cls}">${cells.map((c, i) => `<td class="${num.includes(i) ? 'n' : ''}">${c}</td>`).join('')}</tr>`;
+  return `<div class="tablewrap" style="border:0"><table><thead><tr>${r.head.map((h, i) => `<th class="${num.includes(i) ? 'n' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${r.body.map(c => tr(c)).join('')}${(r.avg || []).map(c => tr(c, 'avg')).join('')}</tbody></table></div>`;
+}
+function render(){
+  const R = REPORTS.find(r => r.key === view) || REPORTS[0];
+  $('#app').innerHTML = headerHtml({ icon: '💡', title: '마케팅 인사이트', tabs: REPORTS.length > 1 ? REPORTS.map(r => ({ key: r.key, label: r.label })) : [], active: view })
+    + `<main class="wrap wrap-doc">
+      <div class="lead"><h1>${R.title}</h1><div class="meta">${R.meta}</div>${R.lead.map(p => `<p>${p}</p>`).join('')}
+        <div class="terms">${R.terms.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join('')}</div></div>
+      ${R.items.map((it, i) => `<section class="ins"><span class="no">인사이트 ${i + 1}</span><span class="who">${it.who}</span><h2>${it.h}</h2><p class="sum">${it.sum}</p>${table(it.rows)}<div class="todo"><b class="t">그래서 이렇게</b>${it.todo}</div></section>`).join('')}
+      <section class="check"><h2>✅ 기획할 때 체크해 보세요</h2><ul>${R.check.map(c => `<li>${c}</li>`).join('')}</ul></section>
+      <div class="foot">${R.foot}</div>
+    </main>`;
+  bindHeader(k => { view = k; render(); window.scrollTo(0, 0); }, null, null);
+}
+boot({ icon: '💡', title: '마케팅 인사이트', tables: [], render });
+</script>
+</body>
+</html>
