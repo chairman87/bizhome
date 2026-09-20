@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201457">
-<script src="common.js?v=202609201457"></script>
+<link rel="stylesheet" href="common.css?v=202609201503">
+<script src="common.js?v=202609201503"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -34,6 +34,14 @@
   .ed button:hover{background:rgba(0,0,0,.06);color:var(--fg)}
   .ed button.del:hover{color:var(--red)}
   .editing .pg{cursor:pointer}
+  /* 메뉴 편집: 폴더·페이지를 끌어서 순서 바꾸기 */
+  .editing .dept[draggable=true]{cursor:grab}
+  .dept.dragging,.pg.dragging{opacity:.35}
+  .dept.drop-l{box-shadow:-5px 0 0 var(--blue)}
+  .dept.drop-r{box-shadow:5px 0 0 var(--blue)}
+  .dept.drop-in{outline:2px dashed var(--blue);outline-offset:-2px}
+  .pg.drop-before{box-shadow:0 -3px 0 var(--blue)}
+  .pg.drop-after{box-shadow:0 3px 0 var(--blue)}
   .editing .pg .soon{display:none}
   .editbar{background:#fff8e6;border:1px solid #f5e6a3;border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;font-size:13px;color:#7a5a00;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .emojis{display:flex;flex-wrap:wrap;gap:4px}
@@ -167,19 +175,19 @@ function render(){
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
-    ${editing ? `<div class="editbar">✎ 편집 중: 부서·페이지를 눌러 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제, ↑↓ 로 순서를 바꿉니다. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${editing ? `<div class="editbar">✎ 편집 중: 폴더와 페이지를 <b>끌어서</b> 순서를 바꾸거나 페이지를 다른 폴더로 옮길 수 있습니다(화살표 버튼도 됩니다). 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     ${editing ? '' : noticeBoard(notices) + decisionBoard()}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
-      return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}">
+      return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}" ${editing ? 'draggable="true"' : ''}>
         <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
           <span class="ed"><button data-dedit="${d.id}" title="부서 이름·색 바꾸기">✎</button><button data-dmove="${d.id}" data-dir="-1" ${di === 0 ? 'disabled' : ''} title="왼쪽으로">←</button><button data-dmove="${d.id}" data-dir="1" ${di === arr.length - 1 ? 'disabled' : ''} title="오른쪽으로">→</button><button class="del" data-ddel="${d.id}" title="부서 삭제">✕</button></span></h2>
         ${pages.map((p, pi) => {
           const ed = `<span class="ed"><button data-pmove="${p.id}" data-dir="-1" ${pi === 0 ? 'disabled' : ''} title="위로">↑</button><button data-pmove="${p.id}" data-dir="1" ${pi === pages.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="del" data-pdel="${p.id}" title="페이지 삭제">✕</button></span>`;
           const inner = `<span class="ic">${esc(p.icon || '📄')}</span><span class="t">${esc(p.name)}${(p.allowed || []).length ? ` <span class="hint" title="볼 수 있는 사람: ${esc(p.allowed.join(', '))}">🔒</span>` : ''}</span>`;
-          if (editing) return `<div class="pg" data-pedit="${p.id}">${inner}${ed}</div>`;
+          if (editing) return `<div class="pg" data-pedit="${p.id}" draggable="true">${inner}${ed}</div>`;
           if (p.href === 'members') return `<button class="pg" data-members>${inner}<span class="hint">${members.length}명</span></button>`;
           if (p.href && /^https?:\/\//i.test(p.href)) return `<a class="pg" href="${esc(p.href)}" target="_blank" rel="noopener">${inner}<span class="hint">↗</span></a>`;
           if (p.href) return `<a class="pg" href="${esc(p.href)}">${inner}${badges[p.href] ? `<span class="b" title="처리할 것">${badges[p.href]}</span>` : ''}</a>`;
@@ -205,6 +213,33 @@ function render(){
   document.querySelectorAll('[data-ddel]').forEach(b => b.onclick = () => delDept(b.dataset.ddel));
   document.querySelectorAll('[data-dmove]').forEach(b => b.onclick = () => moveItem(b.dataset.dmove, Number(b.dataset.dir)));
   const da = $('#deptAdd'); if (da) da.onclick = () => openDept(null);
+  if (editing) bindMenuDrag();
+}
+/* 메뉴 편집 중 끌어서 옮기기: 폴더는 다른 폴더의 왼쪽/오른쪽 절반에, 페이지는 다른 페이지의 위/아래 절반이나 폴더의 빈 곳(맨 끝)에 놓음 */
+function bindMenuDrag(){
+  let kind = null, dragId = null;
+  const clear = () => document.querySelectorAll('.drop-l,.drop-r,.drop-in,.drop-before,.drop-after').forEach(x => x.classList.remove('drop-l', 'drop-r', 'drop-in', 'drop-before', 'drop-after'));
+  const end = el => { kind = null; dragId = null; el.classList.remove('dragging'); clear(); };
+  document.querySelectorAll('.pg[data-pedit][draggable]').forEach(pg => {
+    pg.ondragstart = e => { e.stopPropagation(); kind = 'page'; dragId = pg.dataset.pedit; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); pg.classList.add('dragging'); };
+    pg.ondragend = () => end(pg);
+    pg.ondragover = e => { if (kind !== 'page' || dragId === pg.dataset.pedit) return; e.preventDefault(); e.stopPropagation(); const r = pg.getBoundingClientRect(); clear(); pg.classList.add(e.clientY > r.top + r.height / 2 ? 'drop-after' : 'drop-before'); };
+    pg.ondrop = e => { if (kind !== 'page' || dragId === pg.dataset.pedit) return; e.preventDefault(); e.stopPropagation(); const r = pg.getBoundingClientRect(); const id = dragId, after = e.clientY > r.top + r.height / 2; clear(); dropPage(id, pg.closest('[data-dept]').dataset.dept, pg.dataset.pedit, after); };
+  });
+  document.querySelectorAll('section.dept[draggable]').forEach(sec => {
+    sec.ondragstart = e => { if (e.target !== sec) return; kind = 'dept'; dragId = sec.dataset.dept; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); sec.classList.add('dragging'); };
+    sec.ondragend = e => { if (e.target === sec) end(sec); };
+    sec.ondragover = e => {
+      if (kind === 'page') { e.preventDefault(); clear(); sec.classList.add('drop-in'); return; }
+      if (kind !== 'dept' || dragId === sec.dataset.dept) return;
+      e.preventDefault(); const r = sec.getBoundingClientRect(); clear(); sec.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-r' : 'drop-l');
+    };
+    sec.ondrop = e => {
+      if (kind === 'page') { e.preventDefault(); const id = dragId; clear(); dropPage(id, sec.dataset.dept, null, true); return; }
+      if (kind !== 'dept' || dragId === sec.dataset.dept) return;
+      e.preventDefault(); const r = sec.getBoundingClientRect(); const id = dragId, after = e.clientX > r.left + r.width / 2; clear(); dropDept(id, sec.dataset.dept, after);
+    };
+  });
 }
 
 /* ---------- 편집 동작 (관리자만) ---------- */
@@ -218,6 +253,23 @@ async function moveItem(id, dir){
   // 순서 번호를 0,1,2… 로 다시 매기면서 둘을 맞바꿈
   const order = list.map(x => x.id); [order[i], order[j]] = [order[j], order[i]];
   for (let k = 0; k < order.length; k++) { const row = M().find(x => x.id === order[k]); if (row.sort_order !== k) await saveRow('menu', { ...row, sort_order: k }); }
+}
+/* 끌어다 놓은 결과를 저장: 순서 번호를 0,1,2… 로 다시 매기고 바뀐 줄만 저장 */
+async function dropDept(id, targetId, after){
+  if (!guard() || id === targetId) return;
+  const order = depts().map(x => x.id).filter(x => x !== id);
+  let to = order.indexOf(targetId); if (to < 0) return; if (after) to++;
+  order.splice(to, 0, id);
+  for (let k = 0; k < order.length; k++) { const row = M().find(x => x.id === order[k]); if (row && row.sort_order !== k) await saveRow('menu', { ...row, sort_order: k }); }
+}
+async function dropPage(id, deptId, targetId, after){
+  if (!guard() || id === targetId) return;
+  const it = M().find(x => x.id === id && x.type === 'page'); if (!it) return;
+  const order = pagesOf(deptId).map(x => x.id).filter(x => x !== id);
+  let to = targetId ? order.indexOf(targetId) : order.length; if (to < 0) to = order.length; else if (targetId && after) to++;
+  order.splice(to, 0, id);
+  for (let k = 0; k < order.length; k++) { const row = M().find(x => x.id === order[k]); if (row && (row.sort_order !== k || row.parent !== deptId)) await saveRow('menu', { ...row, parent: deptId, sort_order: k }); }
+  if (it.parent !== deptId) toast('다른 폴더로 옮겼습니다');
 }
 async function delPage(id){
   if (!guard()) return;
