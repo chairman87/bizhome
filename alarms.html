@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>알람</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609201530">
+<script src="common.js?v=202609201530"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .tabs2{display:flex;gap:4px;flex-wrap:wrap}
+  .tabs2 button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--fg2)}
+  .tabs2 button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
+  .a{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .a:last-child{border-bottom:0}
+  .a:hover{background:var(--bg2)}
+  .a .st{flex:none;font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px;margin-top:1px;white-space:nowrap}
+  .st.open{background:#fee2e2;color:#b91c1c}
+  .st.done{background:#dcfce7;color:#15803d}
+  .st.info{background:#e0e7ff;color:#3730a3}
+  .a .mid{flex:1;min-width:0}
+  .a .t{font-weight:500;word-break:break-word}
+  .a.unread .t{font-weight:700}
+  .a .d{font-size:12.5px;color:var(--fg2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .a .src{font-size:11px;color:var(--fg3);border:1px solid var(--line2);border-radius:3px;padding:0 5px;margin-right:6px;font-weight:400}
+  .a .new{background:var(--red);color:#fff;font-size:10px;border-radius:3px;padding:0 5px;font-weight:600;margin-left:6px}
+  .a .m{font-size:12px;color:var(--fg3);white-space:nowrap;flex:none;text-align:right}
+  .a.done .t{color:var(--fg2)}
+  .content{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:14px;padding:4px 0}
+  .readers{font-size:12px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  .mon{padding:6px 14px;font-size:12px;font-weight:700;color:var(--fg2);background:var(--bg2);border-bottom:1px solid var(--line)}
+  .morebtn{display:block;width:100%;margin-top:10px;padding:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   알람 — 회사 운영 중 생기는 알람 메시지를 모으는 곳
+   글은 사람이 쓰지 않고 대표 PC 의 점검 프로그램이 넣음 (지금은 메타·인스타 계정 점검 META-COMMENTS\health.py)
+   한 줄 = { source, level, title, body, issue_key, status(발생/해소/안내), resolved_at, reads:[이름...], created_at }
+   이상이 풀리면 새 글이 아니라 같은 줄이 '해소'로 바뀜. 열어 보면 "확인"이 기록됨
+================================================================ */
+const A = () => (DATA.alarms || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const isRead = a => (a.reads || []).includes(me);
+const isOpen = a => a.status === '발생';
+let tab = 'all', src = '', limit = 30;
+const monthLabel = s => { if (!s) return '날짜 없음'; const d = new Date(s); return `${d.getFullYear()}년 ${d.getMonth() + 1}월`; };
+let lastMon = null;
+const monHead = a => { const g = monthLabel(a.created_at); if (g === lastMon) return ''; lastMon = g; return `<div class="mon">${g}</div>`; };
+const stHtml = a => isOpen(a) ? '<span class="st open">발생 중</span>' : a.status === '해소' ? '<span class="st done">해소</span>' : '<span class="st info">안내</span>';
+
+function normalize(table, a){ return { ...a, reads: Array.isArray(a.reads) ? a.reads : [] }; }
+
+function render(){
+  const all = A(), sources = [...new Set(all.map(a => a.source).filter(Boolean))];
+  const list = all.filter(a => (tab === 'all' || (tab === 'open' ? isOpen(a) : !isRead(a))) && (!src || a.source === src));
+  const shown = list.slice(0, limit); lastMon = null;
+  const nOpen = all.filter(isOpen).length, nUnread = all.filter(a => !isRead(a)).length;
+  $('#app').innerHTML = headerHtml({ icon: '🔔', title: '알람' }) + `<main class="wrap" style="max-width:1000px">
+    <div class="actions">
+      <div class="tabs2"><button data-tab="all" class="${tab === 'all' ? 'on' : ''}">전체 ${all.length}</button><button data-tab="open" class="${tab === 'open' ? 'on' : ''}">발생 중 ${nOpen}</button><button data-tab="unread" class="${tab === 'unread' ? 'on' : ''}">안 읽음 ${nUnread}</button></div>
+      ${sources.length > 1 ? `<select id="fsrc" style="border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px"><option value="">종류 전체</option>${sources.map(s => `<option ${src === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>` : ''}
+      ${nUnread ? '<button class="btn" id="readAll">모두 읽음으로</button>' : ''}
+    </div>
+    ${!DATA.alarms ? `<div class="empty">알람 저장 표가 아직 없습니다.${isAdmin() ? ' sql-alarms.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` :
+      list.length ? `<div class="list">${shown.map(a => monHead(a) + `<div class="a ${isRead(a) ? '' : 'unread'} ${a.status === '해소' ? 'done' : ''}" data-id="${a.id}">
+        ${stHtml(a)}<div class="mid"><div class="t">${a.source ? `<span class="src">${esc(a.source)}</span>` : ''}${esc(a.title)}${isRead(a) ? '' : '<span class="new">NEW</span>'}</div><div class="d">${esc(a.body || '')}</div></div>
+        <span class="m">${fmtDateTime(a.created_at)}${a.resolved_at ? `<br>해소 ${fmtDateTime(a.resolved_at)}` : ''}</span></div>`).join('')}</div>${list.length > shown.length ? `<button class="btn morebtn" id="moreBtn">더 보기 (${list.length - shown.length}건 더 있음)</button>` : ''}`
+      : `<div class="empty">${tab === 'open' ? '지금 발생 중인 이상이 없습니다. 👍' : tab === 'unread' ? '안 읽은 알람이 없습니다.' : '아직 알람이 없습니다. 이상이 생기면 여기에 자동으로 쌓입니다.'}</div>`}
+    <div class="hint" style="margin-top:12px">알람은 점검 프로그램이 자동으로 올립니다. 지금 연결된 것: <b>메타·인스타 계정 점검</b>(30분마다 — 광고계정·페이지·인스타 계정 이상, 광고 거부, 인스타 노출 멈춤). 이상이 풀리면 같은 줄이 "해소"로 바뀝니다.</div>
+  </main>`;
+  bindHeader(() => {}, null, m => `안 읽은 알람 ${A().filter(a => !(a.reads || []).includes(m.name)).length}건`);
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; limit = 30; render(); });
+  const fs = $('#fsrc'); if (fs) fs.onchange = () => { src = fs.value; render(); };
+  const mb = $('#moreBtn'); if (mb) mb.onclick = () => { limit += 30; render(); };
+  const ra = $('#readAll'); if (ra) ra.onclick = async () => { for (const a of A().filter(x => !isRead(x))) await saveRow('alarms', { ...a, reads: [...(a.reads || []), me] }); toast('모두 읽음으로 표시했습니다'); };
+  document.querySelectorAll('.a[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
+}
+
+/* 알람 보기 (열면 확인 기록) */
+function openView(id){
+  const a = A().find(x => x.id === id); if (!a) return;
+  if (!isRead(a)) saveRow('alarms', { ...a, reads: [...(a.reads || []), me] });
+  const admin = isAdmin();
+  openModal(`${modalHead(esc(a.title))}
+    <div class="mb">
+      <div class="hint">${stHtml(a)} ${esc(a.source || '')} · 발생 ${fmtDateTime(a.created_at)}${a.resolved_at ? ` · 해소 ${fmtDateTime(a.resolved_at)}` : ''}</div>
+      <div class="content">${esc(a.body || '')}</div>
+      ${admin ? `<div class="readers">확인 ${(a.reads || []).length}명: ${(a.reads || []).map(r => who(r)).join('') || '<span class="hint">아직 없음</span>'}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${admin ? `<button class="btn danger left" id="aDel">삭제</button>${isOpen(a) ? '<button class="btn" id="aDone" title="프로그램이 풀린 것을 알아채기 전에 직접 닫기">해소로 표시</button>' : ''}` : ''}
+      <button class="btn primary" data-close>닫기</button>
+    </div>`, { wide: true });
+  if (admin) {
+    $('#aDel').onclick = async () => { if (confirm(`"${a.title}" 알람을 삭제할까요?`)) { closeModal(); await removeRow('alarms', a.id); toast('삭제했습니다'); } };
+    const d = $('#aDone'); if (d) d.onclick = async () => { closeModal(); await saveRow('alarms', { ...a, reads: [...new Set([...(a.reads || []), me])], status: '해소', resolved_at: nowIso() }); toast('해소로 표시했습니다'); };
+  }
+}
+
+boot({ icon: '🔔', title: '알람', tables: ['alarms'], render, normalize });
+</script>
+</body>
+</html>
