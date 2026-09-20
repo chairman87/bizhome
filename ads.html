@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609201233">
-<script src="common.js?v=202609201233"></script>
+<link rel="stylesheet" href="common.css?v=202609201235">
+<script src="common.js?v=202609201235"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -89,7 +89,8 @@ const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑'
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
 let view = LS.get('ads_view') || PRODUCTS[0];
-let filter = { q: '', editor: '', meta: '', mstate: '', budget: '', gstate: '', google: '', status: '' };
+const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', budget: '', gstate: '', google: '', status: '' });   // 기본: 메타 운영중만
+let filter = freshFilter();
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let sort = { key: 'date', dir: 'desc' };
 
@@ -106,6 +107,8 @@ const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제
 const MSTATES = ['운영중', 'OFF', '미연결'];
 const mstateOf = a => a.meta_state === '운영중' || a.meta_state === 'OFF' ? a.meta_state : '미연결';   // 메타에서 실제로 켜져 있는지 (매일 10시 자동 반영)
 const mstateHtml = a => { const m = mstateOf(a); return m === '운영중' ? '<span class="run">운영중</span>' : m === 'OFF' ? '<span class="off">OFF</span>' : '<span style="color:var(--fg3)" title="메타 캠페인과 아직 연결되지 않은 줄입니다. 새로 넣은 줄은 다음 날 오전 10시에 자동으로 연결됩니다.">–</span>'; };
+const NO_GOOGLE = ['레모너리'];   // 구글 광고를 하지 않는 제품: 표에서 구글 열 두 개를 숨김
+const hasGoogle = p => !NO_GOOGLE.includes(p);
 const GSTATES = ['운영중', 'OFF', '거부됨', '없음'];
 const gstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.google_state) ? a.google_state : '없음';   // 구글애즈에서 실제로 켜져 있는지 (매일 10시 자동 반영, 서리맥스·흑생마)
 const gstateHtml = a => { const g = gstateOf(a); return g === '운영중' ? '<span class="run">운영중</span>' : g === 'OFF' ? '<span class="off">OFF</span>' : g === '거부됨' ? '<span class="del" title="구글애즈에서 캠페인은 켜져 있지만 광고가 전부 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : '<span style="color:var(--fg3)" title="구글애즈에 이 영상의 캠페인이 없습니다. 구글에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
@@ -117,7 +120,7 @@ function render(){
   const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }];
   $('#app').innerHTML = headerHtml({ icon: '🎬', title: '광고 영상 리스트', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : productHtml(view)}</main>`;
-  bindHeader(k => { view = k; LS.set('ads_view', k); render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
+  bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
   bindView();
 }
 
@@ -142,12 +145,12 @@ function syncHtml(p){
 function listOf(p){
   const q = filter.q.trim().toLowerCase();
   return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
-    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.gstate || gstateOf(a) === filter.gstate) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate || (filter.mstate === '운영중' && mstateOf(a) === '미연결' && a.status === '운영중')) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.gstate || gstateOf(a) === filter.gstate) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
   const all = G().filter(a => a.product === p);   // 상태 버튼의 개수는 필터와 상관없이 제품 전체 기준
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '메타'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google_state', '구글 운영'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']];
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '메타'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google_state', '구글 운영'], ['google', '구글'], ['status', '상태'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="stf"><span class="lb">상태 보기</span>${['', ...STATUSES].map(s => `<button type="button" data-fs="${s}" class="${filter.status === s ? 'on' : ''}" title="${s ? s + ' 영상만 보기' : '전체 보기'}">${s || '전체'} <b>${all.filter(a => !s || a.status === s).length}</b></button>`).join('')}</span>
@@ -167,12 +170,12 @@ function productHtml(p){
       <td class="c hint" title="메타 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
-      <td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
-      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>
+      ${hasGoogle(p) ? `<td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
+      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
       <td class="c"><select id="nStatus" title="새로 넣을 영상의 상태 (걸러 보기는 위 '상태 보기' 버튼)">${STATUSES.map(s => `<option ${s === (filter.status || '운영중') ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="11" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 노란 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
@@ -181,8 +184,8 @@ function productHtml(p){
       <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
       <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 예산과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
-      <td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
-      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
+      ${hasGoogle(p) ? `<td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
+      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>` : ''}
       <td class="c"><select data-status="${a.id}" style="border:1px solid transparent;background:transparent;border-radius:4px;font-size:12px">${STATUSES.map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}</td>
     </tr>`).join('')}</tbody></table></div>`;
@@ -193,7 +196,7 @@ async function addFromRow(){
   const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
   lastNew = { date: $('#nDate').value || todayStr(), editor: $('#nEditor').value.trim(), meta: $('#nMeta').value.trim() };
   const row = { id: uid(), product: view, date: lastNew.date, title, editor: lastNew.editor || null, meta_account: lastNew.meta || null,
-    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, google: $('#nGoogle').value === '1', status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
+    meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, google: !!$('#nGoogle') && $('#nGoogle').value === '1', status: $('#nStatus').value, note: $('#nNote').value.trim() || null,
     created_by: me, created_at: nowIso(), updated_by: me };
   await saveRow('ads', row);
   toast(`추가: ${title}`);
@@ -283,7 +286,7 @@ function openAd(id, preset = {}){
         <div class="f"><label>예산 (숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="예: 10000 또는 OFF"></div>
       </div>
       <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
-      <div class="f"><label>구글</label><select id="aGoogle"><option value="0" ${!d.google ? 'selected' : ''}>X</option><option value="1" ${d.google ? 'selected' : ''}>O</option></select></div>
+      <div class="f" ${hasGoogle(d.product) ? '' : 'style="display:none"'}><label>구글</label><select id="aGoogle"><option value="0" ${!d.google ? 'selected' : ''}>X</option><option value="1" ${d.google ? 'selected' : ''}>O</option></select></div>
       <div class="f"><label>질병 예방/치료 오인 사유 · 수정 콘티</label><textarea id="aNote">${esc(d.note || '')}</textarea></div>
       ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
     </div>
