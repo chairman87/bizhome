@@ -23,7 +23,7 @@
   .cat{font-size:12px;border-radius:4px;padding:1px 7px;white-space:nowrap;background:#f1f5f9;color:#334155;font-weight:600}
   .cat.c0{background:#fef9c3;color:#854d0e}.cat.c1{background:#e0f2fe;color:#075985}.cat.c2{background:#dcfce7;color:#166534}
   .cat.c3{background:#e2e8f0;color:#0f172a}.cat.c4{background:#fce7f3;color:#9d174d}.cat.c5{background:#f3e8ff;color:#6b21a8}
-  .cat.c6{background:#e0e7ff;color:#3730a3}.cat.c7{background:#ffedd5;color:#9a3412}.cat.c8{background:#f1f5f9;color:#334155}
+  .cat.c6{background:#ccfbf1;color:#115e59}.cat.c7{background:#e0e7ff;color:#3730a3}.cat.c8{background:#ffedd5;color:#9a3412}.cat.c9{background:#f1f5f9;color:#334155}
   .mt .t .cat{margin-right:6px;vertical-align:1px}
   .view .cat + .cat{margin-left:6px}
   .topic{display:inline-block;margin-top:6px;color:var(--fg)}
@@ -71,7 +71,7 @@
 ================================================================ */
 /* 분류: 식이해법연구소(레모너리·서리맥스) / (주)피에이치뷰티(흑생마·바이세라) / 회사 전체(운영·재무)
    PLAUD-MEETINGS/config.js 의 CATS 와 같아야 합니다(플라우드 자동 등록이 이 이름으로 분류함). */
-const CATS = ['레모너리', '서리맥스', '식이해법 공통', '흑생마', '바이세라', '피에이치뷰티 공통', '회사 운영', '재무', '기타'];
+const CATS = ['레모너리', '서리맥스', '식이해법 공통', '흑생마', '바이세라', '피에이치뷰티 공통', '마케팅', '회사 운영', '재무', '기타'];
 const catCls = c => 'c' + (CATS.includes(c) ? CATS.indexOf(c) : CATS.length - 1);
 /* 주제가 여럿인 회의는 분류도 여러 개: category 칸에 "바이세라,흑생마" 처럼 쉼표로 이어 저장 */
 const catsOf = m => { const a = String((m && m.category) || '').split(',').map(s => s.trim()).filter(Boolean); return a.length ? a : ['기타']; };
