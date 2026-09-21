@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회의록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609211116">
-<script src="common.js?v=202609211116"></script>
+<link rel="stylesheet" href="common.css?v=202609211136">
+<script src="common.js?v=202609211136"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -33,9 +33,11 @@
   .summary{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap}
   .details{font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--fg);max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg)}
   .acts{display:grid;gap:4px}
-  .acts label{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;border-radius:6px}
-  .acts label:hover{background:var(--bg2)}
-  .acts label.done{color:var(--fg3);text-decoration:line-through}
+  .acts .act{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;border-radius:6px}
+  .acts .act:hover{background:var(--bg2)}
+  .acts .act.done{color:var(--fg3);text-decoration:line-through}
+  .acts .act .tx{cursor:text}
+  .acts .actrow{margin:2px 0;align-items:center}
   .acts .w{font-size:11px;color:var(--fg3);margin-left:auto;white-space:nowrap}
   .f3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3{grid-template-columns:1fr}.mt{grid-template-columns:1fr}}
@@ -117,8 +119,8 @@ function openView(id){
       <div class="sec">요약</div>
       <div class="summary">${esc(m.summary || '요약이 없습니다.')}</div>
       ${m.decisions ? `<div class="sec">결정 사항</div><div class="summary" style="background:#f0fdf4;border-color:#bbf7d0">${esc(m.decisions)}</div>` : ''}
-      ${m.actions.length ? `<div class="sec">할 일 <span class="hint">${m.actions.filter(a => a.done).length}/${m.actions.length} 완료</span></div>
-        <div class="acts">${m.actions.map((a, i) => `<label class="${a.done ? 'done' : ''}"><input type="checkbox" data-act="${i}" ${a.done ? 'checked' : ''}> ${esc(a.text)}${a.who ? ` <span class="chip" style="font-size:11px">${esc(a.who)}</span>` : ''}${a.due ? `<span class="w">${fmtDate(a.due)}까지</span>` : ''}</label>`).join('')}</div>` : ''}
+      ${m.actions.length ? `<div class="sec">할 일 <span class="hint">${m.actions.filter(a => a.done).length}/${m.actions.length} 완료 · 줄을 더블클릭하면 고칠 수 있습니다</span></div>
+        <div class="acts">${m.actions.map((a, i) => `<div class="act ${a.done ? 'done' : ''}" data-row="${i}" title="더블클릭하면 고칠 수 있습니다"><input type="checkbox" data-act="${i}" ${a.done ? 'checked' : ''}><span class="tx">${esc(a.text)}</span>${a.who ? ` <span class="chip" style="font-size:11px">${esc(a.who)}</span>` : ''}${a.due ? `<span class="w">${fmtDate(a.due)}까지</span>` : ''}</div>`).join('')}</div>` : ''}
       ${m.files.length ? `<div class="sec">첨부 파일</div>${filesHtml(m.files)}${audio ? `<audio controls src="${esc(audio.url)}" style="width:100%;margin-top:8px"></audio>` : ''}` : ''}
       <div class="sec">상세 내용 <span class="hint">논의 흐름을 자세히 정리한 내용</span></div>
       <div class="details">${m.details ? esc(m.details) : '<span class="hint">상세 내용이 없습니다.</span>'}</div>
@@ -127,8 +129,23 @@ function openView(id){
     </div>
     <div class="mf">${m.created_by === me || isAdmin() ? '<button class="btn danger left" id="vDel">삭제</button>' : ''}<button class="btn" id="vEdit">수정</button><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
   document.querySelectorAll('[data-act]').forEach(cb => cb.onchange = async () => { const actions = m.actions.map((a, i) => i === Number(cb.dataset.act) ? { ...a, done: cb.checked, done_by: cb.checked ? me : null } : a); await saveRow('meetings', { ...m, actions, updated_by: me }); openView(m.id); });
+  document.querySelectorAll('.acts [data-row]').forEach(row => row.ondblclick = e => { if (e.target.type !== 'checkbox') editAct(m, Number(row.dataset.row)); });
   $('#vEdit').onclick = () => { closeModal(); openEdit(m.id); };
   const del = $('#vDel'); if (del) del.onclick = async () => { if (confirm(`"${m.title}" 회의록을 삭제할까요? 첨부 파일도 지워집니다.`)) { closeModal(); for (const f of m.files) if (f.path) deleteFile(f.path); await removeRow('meetings', m.id); toast('삭제했습니다'); } };
+}
+
+/* 상세 보기에서 할 일 한 줄을 더블클릭 → 그 자리에서 내용·담당·기한 수정 (Enter 저장, Esc 취소) */
+function editAct(m, i){
+  const a = m.actions[i], row = document.querySelector(`.acts [data-row="${i}"]`); if (!a || !row || row.dataset.editing) return;
+  row.dataset.editing = '1'; row.className = 'actrow'; row.removeAttribute('title'); row.ondblclick = null;
+  row.innerHTML = `<input id="eaText" value="${esc(a.text || '')}" placeholder="할 일"><select id="eaWho"><option value="">담당</option>${a.who && !members.some(x => x.name === a.who) ? `<option selected>${esc(a.who)}</option>` : ''}${memberOptions(a.who)}</select><input type="date" id="eaDue" value="${esc(a.due || '')}" style="flex:none;width:140px"><button type="button" class="btn sm primary" id="eaSave">저장</button><button type="button" class="btn sm" id="eaCancel">취소</button><button type="button" class="rm" id="eaDel" title="이 할 일 삭제">✕</button>`;
+  const save = async actions => { await saveRow('meetings', { ...m, actions, updated_by: me }); openView(m.id); };
+  $('#eaSave').onclick = () => { const text = $('#eaText').value.trim(); if (!text) { $('#eaText').focus(); toast('할 일 내용을 입력하세요', true); return; }
+    save(m.actions.map((x, k) => k === i ? { ...x, text, who: $('#eaWho').value || null, due: $('#eaDue').value || null } : x)).then(() => toast('할 일을 고쳤습니다')); };
+  $('#eaCancel').onclick = () => openView(m.id);
+  $('#eaDel').onclick = () => { if (confirm(`"${a.text}" 할 일을 삭제할까요?`)) save(m.actions.filter((x, k) => k !== i)).then(() => toast('할 일을 삭제했습니다')); };
+  row.onkeydown = e => { if (e.key === 'Enter' && e.target.id !== 'eaWho') { e.preventDefault(); $('#eaSave').click(); } else if (e.key === 'Escape') { e.stopPropagation(); $('#eaCancel').click(); } };
+  const t = $('#eaText'); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
 }
 
 /* 작성·수정 */
