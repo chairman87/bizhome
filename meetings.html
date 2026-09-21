@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회의록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609211136">
-<script src="common.js?v=202609211136"></script>
+<link rel="stylesheet" href="common.css?v=202609211140">
+<script src="common.js?v=202609211140"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -25,6 +25,12 @@
   .cat.c3{background:#e2e8f0;color:#0f172a}.cat.c4{background:#fce7f3;color:#9d174d}.cat.c5{background:#f3e8ff;color:#6b21a8}
   .cat.c6{background:#e0e7ff;color:#3730a3}.cat.c7{background:#ffedd5;color:#9a3412}.cat.c8{background:#f1f5f9;color:#334155}
   .mt .t .cat{margin-right:6px;vertical-align:1px}
+  .view .cat + .cat{margin-left:6px}
+  .topic{display:inline-block;margin-top:6px;color:var(--fg)}
+  .summary .topic:first-child,.details .topic:first-child{margin-top:0}
+  .catpicks{display:flex;flex-wrap:wrap;gap:6px 10px}
+  .f .catpicks .catpick{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:400;margin:0}
+  .f .catpicks .catpick input{width:auto;margin:0}
   .todo{font-size:12px;color:var(--orange);font-weight:600}
   /* 상세 보기 */
   .view h1{font-size:20px;margin:0 0 4px}
@@ -67,7 +73,12 @@
    PLAUD-MEETINGS/config.js 의 CATS 와 같아야 합니다(플라우드 자동 등록이 이 이름으로 분류함). */
 const CATS = ['레모너리', '서리맥스', '식이해법 공통', '흑생마', '바이세라', '피에이치뷰티 공통', '회사 운영', '재무', '기타'];
 const catCls = c => 'c' + (CATS.includes(c) ? CATS.indexOf(c) : CATS.length - 1);
-const catOptions = cur => [...CATS, ...(cur && !CATS.includes(cur) ? [cur] : [])].map(c => `<option ${cur === c ? 'selected' : ''}>${esc(c)}</option>`).join('');
+/* 주제가 여럿인 회의는 분류도 여러 개: category 칸에 "바이세라,흑생마" 처럼 쉼표로 이어 저장 */
+const catsOf = m => { const a = String((m && m.category) || '').split(',').map(s => s.trim()).filter(Boolean); return a.length ? a : ['기타']; };
+const catChips = (m, style = '') => catsOf(m).map(c => `<span class="cat ${catCls(c)}"${style ? ` style="${style}"` : ''}>${esc(c)}</span>`).join('');
+const catChecks = cur => [...CATS, ...cur.filter(c => !CATS.includes(c))].map(c => `<label class="catpick"><input type="checkbox" value="${esc(c)}" ${cur.includes(c) ? 'checked' : ''}><span class="cat ${catCls(c)}">${esc(c)}</span></label>`).join('');
+/* 요약·결정·상세 글에서 '■ 주제' 줄은 굵게 (주제별 묶음이 눈에 띄게) */
+const topicText = s => esc(s).replace(/^(■.*)$/gm, '<b class="topic">$1</b>');
 const M = () => DATA.meetings || [];
 const monthOf = d => (d || '').slice(0, 7);
 const monthLabel = m => m ? `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월` : '날짜 없음';
@@ -81,7 +92,7 @@ function normalize(table, m){ return { ...m, actions: Array.isArray(m.actions) ?
 const VIEWS = () => [{ key: 'all', label: '전체' }, ...CATS.map(c => ({ key: 'c:' + c, label: c })), null, { key: 'todo', label: '남은 할 일', badge: M().reduce((a, m) => a + openActs(m), 0) }];
 
 function render(){
-  const list = M().filter(m => (view === 'all' || (view === 'todo' ? openActs(m) > 0 : m.category === view.slice(2)))
+  const list = M().filter(m => (view === 'all' || (view === 'todo' ? openActs(m) > 0 : catsOf(m).includes(view.slice(2))))
     && (!q || [m.title, m.summary, m.details, m.attendees, m.decisions].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))))
     .sort((a, b) => String(b.meeting_date || '').localeCompare(String(a.meeting_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
   $('#app').innerHTML = headerHtml({ icon: '📝', title: '회의록', tabs: VIEWS(), active: view })
@@ -101,7 +112,7 @@ function listHtml(list){
   return months.map(mo => `<div class="month-h">${monthLabel(mo)} <span class="n">${list.filter(m => monthOf(m.meeting_date) === mo).length}건</span></div>
     ${list.filter(m => monthOf(m.meeting_date) === mo).map(m => `<div class="mt" data-id="${m.id}">
       <div class="d">${m.meeting_date ? fmtDate(m.meeting_date).slice(5) : '-'}<small>${dow(m.meeting_date)}${m.start_time ? ' ' + esc(m.start_time) : ''}</small></div>
-      <div><div class="t"><span class="cat ${catCls(m.category)}">${esc(m.category || '기타')}</span>${esc(m.title)}</div><div class="sum">${esc(m.summary || '(요약 없음)')}</div>
+      <div><div class="t">${catChips(m)}${esc(m.title)}</div><div class="sum">${topicText(m.summary || '(요약 없음)')}</div>
         <div class="meta">${m.attendees ? `<span>👥 ${esc(m.attendees)}</span>` : ''}${m.files.length ? `<span>📎 ${m.files.length}</span>` : ''}${openActs(m) ? `<span class="todo">할 일 ${openActs(m)}개 남음</span>` : (m.actions.length ? '<span>✓ 할 일 완료</span>' : '')}</div></div>
       <div class="side">${esc(m.created_by || '')}</div></div>`).join('')}`).join('');
 }
@@ -113,17 +124,17 @@ function openView(id){
   const audio = m.files.find(f => /\.(mp3|m4a|wav|ogg)$/i.test(f.name || ''));
   openModal(`${modalHead('회의록')}
     <div class="mb view">
-      <div style="margin-bottom:6px"><span class="cat ${catCls(m.category)}" style="font-size:13px;padding:2px 9px">${esc(m.category || '기타')}</span></div>
+      <div style="margin-bottom:6px">${catChips(m, 'font-size:13px;padding:2px 9px')}</div>
       <h1>${esc(m.title)}</h1>
       <div class="info"><span>📅 ${fmtDate(m.meeting_date)} (${dow(m.meeting_date)})${m.start_time ? ' ' + esc(m.start_time) : ''}</span>${m.attendees ? `<span>👥 ${esc(m.attendees)}</span>` : ''}${m.plaud_url ? `<a href="${esc(m.plaud_url)}" target="_blank" rel="noopener">🎙️ 플라우드에서 열기</a>` : ''}</div>
       <div class="sec">요약</div>
-      <div class="summary">${esc(m.summary || '요약이 없습니다.')}</div>
-      ${m.decisions ? `<div class="sec">결정 사항</div><div class="summary" style="background:#f0fdf4;border-color:#bbf7d0">${esc(m.decisions)}</div>` : ''}
+      <div class="summary">${topicText(m.summary || '요약이 없습니다.')}</div>
+      ${m.decisions ? `<div class="sec">결정 사항</div><div class="summary" style="background:#f0fdf4;border-color:#bbf7d0">${topicText(m.decisions)}</div>` : ''}
       ${m.actions.length ? `<div class="sec">할 일 <span class="hint">${m.actions.filter(a => a.done).length}/${m.actions.length} 완료 · 줄을 더블클릭하면 고칠 수 있습니다</span></div>
         <div class="acts">${m.actions.map((a, i) => `<div class="act ${a.done ? 'done' : ''}" data-row="${i}" title="더블클릭하면 고칠 수 있습니다"><input type="checkbox" data-act="${i}" ${a.done ? 'checked' : ''}><span class="tx">${esc(a.text)}</span>${a.who ? ` <span class="chip" style="font-size:11px">${esc(a.who)}</span>` : ''}${a.due ? `<span class="w">${fmtDate(a.due)}까지</span>` : ''}</div>`).join('')}</div>` : ''}
       ${m.files.length ? `<div class="sec">첨부 파일</div>${filesHtml(m.files)}${audio ? `<audio controls src="${esc(audio.url)}" style="width:100%;margin-top:8px"></audio>` : ''}` : ''}
       <div class="sec">상세 내용 <span class="hint">논의 흐름을 자세히 정리한 내용</span></div>
-      <div class="details">${m.details ? esc(m.details) : '<span class="hint">상세 내용이 없습니다.</span>'}</div>
+      <div class="details">${m.details ? topicText(m.details) : '<span class="hint">상세 내용이 없습니다.</span>'}</div>
       ${pdf ? `<div class="sec">PDF 미리보기 <a class="hint" href="${esc(pdf.url)}?download=${encodeURIComponent(pdf.name)}" download>내려받기</a></div><div class="pdfbox"><iframe src="${esc(pdf.url)}#toolbar=0"></iframe></div>` : ''}
       <div class="hint" style="margin-top:10px">작성: ${esc(m.created_by || '')} ${fmtDateTime(m.created_at)}${m.updated_by ? ` · 수정: ${esc(m.updated_by)} ${fmtDateTime(m.updated_at)}` : ''}</div>
     </div>
@@ -161,8 +172,9 @@ function openEdit(id){
       <div class="f3">
         <div class="f"><label>참석자</label><input id="mAtt" value="${esc(d.attendees || '')}" placeholder="예: 박봉수, 홍주, 김상우"></div>
         <div class="f"><label>일자</label><input type="date" id="mDate" value="${esc(d.meeting_date || '')}"></div>
-        <div class="f"><label>시간 / 구분</label><div style="display:flex;gap:4px"><input type="time" id="mTime" value="${esc(d.start_time || '')}" style="width:110px"><select id="mCat" style="flex:1">${catOptions(d.category)}</select></div></div>
+        <div class="f"><label>시간</label><input type="time" id="mTime" value="${esc(d.start_time || '')}"></div>
       </div>
+      <div class="f"><label>분류 <span class="hint">(주제가 여럿인 회의는 여러 개 고를 수 있습니다)</span></label><div class="catpicks" id="mCats">${catChecks(m0 ? catsOf(d) : [])}</div></div>
       <div class="f"><label>요약 <span class="hint">(위에 보이는 부분 · 플라우드 요약을 붙여 넣으면 됩니다)</span></label><textarea id="mSummary" placeholder="핵심 내용 3~7줄">${esc(d.summary || '')}</textarea></div>
       <div class="f"><label>결정 사항</label><textarea id="mDec" style="min-height:60px" placeholder="이번 회의에서 확정한 것">${esc(d.decisions || '')}</textarea></div>
       <div class="f"><label>할 일 <span class="hint">(담당·기한을 정해 두면 위 "남은 할 일" 탭에 모입니다)</span></label><div id="actList">${actRows()}</div><button type="button" class="btn sm" id="actAdd">＋ 할 일 추가</button></div>
@@ -180,8 +192,10 @@ function openEdit(id){
   bindActs();
   $('#mSave').onclick = async () => {
     const title = $('#mTitle').value.trim(); if (!title) { $('#mTitle').focus(); toast('회의 제목을 입력하세요', true); return; }
+    const cats = [...document.querySelectorAll('#mCats input:checked')].map(c => c.value); const ord = m0 ? catsOf(m0) : []; const rank = c => ord.includes(c) ? ord.indexOf(c) : 99; cats.sort((a, b) => rank(a) - rank(b)); /* 원래 있던 분류의 순서(비중 큰 순)는 유지 */
+    if (!cats.length) { toast('분류를 하나 이상 고르세요', true); return; }
     syncActs();
-    const row = { id: m0 ? m0.id : uid(), title, meeting_date: $('#mDate').value || null, start_time: $('#mTime').value || null, attendees: $('#mAtt').value.trim() || null, category: $('#mCat').value,
+    const row = { id: m0 ? m0.id : uid(), title, meeting_date: $('#mDate').value || null, start_time: $('#mTime').value || null, attendees: $('#mAtt').value.trim() || null, category: cats.join(','),
       summary: $('#mSummary').value.trim() || null, decisions: $('#mDec').value.trim() || null, details: $('#mDetails').value.trim() || null,
       actions: actions.filter(a => (a.text || '').trim()).map(a => ({ text: a.text.trim(), who: a.who || null, due: a.due || null, done: !!a.done })), files: at.files, plaud_url: $('#mPlaud').value.trim() || null, memo: null,
       created_by: m0 ? m0.created_by : me, created_at: m0 ? m0.created_at : nowIso(), updated_by: me };
