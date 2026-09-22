@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>참고 컨텐츠 영상</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202609221636">
+<script src="common.js?v=202609221636"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+  .actions input[type=search],.actions select{border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;background:var(--bg)}
+  .actions input[type=search]{min-width:220px}
+  .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  @media(max-width:480px){.vgrid{grid-template-columns:1fr}}
+  .v{border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden;display:flex;flex-direction:column;cursor:pointer}
+  .v:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .v .th{position:relative;aspect-ratio:16/9;background:#1f2937;display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;overflow:hidden}
+  .v .th.ig{background:linear-gradient(45deg,#f58529,#dd2a7b,#8134af)}
+  .v .th.tt{background:#111}
+  .v .th.yt{background:#3a0a0a}
+  .v .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .v .th.tall img{object-fit:contain;background:#000}
+  .v .th .pf{position:absolute;left:8px;top:8px;font-size:11px;font-weight:600;border-radius:4px;padding:2px 7px;color:#fff;z-index:1}
+  .v .th .play{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;border-radius:4px;padding:2px 7px;z-index:1}
+  .v .bd{padding:10px 12px;display:grid;gap:6px;flex:1;align-content:start}
+  .v .ti{font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  .v .tg{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+  .v .memo{font-size:12px;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+  .v .ft{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg3);margin-top:auto;padding-top:4px}
+  .v .ft .sp{flex:1}
+  .like{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--fg2);white-space:nowrap}
+  .like.on{background:#fff1f2;border-color:#fda4af;color:#be123c;font-weight:600}
+  .like:hover{background:var(--bg2)}
+  .pf.yt{background:#e11d1d}.pf.ig{background:linear-gradient(45deg,#f58529,#dd2a7b,#8134af)}.pf.tt{background:#111}.pf.etc{background:#64748b}
+  .embed{position:relative;width:100%;background:#000;border-radius:8px;overflow:hidden}
+  .embed.wide{aspect-ratio:16/9}
+  .embed.tall{aspect-ratio:9/16;max-height:72vh;max-width:min(100%,380px);margin:0 auto}
+  .embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .meta-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--fg2)}
+  .meta-row .sp{flex:1}
+  .likers{font-size:12px;color:var(--fg2);margin-left:6px}
+  .prev{display:flex;gap:10px;align-items:center;background:var(--bg2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--fg2)}
+  .prev img{height:56px;border-radius:6px;background:#000}
+  .modal .mh a.btn{text-decoration:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   참고 컨텐츠 영상: 팀원이 참고할 만한 영상(유튜브·인스타·틱톡 등) 링크를 모아 두는 곳
+   한 줄 = { url, title, author(채널), thumb(미리보기 그림 주소), category(참고 포인트), product(관련 제품), memo,
+             likes[이름...](👍 추천), comments[{id,by,text,at}], created_by, created_at, updated_by, updated_at }
+   주소를 붙여넣으면 제목·미리보기를 자동으로 가져오고, 카드를 누르면 인트라넷 안에서 바로 재생됨
+================================================================ */
+const CATEGORIES = ['후킹(첫 3초)', '구성·흐름', '제품 설명', '경쟁사', '트렌드·밈', '기타'];
+const PRODUCTS = ['공통', '레모너리', '서리맥스', '흑생마'];
+const PLATFORMS = { yt: { label: '유튜브', cls: 'yt', icon: '▶' }, ig: { label: '인스타그램', cls: 'ig', icon: '◎' }, tt: { label: '틱톡', cls: 'tt', icon: '♪' }, etc: { label: '링크', cls: 'etc', icon: '🔗' } };
+const V = () => DATA.videos || [];
+const SORTS = [['new', '최신순'], ['like', '추천 많은 순']];
+
+let view = LS.get('videos_view') || 'all';
+let q = '', product = '', sort = LS.get('videos_sort') || 'new';
+
+function normalize(table, r){ return { ...r, likes: Array.isArray(r.likes) ? r.likes : [], comments: Array.isArray(r.comments) ? r.comments : [] }; }
+
+/* 주소에서 어느 매체인지, 안에서 재생할 주소(embed), 미리보기 그림(thumb)을 알아냄 */
+function parseUrl(url){
+  let u; try { u = new URL(url); } catch { return { platform: 'etc', kind: 'wide', embed: '', thumb: '' }; }
+  const h = u.hostname.replace(/^(www|m|vm|vt)\./, '');
+  if (/(^|\.)youtube\.com$|^youtu\.be$|youtube-nocookie\.com$/.test(h)) {
+    let id = '';
+    if (h === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
+    else if (u.searchParams.get('v')) id = u.searchParams.get('v');
+    else { const m = u.pathname.match(/\/(shorts|embed|live|v)\/([\w-]{6,})/); if (m) id = m[2]; }
+    const tall = /\/shorts\//.test(u.pathname);
+    return { platform: 'yt', id, kind: tall ? 'tall' : 'wide', embed: id ? `https://www.youtube.com/embed/${id}` : '', thumb: id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '' };
+  }
+  if (/(^|\.)instagram\.com$/.test(h)) {
+    const m = u.pathname.match(/\/(reel|reels|p|tv)\/([\w-]+)/);
+    return { platform: 'ig', id: m ? m[2] : '', kind: 'tall', embed: m ? `https://www.instagram.com/${m[1] === 'reels' ? 'reel' : m[1]}/${m[2]}/embed/` : '', thumb: '' };
+  }
+  if (/(^|\.)tiktok\.com$/.test(h)) {
+    const m = u.pathname.match(/\/video\/(\d+)/);
+    return { platform: 'tt', id: m ? m[1] : '', kind: 'tall', embed: m ? `https://www.tiktok.com/embed/v2/${m[1]}` : '', thumb: '' };
+  }
+  return { platform: 'etc', kind: 'wide', embed: '', thumb: '' };
+}
+/* 같은 영상인지 비교할 때 쓰는 짧은 열쇠 (유튜브 v=ID 만, 꼬리표 si= 등은 무시) */
+function urlKey(url){ const p = parseUrl(url); return p.id ? `${p.platform}:${p.id}` : String(url || '').trim().replace(/\/+$/, '').toLowerCase(); }
+
+/* 제목·채널·미리보기 가져오기 (틱톡은 자체 oembed, 나머지는 noembed). 못 가져와도 오류 없이 빈 값 */
+async function fetchMeta(url){
+  const p = parseUrl(url);
+  const getJson = async u => { const c = new AbortController(); const t = setTimeout(() => c.abort(), 7000); try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw 0; return await r.json(); } finally { clearTimeout(t); } };
+  let m = {};
+  try { m = await getJson(p.platform === 'tt' ? `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}` : `https://noembed.com/embed?url=${encodeURIComponent(url)}`); } catch {}
+  if (m.error) m = {};
+  return { title: m.title || '', author: m.author_name || '', thumb: p.thumb || m.thumbnail_url || '' };
+}
+
+const VIEWS = () => [{ key: 'all', label: '전체' }, ...CATEGORIES.map(c => ({ key: c, label: c })), null, { key: 'mine', label: '내가 올린' }];
+const byNew = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
+
+function render(){
+  const list = V().filter(v => (view === 'all' || (view === 'mine' ? v.created_by === me : (v.category || '기타') === view))
+      && (!product || (v.product || '공통') === product)
+      && (!q || [v.title, v.memo, v.category, v.product, v.author, v.url, v.created_by].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))))
+    .sort((a, b) => sort === 'like' ? (b.likes.length - a.likes.length) || byNew(a, b) : byNew(a, b));
+  $('#app').innerHTML = headerHtml({ icon: '🎥', title: '참고 컨텐츠 영상', tabs: VIEWS(), active: view, newLabel: '영상 추가' })
+    + `<main class="wrap">
+    ${!DATA.videos ? `<div class="empty">참고 영상 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-videos.sql)을 실행하세요.' : ''}</div>` : `
+    <div class="actions">
+      <input type="search" id="fq" placeholder="검색 (제목, 메모, 채널, 올린 사람)" value="${esc(q)}">
+      <select id="fp"><option value="">제품 전체</option>${PRODUCTS.map(p => `<option ${product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+      <select id="fs">${SORTS.map(([k, l]) => `<option value="${k}" ${sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <span class="count">${list.length}개${V().length !== list.length ? ` / 전체 ${V().length}개` : ''}</span></div>
+    <div class="hint" style="margin-bottom:10px">유튜브·인스타·틱톡 주소를 붙여넣으면 제목과 미리보기가 자동으로 채워집니다. 카드를 누르면 여기서 바로 재생되고, <b>👍</b> 로 "이건 꼭 보자"를 표시할 수 있습니다.</div>
+    ${list.length ? `<div class="vgrid">${list.map(cardHtml).join('')}</div>` : `<div class="empty">${q || product ? '조건에 맞는 영상이 없습니다.' : view === 'mine' ? '아직 올린 영상이 없습니다.' : '아직 참고 영상이 없습니다.<br>오른쪽 위 <b>+ 영상 추가</b>로 주소를 붙여넣어 보세요.'}</div>`}`}
+  </main>`;
+  bindHeader(k => { view = k; LS.set('videos_view', k); render(); }, () => openVideo(null), m => `올린 영상 ${V().filter(v => v.created_by === m.name).length}개`);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  const fp = $('#fp'); if (fp) fp.onchange = () => { product = fp.value; render(); };
+  const fs = $('#fs'); if (fs) fs.onchange = () => { sort = fs.value; LS.set('videos_sort', sort); render(); };
+  document.querySelectorAll('.v[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('[data-like]')) return; openDetail(el.dataset.id); });
+  document.querySelectorAll('[data-like]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleLike(b.dataset.like); });
+}
+const pfTag = p => { const pf = PLATFORMS[p] || PLATFORMS.etc; return `<span class="tag pf ${pf.cls}" style="color:#fff">${pf.label}</span>`; };
+function cardHtml(v){
+  const p = parseUrl(v.url), pf = PLATFORMS[p.platform] || PLATFORMS.etc;
+  return `<div class="v" data-id="${v.id}">
+    <div class="th ${pf.cls} ${p.kind}">${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span>${pf.icon}</span><span class="pf ${pf.cls}">${pf.label}</span><span class="play">▶ 보기</span></div>
+    <div class="bd">
+      <div class="ti" title="${esc(v.title || v.url)}">${esc(v.title || v.url)}</div>
+      <div class="tg">${v.category ? tag(v.category, '#e0e7ff', '#3730a3') : ''}${v.product && v.product !== '공통' ? tag(v.product, '#dcfce7', '#166534') : ''}${v.author ? `<span class="hint">${esc(v.author)}</span>` : ''}</div>
+      ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
+      <div class="ft">${who(v.created_by)}<span>${fmtDate((v.created_at || '').slice(0, 10))}</span><span class="sp"></span>${v.comments.length ? `<span title="댓글">💬 ${v.comments.length}</span>` : ''}<button class="like ${v.likes.includes(me) ? 'on' : ''}" data-like="${v.id}" title="${esc(v.likes.length ? '추천: ' + v.likes.join(', ') : '추천하기')}">👍${v.likes.length ? ' ' + v.likes.length : ''}</button></div>
+    </div></div>`;
+}
+
+/* 👍 추천 켜기/끄기 */
+async function toggleLike(id){
+  const v = V().find(x => x.id === id); if (!v) return;
+  const likes = v.likes.includes(me) ? v.likes.filter(n => n !== me) : [...v.likes, me];
+  await saveRow('videos', { ...v, likes });
+}
+
+/* 상세 창: 안에서 재생 + 정보 + 추천 + 댓글 */
+function openDetail(id){
+  const v = V().find(x => x.id === id); if (!v) return;
+  const p = parseUrl(v.url);
+  const likeBtn = () => `👍 추천${v.likes.length ? ' ' + v.likes.length : ''}`;
+  const likers = () => v.likes.length ? v.likes.map(fullName).join(', ') : '아직 추천한 사람이 없습니다';
+  openModal(`${modalHead(esc(v.title || '영상'), `<a class="btn sm" href="${esc(v.url)}" target="_blank" rel="noopener">↗ 원본 열기</a>${v.created_by === me || isAdmin() ? '<button class="btn sm" id="vEdit">수정</button>' : ''}`)}
+    <div class="mb">
+      ${p.embed ? `<div class="embed ${p.kind}"><iframe src="${esc(p.embed)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>` : `<div class="hint">이 주소는 여기서 바로 재생할 수 없습니다. <a href="${esc(v.url)}" target="_blank" rel="noopener">새 창에서 열기</a></div>`}
+      <div class="meta-row">${pfTag(p.platform)}${v.category ? tag(v.category, '#e0e7ff', '#3730a3') : ''}${v.product && v.product !== '공통' ? tag(v.product, '#dcfce7', '#166534') : ''}${v.author ? `<span>${esc(v.author)}</span>` : ''}<span class="sp"></span>${who(v.created_by)}<span>${fmtDate((v.created_at || '').slice(0, 10))}</span></div>
+      ${v.memo ? `<div style="white-space:pre-wrap;background:var(--bg2);border-radius:8px;padding:8px 10px">${esc(v.memo)}</div>` : ''}
+      <div><button class="like ${v.likes.includes(me) ? 'on' : ''}" id="dLike">${likeBtn()}</button><span class="likers" id="dLikers">${esc(likers())}</span></div>
+      <div id="dComments">${commentsHtml(v.comments)}</div>
+    </div>
+    <div class="mf">${v.created_by === me || isAdmin() ? '<button class="btn danger left" id="dDel">삭제</button>' : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  const ed = $('#vEdit'); if (ed) ed.onclick = () => { closeModal(); openVideo(id); };
+  $('#dLike').onclick = async () => {
+    await toggleLike(id);
+    const nv = V().find(x => x.id === id); if (!nv) return; v.likes = nv.likes;
+    const b = $('#dLike'); if (b) { b.className = 'like ' + (v.likes.includes(me) ? 'on' : ''); b.textContent = likeBtn(); $('#dLikers').textContent = likers(); }
+  };
+  const bindComments = () => {
+    const add = async () => {
+      const text = $('#cText').value.trim(); if (!text) return;
+      const nv = V().find(x => x.id === id) || v;
+      v.comments = [...nv.comments, { id: uid(), by: me, text, at: nowIso() }];
+      await saveRow('videos', { ...nv, comments: v.comments });
+      const box = $('#dComments'); if (box) { box.innerHTML = commentsHtml(v.comments); bindComments(); }
+    };
+    $('#cAdd').onclick = add;
+    $('#cText').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add(); };
+  };
+  bindComments();
+  const del = $('#dDel'); if (del) del.onclick = async () => { if (!confirm(`"${v.title || v.url}" 영상을 목록에서 삭제할까요?`)) return; closeModal(); await removeRow('videos', v.id); toast('삭제했습니다'); };
+}
+
+/* 추가·수정 창 */
+function openVideo(id){
+  const v0 = id ? V().find(x => x.id === id) : null;
+  const v = v0 || { url: '', title: '', author: '', thumb: '', category: CATEGORIES.includes(view) ? view : CATEGORIES[0], product: product || '공통', memo: '' };
+  openModal(`${modalHead(v0 ? '영상 수정' : '참고 영상 추가')}
+    <div class="mb">
+      <div class="f"><label>영상 주소 *</label><input id="vUrl" value="${esc(v.url)}" placeholder="유튜브·인스타그램·틱톡 주소를 붙여넣으세요 (https://...)" inputmode="url"><div class="hint" id="vHint">주소를 넣으면 제목과 미리보기를 자동으로 가져옵니다</div></div>
+      <div id="vPrev"></div>
+      <div class="f"><label>제목 *</label><input id="vTitle" value="${esc(v.title)}" maxlength="200" placeholder="자동으로 채워지지 않으면 직접 입력"></div>
+      <div class="f2">
+        <div class="f"><label>참고 포인트</label><select id="vCat">${CATEGORIES.map(c => `<option ${v.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="f"><label>관련 제품</label><select id="vProd">${PRODUCTS.map(p => `<option ${(v.product || '공통') === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      </div>
+      <div class="f"><label>왜 참고할 만한지 (메모)</label><textarea id="vMemo" placeholder="예: 첫 3초에 문제 상황을 바로 보여줌 → 서리맥스 신작에도 적용해 보자">${esc(v.memo || '')}</textarea></div>
+    </div>
+    <div class="mf">
+      <button class="btn" data-close>취소</button><button class="btn primary" id="vSave">${v0 ? '저장' : '추가'}</button>
+    </div>`);
+  let meta = { author: v.author || '', thumb: v.thumb || '' };
+  const urlIn = $('#vUrl'), hint = $('#vHint');
+  const drawPrev = () => {
+    const url = urlIn.value.trim(); const p = parseUrl(url); const pf = PLATFORMS[p.platform] || PLATFORMS.etc;
+    $('#vPrev').innerHTML = url ? `<div class="prev">${meta.thumb ? `<img src="${esc(meta.thumb)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${pfTag(p.platform)}<span>${esc(meta.author || '')}</span>${p.embed ? '<span class="hint">· 여기서 바로 재생 가능</span>' : `<span class="hint">· ${pf.label === '링크' ? '새 창으로 열림' : '주소 형식을 알 수 없어 새 창으로 열림'}</span>`}</div>` : '';
+  };
+  let lastUrl = v.url;
+  const grab = async () => {
+    const url = urlIn.value.trim(); if (!url || url === lastUrl) return; lastUrl = url;
+    if (!/^https?:\/\//i.test(url)) { hint.textContent = '주소는 https:// 로 시작해야 합니다'; hint.className = 'hint warn'; return; }
+    const p = parseUrl(url);
+    meta = { author: '', thumb: p.thumb || '' }; drawPrev();
+    hint.className = 'hint'; hint.textContent = '영상 정보를 가져오는 중…';
+    const m = await fetchMeta(url);
+    if ($('#vUrl') !== urlIn || urlIn.value.trim() !== url) return;   // 창이 닫혔거나 주소가 또 바뀜
+    meta = { author: m.author, thumb: m.thumb || p.thumb || '' };
+    if (m.title && !$('#vTitle').value.trim()) $('#vTitle').value = m.title;
+    hint.textContent = m.title ? `${(PLATFORMS[p.platform] || PLATFORMS.etc).label} 영상 정보를 가져왔습니다` : p.platform === 'ig' ? '인스타그램은 제목을 자동으로 못 가져옵니다. 제목을 직접 넣어 주세요' : '제목을 자동으로 못 가져왔습니다. 직접 넣어 주세요';
+    drawPrev();
+  };
+  urlIn.oninput = () => { clearTimeout(urlIn._t); urlIn._t = setTimeout(grab, 600); };
+  urlIn.onpaste = () => setTimeout(grab, 50);
+  urlIn.onblur = grab;
+  drawPrev();
+  (v0 ? $('#vTitle') : urlIn).focus();
+  $('#vSave').onclick = async () => {
+    const url = urlIn.value.trim();
+    if (!/^https?:\/\//i.test(url)) { urlIn.focus(); toast('영상 주소를 https:// 로 시작하게 넣어 주세요', true); return; }
+    const dup = V().find(x => x.id !== (v0 && v0.id) && urlKey(x.url) === urlKey(url));
+    if (dup) { toast(`이미 올라온 영상입니다 (${dup.created_by || '?'}님이 ${fmtDate((dup.created_at || '').slice(0, 10))} 등록)`, true); return; }
+    const title = $('#vTitle').value.trim();
+    if (!title) { $('#vTitle').focus(); toast('제목을 입력하세요', true); return; }
+    const row = { id: v0 ? v0.id : uid(), url, title, author: meta.author || null, thumb: meta.thumb || null,
+      category: $('#vCat').value, product: $('#vProd').value, memo: $('#vMemo').value.trim() || null,
+      likes: v0 ? v0.likes : [], comments: v0 ? v0.comments : [],
+      created_by: v0 ? v0.created_by : me, created_at: v0 ? v0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('videos', row); toast(v0 ? '저장했습니다' : '영상을 추가했습니다');
+  };
+}
+
+boot({ icon: '🎥', title: '참고 컨텐츠 영상', tables: ['videos'], render, normalize });
+</script>
+</body>
+</html>
