@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609221732">
-<script src="common.js?v=202609221732"></script>
+<link rel="stylesheet" href="common.css?v=202609222208">
+<script src="common.js?v=202609222208"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -106,7 +106,7 @@ const SCREENS = [
   ['alarms.html', '알람 (회사 운영 알람 메시지 모음)'],
   ['leave.html', '연차/휴가 등록'],
   ['notices.html', '공지사항'],
-  ['decisions.html', '결정사항 (대표 결정 공유)'],
+  ['decisions.html', '업무공유 (대표 결정·공유)'],
   ['accounts.html', '운영계정 (업무지원)'],
   ['accounts.html?dept=마케팅', '마케팅계정 (마케팅)'],
   ['subscriptions.html', '구독관리 (매월 지출)'],
@@ -405,7 +405,7 @@ function openNotice(id){
     <div class="mf">${isAdmin() ? '<a class="btn left" href="notices.html">수정·삭제는 공지사항 화면에서</a>' : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
 }
 
-/* ---------- 홈의 결정사항 판 (공지 판 바로 아래. 아직 확인 안 한 것을 먼저, 최근 5개) ---------- */
+/* ---------- 홈의 업무공유 판 (공지 판 바로 아래. 아직 확인 안 한 것을 먼저, 최근 5개) ---------- */
 const DREADS = d => Array.isArray(d.reads) ? d.reads : [];
 const DTARGETS = d => Array.isArray(d.targets) ? d.targets : [];
 const dRead = d => DREADS(d).includes(me);
@@ -421,13 +421,13 @@ function decisionBoard(){
   const todo = all.filter(need).length, list = [...all.filter(need), ...all.filter(d => !need(d) && isRecent(d.created_at)).slice(0, RECENT_MAX)];
   if (!all.length && !admin) return '';
   return `<section class="nboard">
-    <div class="hd"><h2>✅ 결정사항 <span class="cnt">${todo ? `확인할 것 ${todo}건` : list.length ? '' : all.length ? '새 결정사항 없음' : ''}</span></h2>
-      ${admin ? '<a href="decisions.html#new">＋ 결정사항 쓰기</a>' : ''}<a href="decisions.html">전체 보기 →</a></div>
+    <div class="hd"><h2>✅ 업무공유 <span class="cnt">${todo ? `확인할 것 ${todo}건` : list.length ? '' : all.length ? '새 업무공유 없음' : ''}</span></h2>
+      ${admin ? '<a href="decisions.html#new">＋ 업무공유 쓰기</a>' : ''}<a href="decisions.html">전체 보기 →</a></div>
     ${list.length ? list.map(d => { const un = dForMe(d) && !dRead(d), aud = dAudience(d); return `<div class="nrow ${un ? 'unread' : ''}" data-decision="${d.id}">
-      <span class="t">${d.topic ? `<span class="rd" style="margin:0 6px 0 0">[${esc(d.topic)}]</span>` : ''}${esc(d.title)}${un ? '<span class="new">NEW</span>' : ''}${admin ? `<span class="rd" title="확인한 사람 수">✓ ${aud.filter(n => DREADS(d).includes(n)).length}/${aud.length}</span>` : ''}</span>
+      <span class="t">${d.topic ? `<span class="rd" style="margin:0 6px 0 0">[${esc(d.topic)}]</span>` : ''}${esc(d.title)}${(d.files || []).length ? ' 📎' : ''}${d.link ? ' 🔗' : ''}${un ? '<span class="new">NEW</span>' : ''}${admin ? `<span class="rd" title="확인한 사람 수">✓ ${aud.filter(n => DREADS(d).includes(n)).length}/${aud.length}</span>` : ''}</span>
       <span class="by">${esc(d.created_by || '')}</span><span class="dt">${fmtDate(dDate(d))}</span>
       ${!dForMe(d) ? '<span class="ok">-</span>' : un ? '<span class="ok" data-dok title="눌러서 확인">확인</span>' : '<span class="ok">✓ 확인완료</span>'}</div>`; }).join('')
-    : all.length ? '' : `<div class="none">아직 결정사항이 없습니다. 오른쪽 위 <b>＋ 결정사항 쓰기</b>로 남겨 보세요.</div>`}
+    : all.length ? '' : `<div class="none">아직 업무공유 글이 없습니다. 오른쪽 위 <b>＋ 업무공유 쓰기</b>로 남겨 보세요.</div>`}
   </section>`;
 }
 async function confirmDecision(id){
@@ -438,14 +438,16 @@ async function confirmDecision(id){
 function openDecision(id){
   const d = (DATA.decisions || []).find(x => x.id === id); if (!d) return;
   const aud = dAudience(d), pend = aud.filter(n => !DREADS(d).includes(n)), un = dForMe(d) && !dRead(d);
-  openModal(`${modalHead('✅ 결정사항')}
+  openModal(`${modalHead('✅ 업무공유')}
     <div class="mb">
       <div class="hint">${d.topic ? esc(d.topic) + ' · ' : ''}${fmtDate(dDate(d))} · ${esc(d.created_by || '')} · 대상: ${DTARGETS(d).length ? esc(DTARGETS(d).join(', ')) : '전체'}</div>
       <div style="font-size:17px;font-weight:700;line-height:1.5">${esc(d.title)}</div>
       ${d.reason ? `<div class="content" style="background:var(--bg2);border-radius:6px;padding:10px 12px">${linkify(d.reason)}</div>` : ''}
+      ${d.link ? `<a href="${esc(/^https?:\/\//i.test(d.link) ? d.link : 'https://' + d.link)}" target="_blank" rel="noopener" style="font-size:13px">🔗 ${esc(d.link.replace(/^https?:\/\//i, ''))}</a>` : ''}
+      ${filesHtml(Array.isArray(d.files) ? d.files : [])}
       ${isAdmin() ? `<div class="hint">확인 ${aud.length - pend.length}/${aud.length}${pend.length ? ` · 안 함: ${esc(pend.join(', '))}` : ' · 모두 확인'}</div>` : ''}
     </div>
-    <div class="mf">${isAdmin() ? '<a class="btn left" href="decisions.html">수정·삭제는 결정사항 화면에서</a>' : ''}<button class="btn" data-close>닫기</button>${un ? '<button class="btn primary" id="dOk">확인했습니다</button>' : ''}</div>`, { wide: true });
+    <div class="mf">${isAdmin() ? '<a class="btn left" href="decisions.html">수정·삭제는 업무공유 화면에서</a>' : ''}<button class="btn" data-close>닫기</button>${un ? '<button class="btn primary" id="dOk">확인했습니다</button>' : ''}</div>`, { wide: true });
   const ok = $('#dOk'); if (ok) ok.onclick = () => { closeModal(); confirmDecision(id); };
 }
 
