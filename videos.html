@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>참고 컨텐츠 영상</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202609221636">
-<script src="common.js?v=202609221636"></script>
+<link rel="stylesheet" href="common.css?v=202609221642">
+<script src="common.js?v=202609221642"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
   .actions input[type=search],.actions select{border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;background:var(--bg)}
   .actions input[type=search]{min-width:220px}
   .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
@@ -111,18 +112,19 @@ function render(){
       && (!product || (v.product || '공통') === product)
       && (!q || [v.title, v.memo, v.category, v.product, v.author, v.url, v.created_by].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))))
     .sort((a, b) => sort === 'like' ? (b.likes.length - a.likes.length) || byNew(a, b) : byNew(a, b));
-  $('#app').innerHTML = headerHtml({ icon: '🎥', title: '참고 컨텐츠 영상', tabs: VIEWS(), active: view, newLabel: '영상 추가' })
+  $('#app').innerHTML = headerHtml({ icon: '🎥', title: '참고 컨텐츠 영상', tabs: VIEWS(), active: view })
     + `<main class="wrap">
     ${!DATA.videos ? `<div class="empty">참고 영상 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-videos.sql)을 실행하세요.' : ''}</div>` : `
-    <div class="actions">
+    <div class="actions"><button class="btn primary" id="newBtn2">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색 (제목, 메모, 채널, 올린 사람)" value="${esc(q)}">
       <select id="fp"><option value="">제품 전체</option>${PRODUCTS.map(p => `<option ${product === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
       <select id="fs">${SORTS.map(([k, l]) => `<option value="${k}" ${sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <span class="count">${list.length}개${V().length !== list.length ? ` / 전체 ${V().length}개` : ''}</span></div>
     <div class="hint" style="margin-bottom:10px">유튜브·인스타·틱톡 주소를 붙여넣으면 제목과 미리보기가 자동으로 채워집니다. 카드를 누르면 여기서 바로 재생되고, <b>👍</b> 로 "이건 꼭 보자"를 표시할 수 있습니다.</div>
-    ${list.length ? `<div class="vgrid">${list.map(cardHtml).join('')}</div>` : `<div class="empty">${q || product ? '조건에 맞는 영상이 없습니다.' : view === 'mine' ? '아직 올린 영상이 없습니다.' : '아직 참고 영상이 없습니다.<br>오른쪽 위 <b>+ 영상 추가</b>로 주소를 붙여넣어 보세요.'}</div>`}`}
+    ${list.length ? `<div class="vgrid">${list.map(cardHtml).join('')}</div>` : `<div class="empty">${q || product ? '조건에 맞는 영상이 없습니다.' : view === 'mine' ? '아직 올린 영상이 없습니다.' : '아직 참고 영상이 없습니다.<br>위 <b>＋ 영상 추가</b>로 주소를 붙여넣어 보세요.'}</div>`}`}
   </main>`;
   bindHeader(k => { view = k; LS.set('videos_view', k); render(); }, () => openVideo(null), m => `올린 영상 ${V().filter(v => v.created_by === m.name).length}개`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openVideo(null);
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   const fp = $('#fp'); if (fp) fp.onchange = () => { product = fp.value; render(); };
   const fs = $('#fs'); if (fs) fs.onchange = () => { sort = fs.value; LS.set('videos_sort', sort); render(); };
