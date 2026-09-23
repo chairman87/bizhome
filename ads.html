@@ -21,7 +21,7 @@
   table.ads th.grp .brand{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#292524;letter-spacing:.01em}
   table.ads th.grp svg{width:17px;height:17px;display:block}
   table.ads th.gl{border-left:2px solid #e0c25a}
-  table.ads tbody td:nth-child(4),table.ads tbody td:nth-child(7),table.ads tbody td:nth-child(8),table.ads.g tbody td:nth-child(10){border-left:2px solid var(--line)}
+  table.ads tbody td:nth-child(4),table.ads tbody td:nth-child(7),table.ads tbody td:nth-child(9),table.ads.g tbody td:nth-child(11){border-left:2px solid var(--line)}
   td.c{text-align:center;white-space:nowrap}
   td.ttl{font-weight:500;min-width:220px}
   td.note{color:var(--fg2);font-size:12px;max-width:260px;white-space:pre-wrap;word-break:break-word}
@@ -128,7 +128,7 @@ const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑'
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
 let view = 'month';   // 들어오면 항상 월별 현황부터 (예전에는 마지막에 보던 탭을 기억했음)
-const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', budget: '', gstate: '', google: '', status: '' });   // 기본: 메타 운영중만
+const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', budget: '', tstate: '', gstate: '', google: '', status: '' });   // 기본: 메타 운영중만
 let filter = freshFilter();
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let sort = { key: 'date', dir: 'desc' };
@@ -151,6 +151,9 @@ const LOGO = {
   '틱톡': `<span class="brand" title="틱톡"><svg viewBox="-1.5 -1.5 27 27" aria-hidden="true"><path fill="#25F4EE" transform="translate(-1 -1)" d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/><path fill="#FE2C55" transform="translate(1 1)" d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/><path fill="#000" d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>TikTok</span>`,
   '구글': `<span class="brand" title="구글애즈"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Google</span>`,
 };
+const TSTATES = ['운영중', 'OFF', '거부됨', '없음'];
+const tstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.tiktok_state) ? a.tiktok_state : '없음';   // 틱톡에서 실제로 송출 중인지 (매일 10시 크롬으로 읽어 자동 반영)
+const tstateHtml = a => { const t = tstateOf(a); return t === '운영중' ? '<span class="run">운영중</span>' : t === 'OFF' ? '<span class="off">OFF</span>' : t === '거부됨' ? '<span class="del" title="틱톡 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : '<span style="color:var(--fg3)" title="틱톡 광고 관리자에서 이 영상을 찾지 못했습니다. 틱톡에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
 const NO_GOOGLE = ['레모너리'];   // 구글 광고를 하지 않는 제품: 표에서 구글 열 두 개를 숨김
 const hasGoogle = p => !NO_GOOGLE.includes(p);
 const GSTATES = ['운영중', 'OFF', '거부됨', '없음'];
@@ -174,39 +177,39 @@ function syncHtml(p){
   const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
   if (!last) return '';
   const S = last.summary || {}, of = k => (S[k] || []).filter(x => x.product === p), won = v => /^\d+$/.test(v || '') ? Number(v).toLocaleString('ko-KR') : esc(v || '');
-  const nw = of('new'), off = of('off'), on = of('on'), bd = of('budget'), gon = of('g_on'), goff = of('g_off'), chk = [...of('lost').map(x => ({ ...x, why: '표에는 운영중인데 메타에서 못 찾음' })), ...of('kept')];
+  const nw = of('new'), off = of('off'), on = of('on'), bd = of('budget'), gon = of('g_on'), goff = of('g_off'), ton = of('t_on'), toff = of('t_off'), chk = [...of('lost').map(x => ({ ...x, why: '표에는 운영중인데 메타에서 못 찾음' })), ...of('kept')];
   const who = x => `${esc(x.title)}${x.editor ? ' / ' + esc(x.editor) : ''}`;
   const box = (t, list, f) => list.length ? `<div><h4>${t} ${list.length}</h4>${list.map(x => `<div>${f(x)}</div>`).join('')}</div>` : '';
-  const any = nw.length + off.length + on.length + bd.length + gon.length + goff.length + chk.length;
-  return `<div class="sync"><div class="top"><b>🔗 메타·구글 자동 반영</b><span>마지막 ${fmtDateTime(last.synced_at)}</span>
+  const any = nw.length + off.length + on.length + bd.length + ton.length + toff.length + gon.length + goff.length + chk.length;
+  return `<div class="sync"><div class="top"><b>🔗 메타·틱톡·구글 자동 반영</b><span>마지막 ${fmtDateTime(last.synced_at)}</span>
       ${any ? '' : '<span>· 바뀐 점 없음</span>'}
-      ${nw.length ? `<span class="chip">새 영상 <b>${nw.length}</b></span>` : ''}${off.length ? `<span class="chip">OFF 됨 <b>${off.length}</b></span>` : ''}${on.length ? `<span class="chip">다시 켜짐 <b>${on.length}</b></span>` : ''}${bd.length ? `<span class="chip">예산 변경 <b>${bd.length}</b></span>` : ''}${gon.length ? `<span class="chip">구글 켜짐 <b>${gon.length}</b></span>` : ''}${goff.length ? `<span class="chip">구글 꺼짐 <b>${goff.length}</b></span>` : ''}${chk.length ? `<span class="chip warn">확인 필요 <b>${chk.length}</b></span>` : ''}
+      ${nw.length ? `<span class="chip">새 영상 <b>${nw.length}</b></span>` : ''}${off.length ? `<span class="chip">OFF 됨 <b>${off.length}</b></span>` : ''}${on.length ? `<span class="chip">다시 켜짐 <b>${on.length}</b></span>` : ''}${bd.length ? `<span class="chip">예산 변경 <b>${bd.length}</b></span>` : ''}${ton.length ? `<span class="chip">틱톡 켜짐 <b>${ton.length}</b></span>` : ''}${toff.length ? `<span class="chip">틱톡 꺼짐 <b>${toff.length}</b></span>` : ''}${gon.length ? `<span class="chip">구글 켜짐 <b>${gon.length}</b></span>` : ''}${goff.length ? `<span class="chip">구글 꺼짐 <b>${goff.length}</b></span>` : ''}${chk.length ? `<span class="chip warn">확인 필요 <b>${chk.length}</b></span>` : ''}
       ${any ? `<a id="syncTg">${syncOpen ? '접기 ▴' : '자세히 ▾'}</a>` : ''}</div>
-    ${any && syncOpen ? `<div class="det">${box('새 영상', nw, x => `${who(x)} · 예산 ${won(x.budget)}`)}${box('OFF 됨', off, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('다시 켜짐', on, who)}${box('예산 변경', bd, x => `${who(x)}: ${won(x.from)} → <b>${won(x.to)}</b>`)}${box('구글 켜짐', gon, who)}${box('구글 꺼짐', goff, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('확인 필요', chk, x => `${who(x)} <span style="color:#b91c1c">(${esc(x.why || '')})</span>`)}</div>` : ''}</div>`;
+    ${any && syncOpen ? `<div class="det">${box('새 영상', nw, x => `${who(x)} · 예산 ${won(x.budget)}`)}${box('OFF 됨', off, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('다시 켜짐', on, who)}${box('예산 변경', bd, x => `${who(x)}: ${won(x.from)} → <b>${won(x.to)}</b>`)}${box('틱톡 켜짐', ton, who)}${box('틱톡 꺼짐', toff, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('구글 켜짐', gon, who)}${box('구글 꺼짐', goff, x => who(x) + (x.why ? ` <span style="color:#b91c1c">(${esc(x.why)})</span>` : ''))}${box('확인 필요', chk, x => `${who(x)} <span style="color:#b91c1c">(${esc(x.why || '')})</span>`)}</div>` : ''}</div>`;
 }
 
 /* 제품별 표 */
 function listOf(p){
   const q = filter.q.trim().toLowerCase();
   return G().filter(a => a.product === p && (!q || [a.title, a.editor, a.meta_account, a.note, a.tiktok].some(v => (v || '').toLowerCase().includes(q)))
-    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate || (filter.mstate === '운영중' && mstateOf(a) === '미연결' && a.status === '운영중')) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.gstate || gstateOf(a) === filter.gstate) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
+    && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate || (filter.mstate === '운영중' && mstateOf(a) === '미연결' && a.status === '운영중')) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.tstate || tstateOf(a) === filter.tstate) && (!filter.gstate || gstateOf(a) === filter.gstate) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok', '틱톡'], ['google_state', '운영여부'], ['google', '구글'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
-      <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
+      <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.tstate && '틱톡 ' + filter.tstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px;line-height:1.7">
       <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>예산·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 캠페인도 자동으로 들어옵니다.</div>
     </div>
     <div class="tablewrap"><table class="ads ${hasGoogle(p) ? 'g' : ''}"><thead>${(() => {
-      const GROUP = { meta_account: '메타', meta_state: '메타', meta_budget: '메타', tiktok: '틱톡', google_state: '구글', google: '구글' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg' };
+      const GROUP = { meta_account: '메타', meta_state: '메타', meta_budget: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg' };
       const th = ([k, l], attr = '', cls = '') => {
-        const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']] }[k];   // 열 머리 필터: [filter 키, 선택지]
+        const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], tiktok_state: ['tstate', TSTATES], google_state: ['gstate', GSTATES], meta_budget: ['budget', budgets()], google: ['google', ['O', 'X']] }[k];   // 열 머리 필터: [filter 키, 선택지]
         if (!HF) return `<th data-sort="${k}" class="${cls}" ${attr}>${l}${sortArrow(sort, k)}</th>`;
-        const [fk, opts] = HF, cur = filter[fk], name = GROUP[k] === '구글' && k === 'google_state' ? '구글 운영여부' : l;
+        const [fk, opts] = HF, cur = filter[fk], name = k === 'google_state' ? '구글 운영여부' : k === 'tiktok_state' ? '틱톡 운영여부' : l;
         return `<th class="c ${cls}" ${attr}><select data-hf="${fk}" title="${name}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
       };
       const first = (c, i) => i === 0 || GROUP[cols[i - 1][0]] !== GROUP[c[0]];   // 묶음의 첫 열인지
@@ -221,12 +224,13 @@ function productHtml(p){
       <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c hint" title="메타 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><input id="nBudget" placeholder="예산/OFF" style="width:80px"></td>
+      <td class="c hint" title="틱톡 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
       ${hasGoogle(p) ? `<td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
-    ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
+    ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
@@ -234,6 +238,7 @@ function productHtml(p){
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
       <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
       <td class="c" data-edit="meta_budget" data-id="${a.id}">${String(a.meta_budget || '').toUpperCase() === 'OFF' ? '<span class="off">OFF</span>' : fmtBudget(a.meta_budget)}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 예산과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
+      <td class="c" title="틱톡 광고 관리자에서 실제로 송출 중인지 (매일 오전 10시 자동 반영)">${tstateHtml(a)}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       ${hasGoogle(p) ? `<td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>` : ''}
@@ -326,7 +331,7 @@ function bindView(){
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(filter.q.length, filter.q.length); };
   document.querySelectorAll('[data-fs]').forEach(b => b.onclick = e => { e.preventDefault(); filter.status = (b.tagName === 'BUTTON' && b.dataset.fs === filter.status) ? '' : b.dataset.fs; render(); });   // 상태 버튼: 누르면 걸리고 다시 누르면 풀림
   document.querySelectorAll('select[data-hf]').forEach(h => { h.onclick = e => e.stopPropagation(); h.onchange = () => { filter[h.dataset.hf] = h.value; render(); }; });   // 열 머리 필터
-  const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.mstate = filter.budget = filter.gstate = filter.google = filter.status = ''; render(); };
+  const cl = $('[data-clear]'); if (cl) cl.onclick = e => { e.preventDefault(); filter.editor = filter.meta = filter.mstate = filter.budget = filter.tstate = filter.gstate = filter.google = filter.status = ''; render(); };
   bindSort(sort, render, { title: 'asc', editor: 'asc', meta_account: 'asc' });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('select, input, textarea')) return; openAd(tr.dataset.id); });
   document.querySelectorAll('[data-google]').forEach(b => b.onclick = async e => { e.stopPropagation(); const a = G().find(x => x.id === b.dataset.google); await saveRow('ads', { ...a, google: !a.google, updated_by: me }); });   // 구글 O/X 토글
