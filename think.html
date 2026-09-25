@@ -432,7 +432,7 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 09/25 23:41)</span></div>
+      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 09/25 23:48)</span></div>
       <input type="email" id="gateEmail" placeholder="이메일" autocomplete="username">
       <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
       <button id="gateBtn">들어가기</button>
@@ -572,6 +572,19 @@
       } catch (e) { return false; }
     }
 
+    // 앱이 어디까지 갔는지 서버에 자취를 남깁니다 (화면 안에서 나는 문제를 밖에서 보기 위해)
+    async function dbg(stepName, info) {
+      try {
+        const { data } = await sb.auth.getSession();
+        const uid = data && data.session ? data.session.user.id : null;
+        if (!uid) return;
+        await sb.from("think_debug").insert({
+          id: crypto.randomUUID(), owner: uid,
+          step: String(stepName).slice(0, 200),
+          info: String(info === undefined ? "" : info).slice(0, 800)
+        });
+      } catch (e) {}
+    }
     // 어디까지 갔는지 화면에 그대로 적습니다. 문제가 생기면 이 줄만 보면 압니다.
     function step(t) {
       const el = document.getElementById("gateMsg");
@@ -585,10 +598,11 @@
     }
 
     // 예상 못한 오류도 화면에 띄웁니다 (조용히 사라지지 않게)
-    window.addEventListener("error", (e) => fail("오류: " + (e.message || e)));
+    window.addEventListener("error", (e) => { fail("오류: " + (e.message || e)); dbg("window.onerror", (e.message || "") + " @ " + (e.filename || "") + ":" + (e.lineno || "")); });
     window.addEventListener("unhandledrejection", (e) => {
       const r = e.reason;
       fail("오류: " + (r && r.message ? r.message : r));
+      dbg("unhandledrejection", r && r.message ? r.message : String(r));
     });
 
     async function signIn() {
@@ -657,11 +671,13 @@
       document.getElementById("gate").hidden = true;
       document.getElementById("topbar").hidden = false;
 
+      dbg("A. 로그인확인 통과", me.email);
       if (typeof step === "function") step("④ 내용 불러오는 중…");
       const { data, error } = await sb.from("think_docs").select("data").eq("owner", me.id).maybeSingle();
       if (error) {
         document.getElementById("gate").hidden = false;
         document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + error.message;
+        dbg("B. 내용 불러오기 실패", error.message);
         return;
       }
 
@@ -675,13 +691,26 @@
         STATE = (data && data.data) ? data.data : {};
       }
 
+      dbg("C. 내용 받음", "항목 " + Object.keys(STATE).length + "개");
       if (!Object.keys(STATE).length) {
         document.getElementById("importBox").hidden = false;
       }
 
-      migrateBoards();
-      drawLayout();
-      document.getElementById("addBoard").addEventListener("click", addBoard);
+      // 화면 그리기. 여기서 문제가 나면 빈 화면이 되지 않도록 붙잡아 알립니다
+      try {
+        migrateBoards();
+        dbg("D. 탭 목록 준비", storeGet("boards") || "(없음)");
+        drawLayout();
+        dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
+        document.getElementById("addBoard").addEventListener("click", addBoard);
+      } catch (e) {
+        const m = (e && e.message) ? e.message : String(e);
+        dbg("D~E. 화면 그리기 실패", m + " | " + (e && e.stack ? e.stack.slice(0, 500) : ""));
+        document.getElementById("gate").hidden = false;
+        document.getElementById("gateMsg").style.color = "#c96442";
+        document.getElementById("gateMsg").textContent = "화면을 그리는 중 오류: " + m;
+        return;
+      }
 
       appReady = true;
       showStoreStatus(cache && cache.dirty ? "saving" : "ready");
