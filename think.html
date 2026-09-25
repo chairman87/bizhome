@@ -415,7 +415,12 @@
     .gate-msg { margin-top: 12px; font-size: 12px; color: #c96442; line-height: 1.6; }
 
     /* ── 위쪽 줄 안의 버튼들 ── */
-    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    /* 저장 표시는 위쪽 줄 안에서 흐름대로 놓습니다 (고정 위치면 로그아웃 버튼과 겹칩니다) */
+    .topbar .store-status {
+      position: static; top: auto; right: auto;
+      max-width: 52vw; text-align: right;
+    }
     .logout {
       padding: 4px 10px; font-size: 11px;
       background: none; color: #bbb; border: 1px solid #e5e0d8;
@@ -467,7 +472,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-25 23:58";
+    const BUILD = "2026-09-26 00:06";
     (async () => {
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
