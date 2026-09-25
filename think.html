@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>파고들기</title>
+  <link rel="icon" href="favicon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: "맑은 고딕", sans-serif;
+      background: #f4f1ea;
+      display: flex;
+      justify-content: center;
+      padding: 44px 20px 32px;
+      margin: 0;
+    }
+    .card {
+      background: #fff;
+      flex: 0 0 auto;           /* 넓이는 탭마다 직접 정합니다 */
+      min-width: 0;
+      box-sizing: border-box;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+
+      /* 내용이 적어도 카드는 줄어들지 않는 고정 높이 */
+      height: calc(100vh - 76px);
+      min-height: 560px;
+      display: flex;
+      flex-direction: column;
+    }
+    /* 카드 위쪽(제목·입력칸)은 고정, 아래쪽은 카드 안에서 스크롤 */
+    .card-top { flex: 0 0 auto; }
+    .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 6px; }
+
+    /* 스크롤 막대를 얇고 연하게 */
+    .card-body::-webkit-scrollbar, textarea::-webkit-scrollbar { width: 8px; }
+    .card-body::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb {
+      background: #e2ddd4; border-radius: 4px;
+    }
+    .card-body::-webkit-scrollbar-track, textarea::-webkit-scrollbar-track { background: transparent; }
+
+    /* ── 컨디션 · 감정 카드 ── */
+    .mood-date {
+      display: flex; align-items: baseline; justify-content: space-between;
+      font-size: 13px; color: #999; margin-bottom: 16px;
+    }
+    .mood-back {
+      background: none; color: #c96442; font-size: 12px;
+      padding: 0; text-decoration: underline;
+    }
+    .mood-back:hover { background: none; color: #b0543a; }
+
+    .mood-group { margin-bottom: 14px; }
+    .mood-label {
+      display: flex; align-items: baseline; justify-content: space-between;
+      font-size: 13px; color: #666; margin-bottom: 7px;
+    }
+    .mood-score { font-size: 13px; font-weight: bold; color: #c96442; }
+    /* 1~10 점수 버튼 한 줄 */
+    .scale { display: flex; gap: 3px; }
+    .scale button {
+      flex: 1 1 0; min-width: 0; padding: 8px 0;
+      font-size: 12px; border-radius: 6px;
+      background: #f4f1ea; color: #aaa;
+    }
+    .scale button:hover { background: #e8e2d6; color: #666; }
+    .scale button.on { background: #c96442; color: #fff; font-weight: bold; }
+    .scale-ends {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: #ccc; margin-top: 4px;
+    }
+
+    .mood-note {
+      width: 100%; box-sizing: border-box; padding: 10px 12px;
+      font-family: inherit; font-size: 14px;
+      border: 1px solid #ddd; border-radius: 8px;
+    }
+    .mood-sub { font-size: 11px; color: #bbb; margin: 16px 0 8px; }
+    .mood-guide { font-size: 11px; color: #ccc; margin-bottom: 10px; }
+
+    /* 최근 30일 막대 그래프 */
+    .chart { display: flex; align-items: flex-end; gap: 2px; height: 70px; }
+    .chart .day {
+      flex: 1 1 0; min-width: 0; height: 100%; cursor: pointer;
+      display: flex; align-items: flex-end; gap: 1px;
+    }
+    .chart .day:hover { background: #faf8f4; }
+    .chart .bar { flex: 1 1 0; border-radius: 2px 2px 0 0; }
+    .chart .bar.c { background: #c96442; }
+    .chart .bar.e { background: #c9a087; }
+    .chart .bar.none { background: #efeae1; }
+    .chart-legend { display: flex; gap: 12px; font-size: 11px; color: #bbb; margin-top: 6px; }
+    .chart-legend i {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 2px; margin-right: 4px;
+    }
+
+    /* 날짜별 기록 목록 */
+    .mood-list li { cursor: pointer; flex-wrap: wrap; justify-content: space-between; }
+    .mood-list li:hover { background: #faf8f4; }
+    .mood-list .d { font-size: 13px; color: #888; }
+    .mood-list .v { font-size: 13px; color: #555; }
+    .mood-list .n { flex-basis: 100%; font-size: 12px; color: #aaa; margin-top: 4px; }
+    .mood-list li.on .d, .mood-list li.on .v { color: #c96442; font-weight: bold; }
+    .mood-list li.empty { cursor: default; color: #ccc; font-size: 13px; border-bottom: none; }
+    .mood-list li.empty:hover { background: none; }
+
+
+    /* ── 메모함 카드 ── */
+    .notes-add { width: 100%; margin-bottom: 4px; font-size: 14px; padding: 11px; }
+    .note-item { border-bottom: 1px solid #f0f0f0; }
+
+    /* 제목 줄. 누르면 접혔다 펴집니다 */
+    .note-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 0; cursor: pointer;
+    }
+    .note-head:hover { background: #faf8f4; }
+    .note-arrow { flex-shrink: 0; width: 12px; font-size: 10px; color: #ccc; }
+    .note-title-text {
+      flex: 1; min-width: 0; font-size: 14px; color: #444; word-break: break-word;
+    }
+    /* 펼쳤을 때는 제목을 바로 고칠 수 있게 입력칸으로 바뀝니다 */
+    .note-title-input {
+      flex: 1; min-width: 0; padding: 6px 8px;
+      font-family: inherit; font-size: 14px; color: #444;
+      border: 1px solid #ddd; border-radius: 6px;
+    }
+    .note-del {
+      flex-shrink: 0; padding: 0 4px; font-size: 15px;
+      background: none; color: #ddd;
+    }
+    .note-del:hover { background: none; color: #c96442; }
+
+    .note-body {
+      width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 10px 12px;
+      font-family: inherit; font-size: 14px; line-height: 1.8; color: #333;
+      background: #fdfcfa; border: 1px solid #eee; border-radius: 8px;
+      resize: none; overflow: hidden;      /* 내용에 맞춰 저절로 늘어납니다 */
+    }
+    .note-body:focus { outline: none; background: #fff; border-color: #ddd; }
+    .notes-empty { padding: 14px 0; font-size: 13px; color: #ccc; }
+    /* 크게 쓰는 탭(board-big)의 주제는 크고 뚜렷하게 */
+    .board-big .note-item { border-bottom: 1px solid #e8e4dc; }
+    .board-big .note-head { padding: 15px 0; gap: 10px; }
+    .board-big .note-arrow { width: 14px; font-size: 11px; color: #c9b8a8; }
+    .board-big .note-title-text {
+      font-size: 17px; font-weight: 600; color: #2f2f2f; line-height: 1.5;
+    }
+    .board-big .note-title-input { font-size: 17px; font-weight: 600; color: #2f2f2f; }
+    /* 지금 펼쳐서 파고 있는 주제는 색으로 한 번 더 구분 */
+    .board-big .note-item:has(.note-body) .note-title-text { color: #c96442; }
+    .board-big .note-item:has(.note-body) .note-arrow { color: #c96442; }
+    .board-big .note-body { margin-bottom: 18px; font-size: 15px; line-height: 1.9; }
+
+    /* 주제 줄의 '보관' 버튼 */
+    .note-archive {
+      flex-shrink: 0; padding: 3px 7px; font-size: 11px;
+      background: none; color: #d8d2c8;
+    }
+    .note-head:hover .note-archive { color: #a99d8d; }
+    .note-archive:hover { background: #f4f1ea; color: #6b8e5a; }
+
+    /* 보관함 줄의 날짜 */
+    .note-arch-date { flex-shrink: 0; font-size: 11px; color: #ccc; margin-right: 4px; }
+
+    /* 메모 휴지통 목록 */
+    .note-trash-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 0; border-bottom: 1px solid #f4f4f4;
+    }
+    .note-trash-title {
+      flex: 1; min-width: 0; font-size: 13px; color: #bbb;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* 메모를 끌어다 순서 바꾸는 중 */
+    .note-item.dragging { opacity: 0.35; }
+    .note-item.drop-above { box-shadow: inset 0 3px 0 #c96442; }
+    .note-item.drop-below { box-shadow: inset 0 -3px 0 #c96442; }
+    /* 오른쪽 위 저장 상태 표시 */
+    .store-status {
+      position: fixed; top: 7px; right: 20px; z-index: 50;
+      font-size: 12px; color: #aaa;
+    }
+    .store-status.warn {
+      padding: 5px 10px; border-radius: 6px;
+      background: #c96442; color: #fff;
+    }
+    .store-status button {
+      margin-left: 8px; padding: 3px 8px; font-size: 12px;
+      background: #fff; color: #c96442;
+    }
+    .store-status button:hover { background: #f4f1ea; }
+
+    /* 위쪽 줄: 새 탭 버튼과 저장 상태 */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 20px; gap: 12px;
+    }
+    .add-board {
+      padding: 5px 12px; font-size: 12px;
+      background: #fff; color: #c96442; border: 1px solid #e2ddd4;
+    }
+    .add-board:hover { background: #c96442; color: #fff; }
+
+    /* 탭을 나란히 놓는 틀. 넓이를 직접 정하므로 넘치면 옆으로 넘겨서 봅니다 */
+    .layout {
+      display: flex; gap: 20px; align-items: stretch;
+      width: max-content; margin: 0 auto;
+    }
+
+    /* 탭 오른쪽 끝을 잡고 끌면 넓이가 바뀝니다 */
+    .card { position: relative; }
+    .card-grip {
+      position: absolute; top: 0; right: -10px; width: 20px; height: 100%;
+      cursor: col-resize; z-index: 5;
+    }
+    .card-grip::after {
+      content: ""; position: absolute; top: 50%; left: 9px;
+      width: 2px; height: 40px; margin-top: -20px;
+      background: #e2ddd4; border-radius: 1px; opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .card-grip:hover::after { opacity: 1; }
+    body.resizing { cursor: col-resize; user-select: none; }
+
+    /* 탭 지우기 (제목 줄 오른쪽 끝) */
+    .card-del {
+      padding: 0 2px; margin-left: 8px; font-size: 15px;
+      background: none; color: #e5e0d8;
+    }
+    .card-del:hover { background: none; color: #c96442; }
+
+    h1 { margin: 0 0 8px; font-size: 20px; line-height: 1.6; }
+
+    /* ── 왼쪽: 연간 목표 카드 ── */
+    .card-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .card-head h1 { margin: 0; }
+    .card-head.tight { margin-bottom: 8px; }
+
+    /* 클릭해서 고치는 제목 */
+    h1[contenteditable] {
+      white-space: pre-line;               /* 줄바꿈을 그대로 살림 */
+      cursor: text; outline: none;
+      padding: 3px 6px; margin-left: -6px; border-radius: 6px;
+    }
+    h1[contenteditable]:hover { background: #faf8f4; }
+    h1[contenteditable]:focus { background: #fff; box-shadow: 0 0 0 1px #c96442; }
+    h1[contenteditable]:empty::before {
+      content: attr(data-placeholder); color: #d4cfc6;
+    }
+    .saved {
+      font-size: 12px; color: #6b8e5a;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .saved.show { opacity: 1; }
+    .note {
+      flex: 1 1 auto; min-height: 0;      /* 카드 높이를 꽉 채우고 */
+      overflow-y: auto;                    /* 길어지면 이 안에서만 스크롤 */
+      width: 100%; box-sizing: border-box;
+      resize: none;
+      font-family: inherit; font-size: 15px; line-height: 1.9; color: #333;
+      background: #faf8f4; padding: 14px; border-radius: 10px;
+      border: 1px solid transparent; outline: none;
+    }
+    .note:hover { border-color: #eee; }
+    .note:focus { border-color: #c96442; background: #fff; }
+    .note::placeholder { color: #c4c0b8; }
+    .date {
+      display: flex; align-items: baseline; justify-content: space-between;
+      color: #999; font-size: 14px; margin-bottom: 24px;
+    }
+    #clock { font-size: 17px; color: #c96442; letter-spacing: 0.5px; }
+    .row { display: flex; gap: 8px; margin-bottom: 20px; }
+    /* 글자 입력칸에만 적용 (예전엔 그냥 input 이라 체크박스까지 늘어났었음) */
+    .row input, .sub-input input {
+      flex: 1; padding: 12px; font-size: 15px; min-width: 0;
+      border: 1px solid #ddd; border-radius: 8px;
+    }
+    select {
+      padding: 12px 6px; font-size: 14px; cursor: pointer;
+      border: 1px solid #ddd; border-radius: 8px; background: #fff;
+    }
+    button {
+      padding: 12px 18px; font-size: 15px; cursor: pointer;
+      border: none; border-radius: 8px;
+      background: #c96442; color: #fff;
+    }
+    button:hover { background: #b0543a; }
+    ul { list-style: none; padding-left: 0; padding-right: 0; margin: 0; }
+    li {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 0; border-bottom: 1px solid #f0f0f0;
+      text-align: left;
+    }
+    /* 체크박스: 브라우저 기본 여백을 없애고 크기를 고정해서 줄을 맞춤 */
+    li input[type="checkbox"] {
+      width: 18px; height: 18px; margin: 0; flex-shrink: 0;
+      accent-color: #c96442; cursor: pointer;
+    }
+    li .text { flex: 1; text-align: left; min-width: 0; word-break: break-word; }
+
+    /* 메인 목록은 '한 줄 + 하위 할일'을 담아야 해서 세로로 쌓음 */
+    #list > li { display: block; padding: 0; }
+    .row-main { display: flex; align-items: center; gap: 10px; padding: 12px 0; }
+    .row-main .text { cursor: grab; }
+
+    /* 더블클릭해서 고칠 때 나오는 입력칸 */
+    .edit {
+      flex: 1; min-width: 0; font-size: 15px; padding: 5px 8px;
+      border: 1px solid #c96442; border-radius: 6px; outline: none;
+    }
+    .subs .edit { font-size: 14px; padding: 3px 6px; }
+
+    /* 드래그로 순서 바꾸기 */
+    #list > li.dragging { opacity: 0.35; }
+    #list > li.drop-above { box-shadow: inset 0 3px 0 #c96442; }
+    #list > li.drop-below { box-shadow: inset 0 -3px 0 #c96442; }
+    li.done .row-main .text { text-decoration: line-through; color: #bbb; }
+
+    /* 하위 할일 */
+    .subs { margin: 0 0 6px; }
+    .subs li {
+      padding: 5px 0 5px 28px; border-bottom: none; font-size: 14px;
+    }
+    .subs .text { color: #666; }
+    .subs li.done .text { text-decoration: line-through; color: #ccc; }
+    .add-sub { background: none; color: #ccc; font-size: 17px; padding: 0 4px; flex-shrink: 0; }
+    .add-sub:hover { background: none; color: #c96442; }
+    .progress { font-size: 11px; color: #aaa; flex-shrink: 0; }
+
+    /* 하위 할일 입력칸 */
+    .sub-input { display: flex; gap: 6px; padding: 2px 0 10px 28px; }
+    .sub-input input { padding: 8px 10px; font-size: 14px; }
+    .sub-input button { padding: 8px 14px; font-size: 13px; }
+
+    /* 카테고리 태그 — 폭을 고정해서 뒤따르는 글자들이 한 줄로 맞게 함 */
+    .tag {
+      font-size: 11px; padding: 3px 8px; border-radius: 20px;
+      color: #fff; white-space: nowrap; flex-shrink: 0;
+      min-width: 46px; text-align: center; box-sizing: content-box;
+    }
+    .tag.blank { background: none !important; }
+    li.done .row-main .tag { opacity: 0.35; }
+    /* 카테고리가 바뀌는 줄에 여유 간격 */
+    li.group-start { margin-top: 10px; }
+    .del {
+      background: none; color: #ccc; font-size: 18px; padding: 0 0 0 8px;
+    }
+    .del:hover { background: none; color: #c96442; }
+    .empty { color: #bbb; text-align: center; padding: 24px 0; }
+
+    /* 이월된 항목에 붙는 '3일째' 표시 */
+    .days {
+      font-size: 11px; color: #c9a087; flex-shrink: 0;
+      border: 1px solid #e8d5c8; border-radius: 4px; padding: 1px 5px;
+    }
+    li.done .days { opacity: 0.3; }
+
+    /* 완료 보관함 · 휴지통 공통 머리글 */
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 28px; padding-top: 20px; border-top: 1px solid #eee;
+      cursor: pointer; user-select: none;
+    }
+    .section-head h2 { margin: 0; font-size: 15px; color: #888; font-weight: normal; }
+    .clear-btn {
+      background: none; color: #bbb; font-size: 13px; padding: 4px 8px;
+    }
+    .clear-btn:hover { background: none; color: #c96442; }
+
+    /* 보관함 안의 날짜 머리글 */
+    .date-head {
+      font-size: 13px; color: #999; cursor: pointer; user-select: none;
+      padding: 10px 0 6px;
+    }
+    .date-head:hover { color: #666; }
+
+    /* 보관함·휴지통 항목은 체크박스가 없으므로 그만큼 밀어서 위 목록과 줄을 맞춤 */
+    #trashList li, #archiveBox li { padding-left: 28px; }
+    #trashList li .text, #archiveBox li .text { color: #bbb; }
+    #trashList li .tag, #archiveBox li .tag { opacity: 0.5; }
+    .restore { background: none; color: #ccc; font-size: 15px; padding: 0 6px; }
+    .restore:hover { background: none; color: #6b8e5a; }
+    /* ── 로그인 화면 ── */
+    .gate {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      background: #f4f1ea;
+    }
+    .gate-box {
+      width: 320px; max-width: calc(100vw - 40px);
+      background: #fff; border-radius: 16px; padding: 32px 28px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .gate-box h1 { margin: 0 0 4px; font-size: 20px; }
+    .gate-box .hint { font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.7; }
+    .gate-box input {
+      width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 11px 12px;
+      font-family: inherit; font-size: 14px;
+      border: 1px solid #ddd; border-radius: 8px;
+    }
+    .gate-box button { width: 100%; margin-top: 6px; }
+    .gate-msg { margin-top: 12px; font-size: 12px; color: #c96442; line-height: 1.6; }
+
+    /* ── 위쪽 줄 안의 버튼들 ── */
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .logout {
+      padding: 4px 10px; font-size: 11px;
+      background: none; color: #bbb; border: 1px solid #e5e0d8;
+    }
+    .logout:hover { background: #fff; color: #c96442; }
+
+    /* ── 처음 한 번: 쓰던 내용 가져오기 ── */
+    .import-box {
+      margin: 0 auto; max-width: 520px; padding: 28px;
+      background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      font-size: 14px; color: #555; line-height: 1.9;
+    }
+    .import-box h2 { margin: 0 0 10px; font-size: 16px; color: #333; }
+  </style>
+</head>
+<body>
+  <!-- 로그인 화면: 내 계정으로 들어와야만 내용이 보입니다 -->
+  <div class="gate" id="gate">
+    <div class="gate-box">
+      <h1>파고들기</h1>
+      <div class="hint">내 계정으로만 열립니다.</div>
+      <input type="email" id="gateEmail" placeholder="이메일" autocomplete="username">
+      <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
+      <button id="gateBtn">들어가기</button>
+      <div class="gate-msg" id="gateMsg"></div>
+    </div>
+  </div>
+
+  <div class="topbar" id="topbar" hidden>
+    <button id="addBoard" class="add-board">+ 새 탭</button>
+    <div class="topbar-right">
+      <div id="storeStatus" class="store-status" hidden></div>
+      <button class="logout" id="logout">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="layout" id="layout"></div>
+
+  <div id="importBox" class="import-box" hidden>
+    <h2>쓰던 내용 가져오기</h2>
+    저장된 내용이 아직 없습니다.<br>
+    이 컴퓨터의 <b>바탕화면 › 클로드코드 › TODO-APP › data › todo-data.json</b> 파일을 고르면
+    적어두신 주제가 그대로 올라옵니다.<br>
+    <input type="file" id="importFile" accept=".json,application/json" style="margin-top:14px">
+    <div id="importMsg" style="margin-top:10px; font-size:13px; color:#c96442;"></div>
+  </div>
+
+  <script>
+    // ══ 저장 장치 ══════════════════════════════════════════
+    // 적은 내용은 이 브라우저가 아니라 Supabase(think_docs 표)에 저장됩니다.
+    // 그래서 노트북·휴대폰 어디서 열어도 이어서 쓸 수 있습니다.
+    //
+    // 보안: 표에 '본인만' 규칙(RLS)이 걸려 있어, 이 페이지 주소와 공개키를
+    // 아는 사람이라도 로그인하지 않으면 한 줄도 읽지 못합니다.
+    const SUPABASE_URL = "https://nflznotjmdqvqtjkzsec.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_grDEdL-mRivtPAta6qNVTw_Di-opchT";
+    const CACHE_KEY = "think_cache";      // 저장이 실패했을 때를 대비한 이 기기의 임시 보관
+    const HIST_KEY  = "think_hist_at";    // 마지막으로 지난 내용을 남긴 때
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let me = null;            // 로그인한 사람
+    let STATE = {};           // 내용 전체 (이름 → 글자)
+    let saveTimer = null;
+    let editSeq = 0;
+    let appReady = false;     // 처음 그리는 동안의 저장은 보내지 않음
+
+    // 앱 안에서는 이 셋으로만 읽고 씁니다
+    function storeGet(key) {
+      const v = STATE[key];
+      return (v === undefined || v === null) ? null : v;
+    }
+    function storeSet(key, value) {
+      STATE[key] = String(value);
+      if (!appReady) return;
+      editSeq++;
+      cacheNow(true);
+      showStoreStatus("saving");
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(pushToServer, 700);   // 연달아 고치면 멈춘 뒤 한 번에
+    }
+    function storeDel(key) {
+      delete STATE[key];
+      if (!appReady) return;
+      editSeq++;
+      cacheNow(true);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(pushToServer, 700);
+    }
+
+    // 이 기기에 임시로 남겨두기 (저장 실패로 날아가는 일이 없게)
+    function cacheNow(dirty) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: STATE, dirty: !!dirty, at: Date.now() }));
+      } catch (e) {}
+    }
+    function readCache() {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { return null; }
+    }
+
+    async function pushToServer() {
+      clearTimeout(saveTimer);
+      const seq = editSeq;
+      try {
+        const { error } = await sb.from("think_docs")
+          .upsert({ owner: me.id, data: STATE, updated_at: new Date().toISOString() }, { onConflict: "owner" });
+        if (error) throw error;
+
+        if (seq === editSeq) cacheNow(false);
+        showStoreStatus("ok");
+        saveHistory();          // 한 시간에 한 번 지난 내용 남기기
+      } catch (e) {
+        showStoreStatus("fail");
+      }
+    }
+
+    // 한 시간에 한 번, 지금 내용을 따로 남겨 둡니다 (실수로 지웠을 때 되돌리기용)
+    async function saveHistory() {
+      const last = Number(localStorage.getItem(HIST_KEY) || 0);
+      if (Date.now() - last < 3600000) return;
+      localStorage.setItem(HIST_KEY, String(Date.now()));
+      try {
+        await sb.from("think_history").insert({ id: crypto.randomUUID(), owner: me.id, data: STATE });
+      } catch (e) {}
+    }
+
+    window.addEventListener("pagehide", () => {
+      const c = readCache();
+      if (c && c.dirty) pushToServer();
+    });
+
+    function showStoreStatus(state) {
+      const el = document.getElementById("storeStatus");
+      el.hidden = false;
+      el.classList.toggle("warn", state === "fail");
+      if (state === "ok") {
+        const t = new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+        el.textContent = "💾 저장됨 · " + t;
+      } else if (state === "saving") {
+        el.textContent = "💾 저장 중…";
+      } else if (state === "ready") {
+        el.textContent = "💾 저장 켜짐";
+      } else if (state === "fail") {
+        el.textContent = "⚠ 저장하지 못했습니다. 인터넷 연결을 확인해 주세요. (적은 내용은 이 기기에 남아 있다가 다시 열 때 저장됩니다)";
+      }
+    }
+
+    // ── 로그인 ────────────────────────────────
+    async function signIn() {
+      const email = document.getElementById("gateEmail").value.trim();
+      const pw = document.getElementById("gatePw").value;
+      const msg = document.getElementById("gateMsg");
+      msg.textContent = "";
+      if (!email || !pw) { msg.textContent = "이메일과 비밀번호를 적어주세요."; return; }
+
+      const { error } = await sb.auth.signInWithPassword({ email: email, password: pw });
+      if (error) { msg.textContent = "들어가지 못했습니다. 이메일이나 비밀번호를 확인해 주세요."; return; }
+      start();
+    }
+
+    document.getElementById("gateBtn").addEventListener("click", signIn);
+    document.getElementById("gatePw").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
+    document.getElementById("logout").addEventListener("click", async () => {
+      await sb.auth.signOut();
+      location.reload();
+    });
+
+    // ── 내용 불러오기 ─────────────────────────
+    async function start() {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return;                    // 아직 로그인 전
+      me = user;
+
+      document.getElementById("gate").hidden = true;
+      document.getElementById("topbar").hidden = false;
+
+      const { data, error } = await sb.from("think_docs").select("data").eq("owner", me.id).maybeSingle();
+      if (error) {
+        document.getElementById("gate").hidden = false;
+        document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + error.message;
+        return;
+      }
+
+      const cache = readCache();
+      if (cache && cache.dirty && cache.data) {
+        // 지난번에 저장하지 못하고 남아 있던 내용이 있으면 그것을 살립니다
+        STATE = cache.data;
+        appReady = true;
+        pushToServer();
+      } else {
+        STATE = (data && data.data) ? data.data : {};
+      }
+
+      if (!Object.keys(STATE).length) {
+        document.getElementById("importBox").hidden = false;
+      }
+
+      migrateBoards();
+      drawLayout();
+      document.getElementById("addBoard").addEventListener("click", addBoard);
+
+      appReady = true;
+      showStoreStatus(cache && cache.dirty ? "saving" : "ready");
+    }
+
+    // ── 처음 한 번: 쓰던 파일에서 가져오기 ────
+    document.getElementById("importFile").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      const msg = document.getElementById("importMsg");
+      if (!f) return;
+      try {
+        const text = await f.text();
+        const obj = JSON.parse(text);
+        const data = obj.data || obj;
+        if (typeof data !== "object") throw new Error("모양이 다릅니다");
+
+        STATE = {};
+        Object.keys(data).forEach(k => { if (typeof data[k] === "string") STATE[k] = data[k]; });
+
+        appReady = true;
+        await pushToServer();
+        location.reload();
+      } catch (err) {
+        msg.textContent = "가져오지 못했습니다: " + err.message;
+      }
+    });
+
+    // 작은 버튼을 만들어주는 함수
+    function makeBtn(cls, label, title, onClick) {
+      const btn = document.createElement("button");
+      btn.className = cls;
+      btn.textContent = label;
+      btn.title = title;
+      btn.onclick = onClick;
+      return btn;
+    }
+
+    function makeBtn(cls, label, title, onClick) {
+      const btn = document.createElement("button");
+      btn.className = cls;
+      btn.textContent = label;
+      btn.title = title;
+      btn.onclick = onClick;
+      return btn;
+    }
+
+    // ── 탭(카드) ────────────────────────────────
+    // 탭은 고정이 아니라 사용자가 만들고 지우고 넓이를 바꿉니다.
+    // 탭 목록: [{ id, title, key, trashKey, width, compact }]
+    //   key      : 그 탭의 주제들이 저장되는 자리
+    //   trashKey : 그 탭 휴지통이 저장되는 자리
+    //   width    : 탭 넓이(px). 끌어서 바꾼 값이 그대로 남습니다
+    //   compact  : true 면 제목을 작게 (메모함처럼 참고용 탭)
+    const BOARDS_KEY = "boards";
+    const MIN_W = 260, MAX_W = 1400, DEFAULT_W = 520;
+
+    function loadBoards() {
+      try { return JSON.parse(storeGet(BOARDS_KEY)) || []; }
+      catch (e) { return []; }
+    }
+    function saveBoards(list) { storeSet(BOARDS_KEY, JSON.stringify(list)); }
+
+    function newId() {
+      return "b" + Date.now() + Math.random().toString(16).slice(2, 6);
+    }
+
+    // 처음 한 번: 예전에 고정으로 박혀 있던 '파고들기'와 '메모함'을 탭 목록으로 옮깁니다.
+    // 적어둔 내용은 저장 자리를 그대로 쓰므로 전혀 움직이지 않습니다.
+    function migrateBoards() {
+      if (storeGet(BOARDS_KEY) !== null) return;
+
+      const list = [];
+      if (storeGet("dig") !== null) {
+        list.push({
+          id: "dig", title: storeGet("digTitle") || "파고들기",
+          key: "dig", trashKey: "digTrash", width: 832, compact: false
+        });
+      }
+      if (storeGet("notes") !== null) {
+        list.push({
+          id: "notes", title: storeGet("memo2Title") || "메모함",
+          key: "notes", trashKey: "notesTrash", width: 444, compact: true
+        });
+      }
+      if (!list.length) {
+        list.push({
+          id: "dig", title: "파고들기",
+          key: "dig", trashKey: "digTrash", width: DEFAULT_W, compact: false
+        });
+      }
+      storeSet(BOARDS_KEY, JSON.stringify(list));
+    }
+
+    function addBoard() {
+      const list = loadBoards();
+      const id = newId();
+      list.push({
+        id: id, title: "새 탭",
+        key: "board_" + id, trashKey: "board_" + id + "_trash",
+        width: DEFAULT_W, compact: false
+      });
+      saveBoards(list);
+      drawLayout(id);        // 새 탭의 제목을 바로 고칠 수 있게
+    }
+
+    function removeBoard(board) {
+      const msg = "'" + board.title + "' 탭을 지울까요?\n" +
+                  "안에 적은 주제가 모두 함께 사라집니다. 되돌릴 수 없습니다.\n" +
+                  "(한 시간마다 남는 백업 파일에는 남아 있습니다)";
+      if (!confirm(msg)) return;
+
+      saveBoards(loadBoards().filter(b => b.id !== board.id));
+      storeDel(board.key);
+      storeDel(board.trashKey);
+      storeSet("_touch", String(Date.now()));   // 지운 것도 파일에 반영되도록 한 번 흔들어 줌
+      storeDel("_touch");
+      drawLayout();
+    }
+
+    function setBoardWidth(id, width) {
+      const list = loadBoards();
+      const b = list.find(x => x.id === id);
+      if (!b) return;
+      b.width = Math.round(width);
+      saveBoards(list);
+    }
+
+    function setBoardTitle(id, title) {
+      const list = loadBoards();
+      const b = list.find(x => x.id === id);
+      if (!b) return;
+      b.title = title.trim() || "제목 없음";
+      saveBoards(list);
+    }
+
+    // 탭 하나의 화면을 만들어 붙입니다
+    function buildCard(board, layout) {
+      const card = document.createElement("div");
+      card.className = "card" + (board.compact ? "" : " board-big");
+      card.style.width = (board.width || DEFAULT_W) + "px";
+
+      const top = document.createElement("div");
+      top.className = "card-top";
+
+      const headRow = document.createElement("div");
+      headRow.className = "card-head";
+
+      const h1 = document.createElement("h1");
+      h1.contentEditable = "plaintext-only";
+      h1.textContent = board.title;
+      h1.dataset.placeholder = "제목";
+      // 제목은 타이핑을 멈추면 저장, 엔터로 끝내기, Shift+엔터로 줄 바꾸기
+      let titleTimer = null;
+      const saveTitle = () => { setBoardTitle(board.id, h1.textContent); flashMark(mark); };
+      h1.addEventListener("input", () => {
+        clearTimeout(titleTimer);
+        titleTimer = setTimeout(saveTitle, 600);
+      });
+      h1.addEventListener("blur", () => { clearTimeout(titleTimer); saveTitle(); });
+      h1.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { h1.blur(); return; }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          clearTimeout(titleTimer);
+          saveTitle();
+          h1.blur();
+        }
+      });
+      headRow.appendChild(h1);
+
+      const mark = document.createElement("span");
+      mark.className = "saved";
+      mark.textContent = "저장됨";
+      headRow.appendChild(mark);
+
+      const kill = document.createElement("button");
+      kill.className = "card-del";
+      kill.textContent = "×";
+      kill.title = "이 탭 지우기";
+      kill.addEventListener("click", () => removeBoard(board));
+      headRow.appendChild(kill);
+
+      top.appendChild(headRow);
+
+      const addBtn = document.createElement("button");
+      addBtn.className = "notes-add";
+      addBtn.textContent = "+ 새 주제";
+      top.appendChild(addBtn);
+
+      card.appendChild(top);
+
+      const body = document.createElement("div");
+      body.className = "card-body";
+
+      const list = document.createElement("div");
+      body.appendChild(list);
+
+      // 보관함: 생각이 끝난 주제를 내려두는 곳 (휴지통과는 별개입니다)
+      const archHead = document.createElement("div");
+      archHead.className = "section-head";
+      const archTitle = document.createElement("h2");
+      archTitle.textContent = "📦 보관함 (0)";
+      archHead.appendChild(archTitle);
+      body.appendChild(archHead);
+
+      const archList = document.createElement("div");
+      archList.style.display = "none";
+      body.appendChild(archList);
+
+      const trashHead = document.createElement("div");
+      trashHead.className = "section-head";
+      const trashTitle = document.createElement("h2");
+      trashTitle.textContent = "🗑 휴지통 (0)";
+      trashHead.appendChild(trashTitle);
+      const trashClear = document.createElement("button");
+      trashClear.className = "clear-btn";
+      trashClear.textContent = "비우기";
+      trashHead.appendChild(trashClear);
+      body.appendChild(trashHead);
+
+      const trashList = document.createElement("div");
+      trashList.style.display = "none";
+      body.appendChild(trashList);
+
+      card.appendChild(body);
+
+      // 오른쪽 끝을 잡고 끌면 넓이가 바뀝니다
+      const grip = document.createElement("div");
+      grip.className = "card-grip";
+      grip.title = "끌어서 넓이 조절";
+      grip.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = card.getBoundingClientRect().width;
+        document.body.classList.add("resizing");
+
+        const onMove = (ev) => {
+          const w = Math.min(MAX_W, Math.max(MIN_W, startW + (ev.clientX - startX)));
+          card.style.width = w + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          document.body.classList.remove("resizing");
+          setBoardWidth(board.id, card.getBoundingClientRect().width);
+          flashMark(mark);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+      card.appendChild(grip);
+
+      layout.appendChild(card);
+
+      return { card: card, h1: h1, mark: mark, addBtn: addBtn, list: list,
+               archHead: archHead, archTitle: archTitle, archList: archList,
+               trashHead: trashHead, trashTitle: trashTitle, trashClear: trashClear,
+               trashList: trashList };
+    }
+
+    // 탭 전체를 다시 그림. renameId 를 주면 그 탭 제목에 커서를 놓습니다
+    function drawLayout(renameId) {
+      const layout = document.getElementById("layout");
+      layout.innerHTML = "";
+
+      const boards = loadBoards();
+      boards.forEach(board => {
+        const el = buildCard(board, layout);
+        createBoard(board, el);
+        if (board.id === renameId) {
+          el.h1.focus();
+          document.getSelection().selectAllChildren(el.h1);
+        }
+      });
+    }
+
+    function flashMark(mark) {
+      if (!mark) return;
+      mark.classList.add("show");
+      clearTimeout(mark._timer);
+      mark._timer = setTimeout(() => mark.classList.remove("show"), 1500);
+    }
+
+    // ── 탭 하나의 속(주제 목록) ─────────────────
+    // 제목만 죽 보이다가 제목을 한 번 누르면 아래로 펼쳐지고,
+    // 두 번 누르면 이름을 고칩니다. 끌어다 순서를 바꿀 수 있고,
+    // 지운 것은 그 탭의 휴지통에 모입니다.
+    function createBoard(B, el) {
+      let dragFrom = null;      // 지금 끌고 있는 항목의 자리 번호
+      let trashOpen = false;
+      let renameNext = null;    // 새로 만든 직후 바로 이름을 고칠 항목
+
+      const load      = () => { try { return JSON.parse(storeGet(B.key)) || []; }      catch (e) { return []; } };
+      const loadTrash = () => { try { return JSON.parse(storeGet(B.trashKey)) || []; } catch (e) { return []; } };
+
+      // 내용이 바뀌었을 때 ('저장됨' 표시를 띄움)
+      function save(list) {
+        storeSet(B.key, JSON.stringify(list));
+        flashMark(el.mark);
+      }
+      // 접기/펼치기처럼 내용이 안 바뀌는 저장 (표시를 띄우지 않음)
+      function saveQuiet(list) { storeSet(B.key, JSON.stringify(list)); }
+
+      function saveTrash(list) { storeSet(B.trashKey, JSON.stringify(list)); }
+
+      function move(from, to, below) {
+        const all = load();
+        const item = all.splice(from, 1)[0];
+        let target = (to > from) ? to - 1 : to;   // 빼내면서 번호가 하나 밀림
+        if (below) target += 1;
+        all.splice(target, 0, item);
+        save(all);
+        draw();
+      }
+
+      function setOpen(id, open) {
+        const all = load();
+        const n = all.find(x => x.id === id);
+        if (!n) return;
+        n.open = open;
+        saveQuiet(all);
+        draw();
+      }
+
+      // 지우지 않고 휴지통으로 옮깁니다
+      function toTrash(id) {
+        const all = load();
+        const at = all.findIndex(x => x.id === id);
+        if (at === -1) return;
+        const bin = loadTrash();
+        bin.unshift(all.splice(at, 1)[0]);   // 최근에 지운 것이 맨 위로
+        saveTrash(bin);
+        save(all);
+        draw();
+      }
+
+      function restore(i) {
+        const bin = loadTrash();
+        const item = bin.splice(i, 1)[0];
+        if (!item) return;
+        const all = load();
+        all.unshift(item);
+        saveTrash(bin);
+        save(all);
+        draw();
+      }
+
+      function deleteForever(i) {
+        const bin = loadTrash();
+        const item = bin[i];
+        if (!item) return;
+        if (!confirm((item.title || "제목 없음") + " 을(를) 완전히 삭제할까요?\n되돌릴 수 없습니다.")) return;
+        bin.splice(i, 1);
+        saveTrash(bin);
+        drawTrash();
+      }
+
+      function emptyTrash() {
+        const bin = loadTrash();
+        if (bin.length === 0) return;
+        if (!confirm("휴지통의 " + bin.length + "개를 완전히 삭제할까요?\n되돌릴 수 없습니다.")) return;
+        saveTrash([]);
+        drawTrash();
+      }
+
+      function draw() {
+        drawArch();       // 보관함 개수도 같이 갱신
+        drawTrash();      // 휴지통 개수도 같이 갱신
+
+        const box = el.list;
+        const list = load();
+        box.innerHTML = "";
+
+        if (!list.length) {
+          const p = document.createElement("div");
+          p.className = "notes-empty";
+          p.textContent = "아직 없습니다. 위 '+ 새 주제'를 눌러보세요.";
+          box.appendChild(p);
+          return;
+        }
+
+        list.forEach((note, idx) => {
+          const item = document.createElement("div");
+          item.className = "note-item";
+
+          // ── 끌어다 순서 바꾸기 ──
+          item.draggable = true;
+
+          item.ondragstart = (e) => {
+            dragFrom = idx;
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", "");   // 파이어폭스에서 필요
+            item.classList.add("dragging");
+          };
+          item.ondragend = () => { dragFrom = null; draw(); };
+          item.ondragover = (e) => {
+            if (dragFrom === null || dragFrom === idx) return;
+            e.preventDefault();
+            const rect = item.getBoundingClientRect();
+            const below = (e.clientY - rect.top) > rect.height / 2;
+            item.classList.toggle("drop-below", below);
+            item.classList.toggle("drop-above", !below);
+          };
+          item.ondragleave = () => item.classList.remove("drop-above", "drop-below");
+          item.ondrop = (e) => {
+            e.preventDefault();
+            const below = item.classList.contains("drop-below");
+            item.classList.remove("drop-above", "drop-below");
+            if (dragFrom !== null && dragFrom !== idx) move(dragFrom, idx, below);
+            dragFrom = null;
+          };
+
+          // ── 제목 줄 ──
+          const head = document.createElement("div");
+          head.className = "note-head";
+
+          const arrow = document.createElement("span");
+          arrow.className = "note-arrow";
+          arrow.textContent = note.open ? "▼" : "▶";
+          head.appendChild(arrow);
+
+          const tt = document.createElement("span");
+          tt.className = "note-title-text";
+          tt.textContent = note.title || "제목 없음";
+          head.appendChild(tt);
+
+          // 이름 고치기 (두 번 눌렀을 때, 또는 새로 만든 직후)
+          function startRename() {
+            const ti = document.createElement("input");
+            ti.className = "note-title-input";
+            ti.value = note.title || "";
+            ti.placeholder = "무엇을 고민할지 적어보세요";
+
+            const finish = () => {
+              const all = load();
+              const n = all.find(x => x.id === note.id);
+              if (n) {
+                n.title = ti.value.trim() || "제목 없음";
+                save(all);
+              }
+              draw();
+            };
+
+            ti.addEventListener("blur", finish);
+            ti.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") { e.preventDefault(); ti.blur(); }
+              if (e.key === "Escape") { ti.value = note.title || ""; ti.blur(); }
+            });
+            // 입력칸 안에서 누른 건 접기/펼치기로 새지 않게
+            ti.addEventListener("click", (e) => e.stopPropagation());
+            ti.addEventListener("dblclick", (e) => e.stopPropagation());
+            ti.addEventListener("mousedown", () => { item.draggable = false; });
+            ti.addEventListener("mouseup", () => { item.draggable = true; });
+
+            tt.replaceWith(ti);
+            ti.focus();
+            ti.select();
+          }
+
+          const arch = document.createElement("button");
+          arch.className = "note-archive";
+          arch.textContent = "보관";
+          arch.title = "생각이 끝났으면 보관함으로";
+          arch.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toArchive(note.id);
+          });
+          head.appendChild(arch);
+
+          const del = document.createElement("button");
+          del.className = "note-del";
+          del.textContent = "×";
+          del.title = "휴지통으로 보내기";
+          del.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toTrash(note.id);
+          });
+          head.appendChild(del);
+
+          // 한 번 누르면 접기/펼치기.
+          // 두 번째 누름이 곧바로 이어지면 더블클릭이므로 접지 않고 넘깁니다
+          let clickTimer = null;
+          head.addEventListener("click", () => {
+            if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
+            clickTimer = setTimeout(() => {
+              clickTimer = null;
+              setOpen(note.id, !note.open);
+            }, 200);
+          });
+          head.addEventListener("dblclick", () => {
+            clearTimeout(clickTimer);
+            clickTimer = null;
+            startRename();
+          });
+
+          item.appendChild(head);
+
+          // ── 내용 ──
+          if (note.open) {
+            const ta = document.createElement("textarea");
+            ta.className = "note-body";
+            ta.value = note.body || "";
+            ta.placeholder = "여기에 생각을 적어 나가세요";
+
+            // 글자를 끌어 선택할 때는 항목이 끌려가지 않게
+            ta.addEventListener("mousedown", () => { item.draggable = false; });
+            ta.addEventListener("mouseup", () => { item.draggable = true; });
+
+            // 글이 길어지면 칸도 같이 늘어나게
+            const grow = () => {
+              ta.style.height = "auto";
+              ta.style.height = (ta.scrollHeight + 2) + "px";
+            };
+
+            let bodyTimer = null;
+            const saveBody = () => {
+              const all = load();
+              const n = all.find(x => x.id === note.id);
+              if (!n) return;
+              n.body = ta.value;
+              save(all);
+            };
+            ta.addEventListener("input", () => {
+              grow();
+              clearTimeout(bodyTimer);
+              bodyTimer = setTimeout(saveBody, 600);
+            });
+            ta.addEventListener("blur", () => { clearTimeout(bodyTimer); saveBody(); });
+
+            item.appendChild(ta);
+            setTimeout(grow, 0);
+          }
+
+          box.appendChild(item);
+
+          // 방금 만든 항목이면 바로 제목을 쓸 수 있게 해줍니다
+          if (renameNext === note.id) {
+            renameNext = null;
+            startRename();
+          }
+        });
+      }
+
+
+      // ── 보관함 (생각이 끝난 주제를 내려두는 곳) ──
+      const ARCH_KEY = B.key + "_archive";
+      let archOpen = false;
+
+      const loadArch = () => { try { return JSON.parse(storeGet(ARCH_KEY)) || []; } catch (e) { return []; } };
+      const saveArch = (list) => storeSet(ARCH_KEY, JSON.stringify(list));
+
+      // 오늘 날짜를 "2026-09-25" 모양으로
+      function todayText() {
+        const d = new Date();
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      }
+      // "2026-09-25" → "9월 25일"
+      function dateLabel(s) {
+        if (!s) return "";
+        const [y, m, d] = s.split("-").map(Number);
+        if (!y) return "";
+        return m + "월 " + d + "일";
+      }
+
+      // 목록 → 보관함
+      function toArchive(id) {
+        const all = load();
+        const at = all.findIndex(x => x.id === id);
+        if (at === -1) return;
+        const item = all.splice(at, 1)[0];
+        item.archivedAt = todayText();
+        item.open = false;
+        const arch = loadArch();
+        arch.unshift(item);          // 최근에 보관한 것이 맨 위로
+        saveArch(arch);
+        save(all);
+        draw();
+      }
+
+      // 보관함 → 목록
+      function unarchive(i) {
+        const arch = loadArch();
+        const item = arch.splice(i, 1)[0];
+        if (!item) return;
+        delete item.archivedAt;
+        const all = load();
+        all.unshift(item);
+        saveArch(arch);
+        save(all);
+        draw();
+      }
+
+      // 보관함 → 휴지통 (아주 지우는 건 휴지통에서 합니다)
+      function archiveToTrash(i) {
+        const arch = loadArch();
+        const item = arch.splice(i, 1)[0];
+        if (!item) return;
+        const bin = loadTrash();
+        bin.unshift(item);
+        saveTrash(bin);
+        saveArch(arch);
+        draw();
+      }
+
+      function drawArch() {
+        const arch = loadArch();
+        el.archTitle.textContent = "📦 보관함 (" + arch.length + ")";
+
+        const box = el.archList;
+        box.style.display = archOpen ? "block" : "none";
+        box.innerHTML = "";
+
+        if (arch.length === 0) {
+          box.innerHTML = '<div class="empty">보관한 것이 없어요</div>';
+          return;
+        }
+
+        arch.forEach((note, i) => {
+          const row = document.createElement("div");
+          row.className = "note-trash-row";
+
+          const t = document.createElement("span");
+          t.className = "note-trash-title";
+          t.textContent = note.title || "제목 없음";
+          t.title = (note.body || "").slice(0, 200);   // 마우스를 올리면 내용 미리보기
+          row.appendChild(t);
+
+          const when = document.createElement("span");
+          when.className = "note-arch-date";
+          when.textContent = dateLabel(note.archivedAt);
+          row.appendChild(when);
+
+          row.appendChild(makeBtn("restore", "↩", "다시 목록으로", () => unarchive(i)));
+          row.appendChild(makeBtn("del", "×", "휴지통으로 보내기", () => archiveToTrash(i)));
+
+          box.appendChild(row);
+        });
+      }
+      function drawTrash() {
+        const bin = loadTrash();
+        el.trashTitle.textContent = "🗑 휴지통 (" + bin.length + ")";
+
+        const box = el.trashList;
+        box.style.display = trashOpen ? "block" : "none";
+        box.innerHTML = "";
+
+        if (bin.length === 0) {
+          box.innerHTML = '<div class="empty">휴지통이 비어 있어요</div>';
+          return;
+        }
+
+        bin.forEach((note, i) => {
+          const row = document.createElement("div");
+          row.className = "note-trash-row";
+
+          const t = document.createElement("span");
+          t.className = "note-trash-title";
+          t.textContent = note.title || "제목 없음";
+          t.title = (note.body || "").slice(0, 200);   // 마우스를 올리면 내용 미리보기
+          row.appendChild(t);
+
+          row.appendChild(makeBtn("restore", "↩", "되돌리기", () => restore(i)));
+          row.appendChild(makeBtn("del", "×", "완전 삭제", () => deleteForever(i)));
+
+          box.appendChild(row);
+        });
+      }
+
+      el.addBtn.addEventListener("click", () => {
+        const all = load();
+        const item = { id: newId(), title: "새 주제", body: "", open: true };
+        all.unshift(item);       // 새로 만든 것이 맨 위로
+        renameNext = item.id;    // 그리고 바로 제목을 고칠 수 있게
+        save(all);
+        draw();
+      });
+
+      el.archHead.addEventListener("click", () => {
+        archOpen = !archOpen;
+        drawArch();
+      });
+
+      el.trashHead.addEventListener("click", () => {
+        trashOpen = !trashOpen;
+        drawTrash();
+      });
+
+      el.trashClear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        emptyTrash();
+      });
+
+      draw();
+    }
+
+
+    // ── 시작 ──────────────────────────────────
+    // 이미 로그인해 둔 기기면 로그인 화면 없이 바로 들어갑니다
+    sb.auth.getSession().then(({ data }) => { if (data && data.session) start(); });
+  </script>
+</body>
+</html>
