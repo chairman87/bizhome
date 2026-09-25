@@ -564,12 +564,30 @@
       const email = document.getElementById("gateEmail").value.trim();
       const pw = document.getElementById("gatePw").value;
       const msg = document.getElementById("gateMsg");
+      const btn = document.getElementById("gateBtn");
       msg.textContent = "";
       if (!email || !pw) { msg.textContent = "이메일과 비밀번호를 적어주세요."; return; }
 
-      const { error } = await sb.auth.signInWithPassword({ email: email, password: pw });
-      if (error) { msg.textContent = "들어가지 못했습니다. 이메일이나 비밀번호를 확인해 주세요."; return; }
-      start();
+      btn.disabled = true;
+      btn.textContent = "들어가는 중…";
+      try {
+        const { error } = await sb.auth.signInWithPassword({ email: email, password: pw });
+        if (error) {
+          // 무엇 때문에 막혔는지 그대로 보여줍니다 (비밀번호 틀림 / 메일 인증 대기 등)
+          const m = (error.message || "").toLowerCase();
+          if (m.includes("invalid login")) msg.textContent = "이메일이나 비밀번호가 맞지 않습니다.";
+          else if (m.includes("not confirmed")) msg.textContent = "메일 인증이 아직 안 된 계정입니다.";
+          else msg.textContent = "들어가지 못했습니다: " + error.message;
+          return;
+        }
+        // 들어왔으면 페이지를 새로 엽니다. 이 길이 가장 확실합니다
+        location.reload();
+      } catch (e) {
+        msg.textContent = "오류가 났습니다: " + (e && e.message ? e.message : e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "들어가기";
+      }
     }
 
     document.getElementById("gateBtn").addEventListener("click", signIn);
@@ -1310,7 +1328,14 @@
 
     // ── 시작 ──────────────────────────────────
     // 이미 로그인해 둔 기기면 로그인 화면 없이 바로 들어갑니다
-    sb.auth.getSession().then(({ data }) => { if (data && data.session) start(); });
+    // 이미 로그인해 둔 기기면 로그인 화면 없이 바로 들어갑니다.
+    // 여는 도중 문제가 생기면 조용히 멈추지 않고 이유를 보여줍니다.
+    sb.auth.getSession()
+      .then(({ data }) => { if (data && data.session) return start(); })
+      .catch(e => {
+        document.getElementById("gate").hidden = false;
+        document.getElementById("gateMsg").textContent = "화면을 여는 중 오류: " + (e && e.message ? e.message : e);
+      });
   </script>
 </body>
 </html>
