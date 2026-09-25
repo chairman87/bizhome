@@ -389,6 +389,10 @@
     #trashList li .tag, #archiveBox li .tag { opacity: 0.5; }
     .restore { background: none; color: #ccc; font-size: 15px; padding: 0 6px; }
     .restore:hover { background: none; color: #6b8e5a; }
+    /* 숨김 지시가 디자인 규칙(display)에 밀리지 않도록 못을 박습니다.
+       이것 때문에 로그인 성공 후에도 로그인 창이 화면을 덮고 있었습니다. */
+    [hidden] { display: none !important; }
+
     /* ── 로그인 화면 ── */
     .gate {
       position: fixed; inset: 0; z-index: 100;
@@ -432,7 +436,7 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 09/25 23:48)</span></div>
+      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
       <input type="email" id="gateEmail" placeholder="이메일" autocomplete="username">
       <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
       <button id="gateBtn">들어가기</button>
@@ -460,6 +464,21 @@
   </div>
 
   <script>
+    // ── 판 확인 ────────────────────────────────
+    // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
+    // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
+    const BUILD = "2026-09-25 23:58";
+    (async () => {
+      try {
+        const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
+        const text = await res.text();
+        const m = text.match(/const BUILD = "([^"]+)"/);
+        if (m && m[1] > BUILD) {
+          location.replace(location.pathname + "?v=" + encodeURIComponent(m[1]));
+        }
+      } catch (e) {}
+    })();
+
     // ══ 저장 장치 ══════════════════════════════════════════
     // 적은 내용은 이 브라우저가 아니라 Supabase(think_docs 표)에 저장됩니다.
     // 그래서 노트북·휴대폰 어디서 열어도 이어서 쓸 수 있습니다.
@@ -472,6 +491,7 @@
     const HIST_KEY  = "think_hist_at";    // 마지막으로 지난 내용을 남긴 때
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    document.getElementById("buildStamp").textContent = BUILD;
 
     let me = null;            // 로그인한 사람
     let STATE = {};           // 내용 전체 (이름 → 글자)
