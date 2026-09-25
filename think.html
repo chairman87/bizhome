@@ -432,7 +432,7 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">내 계정으로만 열립니다.</div>
+      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 09/25 23:41)</span></div>
       <input type="email" id="gateEmail" placeholder="이메일" autocomplete="username">
       <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
       <button id="gateBtn">들어가기</button>
@@ -572,41 +572,56 @@
       } catch (e) { return false; }
     }
 
+    // 어디까지 갔는지 화면에 그대로 적습니다. 문제가 생기면 이 줄만 보면 압니다.
+    function step(t) {
+      const el = document.getElementById("gateMsg");
+      el.style.color = "#888";
+      el.textContent = t;
+    }
+    function fail(t) {
+      const el = document.getElementById("gateMsg");
+      el.style.color = "#c96442";
+      el.textContent = t;
+    }
+
+    // 예상 못한 오류도 화면에 띄웁니다 (조용히 사라지지 않게)
+    window.addEventListener("error", (e) => fail("오류: " + (e.message || e)));
+    window.addEventListener("unhandledrejection", (e) => {
+      const r = e.reason;
+      fail("오류: " + (r && r.message ? r.message : r));
+    });
+
     async function signIn() {
       const email = document.getElementById("gateEmail").value.trim();
       const pw = document.getElementById("gatePw").value;
-      const msg = document.getElementById("gateMsg");
       const btn = document.getElementById("gateBtn");
-      msg.textContent = "";
-      if (!email || !pw) { msg.textContent = "이메일과 비밀번호를 적어주세요."; return; }
+      if (!email || !pw) { fail("이메일과 비밀번호를 적어주세요."); return; }
 
       btn.disabled = true;
       btn.textContent = "들어가는 중…";
       try {
+        step("① 서버에 로그인 요청 중…");
         const { data, error } = await sb.auth.signInWithPassword({ email: email, password: pw });
 
         if (error) {
           const m = (error.message || "").toLowerCase();
-          if (m.includes("invalid login")) msg.textContent = "이메일이나 비밀번호가 맞지 않습니다.";
-          else if (m.includes("not confirmed")) msg.textContent = "메일 인증이 아직 안 된 계정입니다.";
-          else msg.textContent = "들어가지 못했습니다: " + error.message;
+          if (m.includes("invalid login")) fail("② 비밀번호가 맞지 않습니다. (서버 응답: " + error.message + ")");
+          else if (m.includes("not confirmed")) fail("② 메일 인증이 안 된 계정입니다.");
+          else fail("② 로그인 거절: " + error.message + " / status=" + (error.status || "?"));
           return;
         }
-        if (!data || !data.session) {
-          msg.textContent = "로그인은 되었는데 이용권(세션)을 받지 못했습니다. 다시 한 번 눌러 주세요.";
-          return;
-        }
+        if (!data || !data.session) { fail("② 이용권(세션)을 받지 못했습니다."); return; }
 
-        // 새로고침에 기대지 않고 지금 이 자리에서 바로 들어갑니다.
-        // (브라우저가 로그인 정보를 저장하지 못해도 이번 사용은 됩니다)
+        step("③ 로그인 성공. 내용 불러오는 중…");
         await start(data.session.user);
 
-        // 다음에 열 때도 로그인이 유지되는지 확인해서, 안 되면 알려줍니다
-        if (!storageWorks()) {
-          showStoreStatus("nosave");
+        if (!document.getElementById("gate").hidden) {
+          fail("④ 내용은 불러왔는데 화면이 열리지 않았습니다. 이 문구를 알려주세요.");
+          return;
         }
+        if (!storageWorks()) showStoreStatus("nosave");
       } catch (e) {
-        msg.textContent = "화면을 여는 중 오류: " + (e && e.message ? e.message : e);
+        fail("오류가 났습니다: " + (e && e.message ? e.message : e));
       } finally {
         btn.disabled = false;
         btn.textContent = "들어가기";
@@ -642,6 +657,7 @@
       document.getElementById("gate").hidden = true;
       document.getElementById("topbar").hidden = false;
 
+      if (typeof step === "function") step("④ 내용 불러오는 중…");
       const { data, error } = await sb.from("think_docs").select("data").eq("owner", me.id).maybeSingle();
       if (error) {
         document.getElementById("gate").hidden = false;
