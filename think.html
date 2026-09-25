@@ -554,12 +554,24 @@
         el.textContent = "💾 저장 중…";
       } else if (state === "ready") {
         el.textContent = "💾 저장 켜짐";
+      } else if (state === "nosave") {
+        el.classList.add("warn");
+        el.textContent = "⚠ 이 브라우저는 로그인 정보를 저장하지 못합니다(시크릿 모드이거나 사이트 데이터 차단). 지금은 쓸 수 있지만 새로고침하면 다시 로그인해야 합니다.";
       } else if (state === "fail") {
         el.textContent = "⚠ 저장하지 못했습니다. 인터넷 연결을 확인해 주세요. (적은 내용은 이 기기에 남아 있다가 다시 열 때 저장됩니다)";
       }
     }
 
     // ── 로그인 ────────────────────────────────
+    // 이 브라우저가 로그인 정보를 저장할 수 있는지 (시크릿 모드·사이트 데이터 차단이면 못 합니다)
+    function storageWorks() {
+      try {
+        localStorage.setItem("_t", "1");
+        localStorage.removeItem("_t");
+        return true;
+      } catch (e) { return false; }
+    }
+
     async function signIn() {
       const email = document.getElementById("gateEmail").value.trim();
       const pw = document.getElementById("gatePw").value;
@@ -571,19 +583,30 @@
       btn.disabled = true;
       btn.textContent = "들어가는 중…";
       try {
-        const { error } = await sb.auth.signInWithPassword({ email: email, password: pw });
+        const { data, error } = await sb.auth.signInWithPassword({ email: email, password: pw });
+
         if (error) {
-          // 무엇 때문에 막혔는지 그대로 보여줍니다 (비밀번호 틀림 / 메일 인증 대기 등)
           const m = (error.message || "").toLowerCase();
           if (m.includes("invalid login")) msg.textContent = "이메일이나 비밀번호가 맞지 않습니다.";
           else if (m.includes("not confirmed")) msg.textContent = "메일 인증이 아직 안 된 계정입니다.";
           else msg.textContent = "들어가지 못했습니다: " + error.message;
           return;
         }
-        // 들어왔으면 페이지를 새로 엽니다. 이 길이 가장 확실합니다
-        location.reload();
+        if (!data || !data.session) {
+          msg.textContent = "로그인은 되었는데 이용권(세션)을 받지 못했습니다. 다시 한 번 눌러 주세요.";
+          return;
+        }
+
+        // 새로고침에 기대지 않고 지금 이 자리에서 바로 들어갑니다.
+        // (브라우저가 로그인 정보를 저장하지 못해도 이번 사용은 됩니다)
+        await start();
+
+        // 다음에 열 때도 로그인이 유지되는지 확인해서, 안 되면 알려줍니다
+        if (!storageWorks()) {
+          showStoreStatus("nosave");
+        }
       } catch (e) {
-        msg.textContent = "오류가 났습니다: " + (e && e.message ? e.message : e);
+        msg.textContent = "화면을 여는 중 오류: " + (e && e.message ? e.message : e);
       } finally {
         btn.disabled = false;
         btn.textContent = "들어가기";
