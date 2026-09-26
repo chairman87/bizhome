@@ -34,14 +34,12 @@
   .org{display:grid;gap:8px 18px;margin:4px auto 18px;max-width:900px}
   .org .box{border:1px solid var(--line2);border-radius:var(--radius);text-align:center;padding:8px 10px;position:relative}
   .org .head{background:#efe9fb;border-color:#c9b8ec;color:#3b2a6b;font-weight:600;font-size:14px}
-  .org .head small{display:block;font-weight:400;font-size:11px;color:#6b5a9b;margin-top:2px}
   .org .head::after,.org .tm::after{content:"";position:absolute;left:50%;bottom:-9px;width:1px;height:8px;background:var(--line2)}
   .org .tm{background:var(--bg3);font-weight:600;font-size:13px}
   .org .mem{display:flex;flex-direction:column;gap:5px}
   .org .mem .p{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:5px 10px;background:var(--bg);font-size:13px}
   .org .mem .p b{font-weight:600;white-space:nowrap}
   .org .mem .p span{font-size:11px;color:var(--fg2);text-align:right;word-break:keep-all;min-width:24px;min-height:14px}
-  .rnr .badge{display:inline-block;font-size:10px;font-weight:600;color:#3b2a6b;background:#efe9fb;border:1px solid #c9b8ec;border-radius:10px;padding:0 6px;margin-left:6px;vertical-align:middle}
   @media (max-width:700px){.org{grid-template-columns:1fr !important}.org .head{grid-column:auto !important}}
   .rnr .fold{border:0;background:transparent;color:var(--fg2);font-size:12px;padding:2px 6px;border-radius:4px}
   .rnr .fold:hover{background:var(--bg3)}
@@ -121,7 +119,7 @@ function orgHtml(v, editable){
     if (last && h && last.head === h) last.span++; else groups.push({ head: h, ti, span: 1 });
   });
   const heads = groups.map(g => `<div class="box head" style="grid-column:span ${g.span}${g.head || editable ? '' : ';visibility:hidden'}">
-    <span${ed('head', g.ti)}>${esc(g.head ? fullName(g.head) : (editable ? '(헤드 없음 · 더블클릭)' : ''))}</span>${g.head ? `<small>${g.span > 1 ? teams.slice(g.ti, g.ti + g.span).map(t => esc(t.name)).join(' · ') + ' 헤드' : '헤드'}</small>` : ''}</div>`).join('');
+    <span${ed('head', g.ti)}>${esc(g.head ? fullName(g.head) : (editable ? '(헤드 없음 · 더블클릭)' : ''))}</span></div>`).join('');
   const body = teams.map((t, ti) => {
     const all = t.rows || [], head = (t.head || '').trim();
     const rows = all.filter(r => r.name && r.name.trim() !== head);
@@ -134,9 +132,9 @@ function orgHtml(v, editable){
 function rnrBodyHtml(v, editable){
   const teams = Array.isArray(v.teams) ? v.teams : [];
   const ed = (kind, ti, ri) => editable ? ` data-edit="${kind}" data-ti="${ti}" data-ri="${ri ?? ''}" title="더블클릭하면 바로 고칠 수 있습니다"` : '';
-  return `${orgHtml(v, editable)}<div class="teams">${teams.map((t, ti) => `<div class="team"><h3><span${ed('team', ti)}>${esc(t.name)}</span>${t.head ? `<span class="badge">헤드 ${esc(t.head)}</span>` : ''}</h3>
+  return `${orgHtml(v, editable)}<div class="teams">${teams.map((t, ti) => `<div class="team"><h3><span${ed('team', ti)}>${esc(t.name)}</span></h3>
     <table><thead><tr><th>이름</th><th>업무</th></tr></thead><tbody>
-    ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}${t.head && r.name === t.head ? '<span class="badge">헤드</span>' : ''}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
+    ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
     </tbody></table></div>`).join('')}</div>
     ${v.footer || editable ? `<div class="footer"${ed('footer')}>${esc(v.footer || (editable ? '(하단 안내문 없음 · 더블클릭해서 입력)' : ''))}</div>` : ''}`;
 }
