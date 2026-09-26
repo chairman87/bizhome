@@ -109,7 +109,8 @@ async function seedRnr(){
 }
 const rnrMeta = v => `v${v.version} · ${fmtDate(v.effective_date) || '적용일 없음'} 적용 · ${esc(v.created_by || '')} · ${fmtDateTime(v.created_at)}`;
 /* editable=true 면 관리자가 더블클릭으로 바로 고칠 수 있는 표시(data-edit)를 붙임 */
-/* 조직도: 팀 순서대로 한 줄에 놓고, 헤드 이름이 같은 이웃 팀은 헤드 상자 하나로 묶음 */
+/* 조직도: 팀 순서대로 한 줄에 놓고, 헤드 이름이 같은 이웃 팀은 헤드 상자 하나로 묶음
+   이름 뒤 직함(대리·팀장 등)은 팀원 관리의 직함 칸에서 자동으로 붙음(fullName). 여기 이름 칸에는 이름만 적음 */
 function orgHtml(v, editable){
   const teams = Array.isArray(v.teams) ? v.teams : [];
   if (!teams.length) return '';
@@ -120,12 +121,12 @@ function orgHtml(v, editable){
     if (last && h && last.head === h) last.span++; else groups.push({ head: h, ti, span: 1 });
   });
   const heads = groups.map(g => `<div class="box head" style="grid-column:span ${g.span}${g.head || editable ? '' : ';visibility:hidden'}">
-    <span${ed('head', g.ti)}>${esc(g.head || (editable ? '(헤드 없음 · 더블클릭)' : ''))}</span>${g.head ? `<small>${g.span > 1 ? teams.slice(g.ti, g.ti + g.span).map(t => esc(t.name)).join(' · ') + ' 헤드' : '헤드'}</small>` : ''}</div>`).join('');
+    <span${ed('head', g.ti)}>${esc(g.head ? fullName(g.head) : (editable ? '(헤드 없음 · 더블클릭)' : ''))}</span>${g.head ? `<small>${g.span > 1 ? teams.slice(g.ti, g.ti + g.span).map(t => esc(t.name)).join(' · ') + ' 헤드' : '헤드'}</small>` : ''}</div>`).join('');
   const body = teams.map((t, ti) => {
     const all = t.rows || [], head = (t.head || '').trim();
     const rows = all.filter(r => r.name && r.name.trim() !== head);
     return `<div><div class="box tm">${esc(t.name)}</div><div class="mem" style="margin-top:10px">
-      ${rows.map(r => `<div class="p"><b>${esc(r.name)}</b><span${ed('role', ti, all.indexOf(r))}>${esc(r.role || '')}</span></div>`).join('') || '<div class="hint" style="text-align:center">인원 없음</div>'}
+      ${rows.map(r => `<div class="p"><b${ed('name', ti, all.indexOf(r))}>${esc(fullName(r.name))}</b><span${ed('role', ti, all.indexOf(r))}>${esc(r.role || '')}</span></div>`).join('') || '<div class="hint" style="text-align:center">인원 없음</div>'}
     </div></div>`;
   }).join('');
   return `<div class="org" style="grid-template-columns:repeat(${teams.length},1fr)">${heads}${body}</div>`;
