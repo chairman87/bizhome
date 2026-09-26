@@ -30,13 +30,27 @@
   .rnr .inline{width:100%;font:inherit;border:2px solid var(--blue);border-radius:4px;padding:4px 6px;background:var(--bg);resize:vertical;line-height:1.5}
   .rnr td.d .inline{min-height:70px}
   .rnr .note{font-size:12px;color:var(--fg2);margin-bottom:10px}
+  /* 조직도: 팀 수만큼 세로 칸, 같은 헤드가 여러 팀을 맡으면 헤드 상자가 그 팀들 위에 넓게 걸침 */
+  .org{display:grid;gap:8px 18px;margin:4px auto 18px;max-width:900px}
+  .org .box{border:1px solid var(--line2);border-radius:var(--radius);text-align:center;padding:8px 10px;position:relative}
+  .org .head{background:#efe9fb;border-color:#c9b8ec;color:#3b2a6b;font-weight:600;font-size:14px}
+  .org .head small{display:block;font-weight:400;font-size:11px;color:#6b5a9b;margin-top:2px}
+  .org .head::after,.org .tm::after{content:"";position:absolute;left:50%;bottom:-9px;width:1px;height:8px;background:var(--line2)}
+  .org .tm{background:var(--bg3);font-weight:600;font-size:13px}
+  .org .mem{display:flex;flex-direction:column;gap:5px}
+  .org .mem .p{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:5px 10px;background:var(--bg);font-size:13px}
+  .org .mem .p b{font-weight:600;white-space:nowrap}
+  .org .mem .p span{font-size:11px;color:var(--fg2);text-align:right;word-break:keep-all;min-width:24px;min-height:14px}
+  .rnr .badge{display:inline-block;font-size:10px;font-weight:600;color:#3b2a6b;background:#efe9fb;border:1px solid #c9b8ec;border-radius:10px;padding:0 6px;margin-left:6px;vertical-align:middle}
+  @media (max-width:700px){.org{grid-template-columns:1fr !important}.org .head{grid-column:auto !important}}
   .rnr .fold{border:0;background:transparent;color:var(--fg2);font-size:12px;padding:2px 6px;border-radius:4px}
   .rnr .fold:hover{background:var(--bg3)}
   /* R&R 편집 창 */
   .tbox{border:1px solid var(--line2);border-radius:var(--radius);padding:10px;margin-bottom:10px;background:var(--bg2)}
   .tbox .th{display:flex;gap:6px;align-items:center;margin-bottom:8px}
   .tbox .th input{flex:1;border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font-weight:600}
-  .rrow{display:grid;grid-template-columns:110px 1fr 28px;gap:6px;align-items:start;margin-bottom:6px}
+  .rrow{display:grid;grid-template-columns:110px 150px 1fr 28px;gap:6px;align-items:start;margin-bottom:6px}
+  .tbox .th .hd-in{flex:0 0 220px;font-weight:400}
   .rrow input,.rrow textarea{border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;width:100%;font:inherit;background:var(--bg)}
   .rrow textarea{min-height:64px;resize:vertical;font-size:13px}
   .rrow .x{padding:4px}
@@ -59,7 +73,8 @@
 
 /* ================================================================
    업무 분장 (R&R) — 버전으로 쌓임. 첫 화면에는 최신 버전, 이전 버전은 언제든 열람
-   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, rows:[{name, duties}]}], footer(하단 안내문) }
+   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, head(헤드 이름), rows:[{name, role(조직도용 짧은 담당), duties}]}], footer(하단 안내문) }
+   조직도는 teams 에서 바로 그림: 팀 순서대로 나란히, 이웃 팀의 head 가 같으면 헤드 상자 하나가 그 팀들 위에 걸침
 ================================================================ */
 const R = () => (DATA.rnr || []).slice().sort((a, b) => (b.version || 0) - (a.version || 0));
 const latestRnr = () => R()[0];
@@ -70,19 +85,18 @@ let rnrSeeding = false;
 const DEFAULT_RNR = {
   title: '9월 업무 분장', effective_date: '2026-09-01', note: '첫 등록',
   teams: [
-    { name: '마케팅팀', rows: [
-      { name: '안상형', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
-      { name: '류수연', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n리뷰 블로그 캠페인' },
-      { name: '김채은', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n매월 마지막 수요일 타사광고 레퍼런스/인사이트 공유' },
-      { name: '전예솔', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n디자인 업무\n틱톡 심포니 테스트' },
-      { name: '김홍재', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
+    { name: '마케팅팀', head: '홍주', rows: [
+      { name: '안상형', role: '영상', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
+      { name: '류수연', role: '영상 · 리뷰 블로그', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n리뷰 블로그 캠페인' },
+      { name: '김채은', role: '영상 · 레퍼런스', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n매월 마지막 수요일 타사광고 레퍼런스/인사이트 공유' },
+      { name: '전예솔', role: '영상 · 디자인', duties: '레모너리/서리맥스 영상: 10개 + 파트너스 2개\n디자인 업무\n틱톡 심포니 테스트' },
+      { name: '김홍재', role: '영상', duties: '레모너리 서리맥스 흑생마 영상: 12개' },
     ]},
-    { name: '경영지원팀', rows: [
-      { name: '홍주', duties: '1) 매출관리: 식이해법연구소\n2) 퍼포먼스(예산 업데이트), 광고 성과 관리 및 인사이트 공유\n3) 광고 : 광고영상 검수(파트너스 포함)\n4) 네이버광고 (검색광고, 브랜드검색)' },
-      { name: '김상우', duties: '1) 보건소대응, 가품 및 리셀 상품 관리\n2) SCM : 제품 bom 관리, 발주 생산, 물류 입출고, 포장박스 발주\n3) 매출관리 : 식이해법연구소/피에이치뷰티\n4) 쇼핑몰 관리\n - 자사몰 : 레모너리/서리맥스/흑생마\n - 쿠팡 : 매칭, 가격관리, 최저가 모니터링\n - 네이버 : 브랜드 검색시 첫페이지 제품노출, 블로그노출, 최저가 모니터링\n5) 고객 CS 및 주문 출고 : 피에이치뷰티' },
-      { name: '김홍석', duties: '1) 고객 CS 및 주문 출고 : 식이해법연구소\n2) 오프라인 약국 사업부 : 영업 및 컨텐츠 기획\n3) 리뷰관리 : 자사몰, 네이버, 쿠팡 리뷰 관리' },
-      { name: '이유나', duties: '1) 뷰티 BM\n2) 광고 업로드 : 메타, 틱톡, 구글애즈\n3) 기타 지원업무' },
-      { name: '황려은', duties: '오프라인 약국 사업부' },
+    { name: '운영기획팀', head: '홍주', rows: [
+      { name: '홍주', role: '퍼포먼스 · 광고 검수', duties: '1) 매출관리: 식이해법연구소\n2) 퍼포먼스(예산 업데이트), 광고 성과 관리 및 인사이트 공유\n3) 광고 : 광고영상 검수(파트너스 포함)\n4) 네이버광고 (검색광고, 브랜드검색)' },
+      { name: '김상우', role: 'SCM · MD · 경영지원', duties: '1) 보건소대응, 가품 및 리셀 상품 관리\n2) SCM : 제품 bom 관리, 발주 생산, 물류 입출고, 포장박스 발주\n3) 매출관리 : 식이해법연구소/피에이치뷰티\n4) 쇼핑몰 관리\n - 자사몰 : 레모너리/서리맥스/흑생마\n - 쿠팡 : 매칭, 가격관리, 최저가 모니터링\n - 네이버 : 브랜드 검색시 첫페이지 제품노출, 블로그노출, 최저가 모니터링\n5) 고객 CS 및 주문 출고 : 피에이치뷰티' },
+      { name: '김홍석', role: 'CS', duties: '1) 고객 CS 및 주문 출고 : 식이해법연구소\n2) 오프라인 약국 사업부 : 영업 및 컨텐츠 기획\n3) 리뷰관리 : 자사몰, 네이버, 쿠팡 리뷰 관리' },
+      { name: '이유나', role: '기획 · 광고지원', duties: '1) 뷰티 BM\n2) 광고 업로드 : 메타, 틱톡, 구글애즈\n3) 기타 지원업무' },
     ]},
   ],
   footer: '* 상기 개별 제작 영상 개수는 월별 기준으로 작성되었으며, 해당 개수는 월말까지 미달되지 않아야 합니다',
@@ -95,12 +109,33 @@ async function seedRnr(){
 }
 const rnrMeta = v => `v${v.version} · ${fmtDate(v.effective_date) || '적용일 없음'} 적용 · ${esc(v.created_by || '')} · ${fmtDateTime(v.created_at)}`;
 /* editable=true 면 관리자가 더블클릭으로 바로 고칠 수 있는 표시(data-edit)를 붙임 */
+/* 조직도: 팀 순서대로 한 줄에 놓고, 헤드 이름이 같은 이웃 팀은 헤드 상자 하나로 묶음 */
+function orgHtml(v, editable){
+  const teams = Array.isArray(v.teams) ? v.teams : [];
+  if (!teams.length) return '';
+  const ed = (kind, ti, ri) => editable ? ` data-edit="${kind}" data-ti="${ti}" data-ri="${ri ?? ''}" title="더블클릭하면 바로 고칠 수 있습니다"` : '';
+  const groups = [];
+  teams.forEach((t, ti) => {
+    const h = (t.head || '').trim(), last = groups[groups.length - 1];
+    if (last && h && last.head === h) last.span++; else groups.push({ head: h, ti, span: 1 });
+  });
+  const heads = groups.map(g => `<div class="box head" style="grid-column:span ${g.span}${g.head || editable ? '' : ';visibility:hidden'}">
+    <span${ed('head', g.ti)}>${esc(g.head || (editable ? '(헤드 없음 · 더블클릭)' : ''))}</span>${g.head ? `<small>${g.span > 1 ? teams.slice(g.ti, g.ti + g.span).map(t => esc(t.name)).join(' · ') + ' 헤드' : '헤드'}</small>` : ''}</div>`).join('');
+  const body = teams.map((t, ti) => {
+    const all = t.rows || [], head = (t.head || '').trim();
+    const rows = all.filter(r => r.name && r.name.trim() !== head);
+    return `<div><div class="box tm">${esc(t.name)}</div><div class="mem" style="margin-top:10px">
+      ${rows.map(r => `<div class="p"><b>${esc(r.name)}</b><span${ed('role', ti, all.indexOf(r))}>${esc(r.role || '')}</span></div>`).join('') || '<div class="hint" style="text-align:center">인원 없음</div>'}
+    </div></div>`;
+  }).join('');
+  return `<div class="org" style="grid-template-columns:repeat(${teams.length},1fr)">${heads}${body}</div>`;
+}
 function rnrBodyHtml(v, editable){
   const teams = Array.isArray(v.teams) ? v.teams : [];
   const ed = (kind, ti, ri) => editable ? ` data-edit="${kind}" data-ti="${ti}" data-ri="${ri ?? ''}" title="더블클릭하면 바로 고칠 수 있습니다"` : '';
-  return `<div class="teams">${teams.map((t, ti) => `<div class="team"><h3${ed('team', ti)}>${esc(t.name)}</h3>
+  return `${orgHtml(v, editable)}<div class="teams">${teams.map((t, ti) => `<div class="team"><h3><span${ed('team', ti)}>${esc(t.name)}</span>${t.head ? `<span class="badge">헤드 ${esc(t.head)}</span>` : ''}</h3>
     <table><thead><tr><th>이름</th><th>업무</th></tr></thead><tbody>
-    ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
+    ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}${t.head && r.name === t.head ? '<span class="badge">헤드</span>' : ''}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
     </tbody></table></div>`).join('')}</div>
     ${v.footer || editable ? `<div class="footer"${ed('footer')}>${esc(v.footer || (editable ? '(하단 안내문 없음 · 더블클릭해서 입력)' : ''))}</div>` : ''}`;
 }
@@ -110,7 +145,7 @@ function bindInlineEdit(){
   document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = () => {
     const cur = latestRnr(); if (!cur || el.querySelector('textarea,input')) return;
     const kind = el.dataset.edit, ti = +el.dataset.ti, ri = el.dataset.ri === '' ? null : +el.dataset.ri;
-    const get = () => kind === 'title' ? cur.title : kind === 'footer' ? (cur.footer || '') : kind === 'team' ? cur.teams[ti].name : cur.teams[ti].rows[ri][kind];
+    const get = () => kind === 'title' ? cur.title : kind === 'footer' ? (cur.footer || '') : kind === 'team' ? cur.teams[ti].name : kind === 'head' ? (cur.teams[ti].head || '') : (cur.teams[ti].rows[ri][kind] || '');
     const multi = kind === 'duties' || kind === 'footer';
     const old = get();
     const box = document.createElement(multi ? 'textarea' : 'input');
@@ -123,7 +158,7 @@ function bindInlineEdit(){
       const val = box.value.trim();
       if (!save || val === old.trim()) { render(); return; }
       const n = JSON.parse(JSON.stringify(cur));
-      if (kind === 'title') n.title = val || old; else if (kind === 'footer') n.footer = val; else if (kind === 'team') n.teams[ti].name = val || old; else n.teams[ti].rows[ri][kind] = val;
+      if (kind === 'title') n.title = val || old; else if (kind === 'footer') n.footer = val; else if (kind === 'team') n.teams[ti].name = val || old; else if (kind === 'head') n.teams[ti].head = val; else n.teams[ti].rows[ri][kind] = val;
       await saveRow('rnr', n);
       toast('저장했습니다 (v' + n.version + ' 에 반영)');
     };
@@ -145,7 +180,7 @@ function rnrHtml(){
       <button class="btn sm" id="rnrHist">이전 버전${R().length > 1 ? ` (${R().length - 1})` : ''}</button>
       ${admin ? `<button class="btn sm primary" id="rnrNew">새 버전 만들기</button>` : ''}
       <button class="fold" id="rnrFold">${rnrFold ? '펼치기 ▾' : '접기 ▴'}</button></div>
-    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${admin ? '<div class="note">✎ 이름·업무·안내문·제목을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다 (현재 버전에 저장). 월이 바뀌어 크게 바꿀 때는 <b>새 버전 만들기</b>.</div>' : ''}${rnrBodyHtml(cur, admin)}</div>`}
+    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${admin ? '<div class="note">✎ 조직도의 헤드·담당, 표의 이름·업무·안내문·제목을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다 (현재 버전에 저장). 월이 바뀌어 크게 바꿀 때는 <b>새 버전 만들기</b>.</div>' : ''}${rnrBodyHtml(cur, admin)}</div>`}
   </div>`;
 }
 function bindRnr(){
@@ -176,23 +211,25 @@ function openRnrEditor(base){
   const nextVer = (latestRnr() ? latestRnr().version : 0) + 1;
   const draft = { title: d.title || '', effective_date: todayStr(), note: '', teams: d.teams, footer: d.footer || '' };
   const teamsHtml = () => draft.teams.map((t, ti) => `<div class="tbox" data-ti="${ti}">
-      <div class="th"><input value="${esc(t.name)}" data-tname="${ti}" placeholder="팀 이름"><button class="btn sm danger" data-tdel="${ti}">팀 삭제</button></div>
-      ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
+      <div class="th"><input value="${esc(t.name)}" data-tname="${ti}" placeholder="팀 이름"><input class="hd-in" value="${esc(t.head || '')}" data-thead="${ti}" placeholder="헤드 이름 (조직도 위 상자)"><button class="btn sm danger" data-tdel="${ti}">팀 삭제</button></div>
+      ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><input value="${esc(r.role || '')}" data-rrole="${ti}-${ri}" placeholder="담당 (조직도용, 짧게)"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
       <button class="addrow2" data-radd="${ti}">＋ 인원 추가</button>
     </div>`).join('') + `<button class="addrow2" id="rTeamAdd">＋ 팀 추가</button>`;
   /* 화면의 입력값을 draft 에 반영 */
   const collect = () => {
     draft.title = $('#rTitle').value.trim(); draft.effective_date = $('#rDate').value; draft.note = $('#rNote').value.trim(); draft.footer = $('#rFooter').value.trim();
     document.querySelectorAll('[data-tname]').forEach(i => draft.teams[+i.dataset.tname].name = i.value.trim());
+    document.querySelectorAll('[data-thead]').forEach(i => draft.teams[+i.dataset.thead].head = i.value.trim());
+    document.querySelectorAll('[data-rrole]').forEach(i => { const [a, b] = i.dataset.rrole.split('-').map(Number); draft.teams[a].rows[b].role = i.value.trim(); });
     document.querySelectorAll('[data-rname]').forEach(i => { const [a, b] = i.dataset.rname.split('-').map(Number); draft.teams[a].rows[b].name = i.value.trim(); });
     document.querySelectorAll('[data-rd]').forEach(i => { const [a, b] = i.dataset.rd.split('-').map(Number); draft.teams[a].rows[b].duties = i.value.trim(); });
   };
   const paint = () => {
     $('#rTeams').innerHTML = teamsHtml();
-    document.querySelectorAll('[data-radd]').forEach(b => b.onclick = () => { collect(); draft.teams[+b.dataset.radd].rows.push({ name: '', duties: '' }); paint(); });
+    document.querySelectorAll('[data-radd]').forEach(b => b.onclick = () => { collect(); draft.teams[+b.dataset.radd].rows.push({ name: '', role: '', duties: '' }); paint(); });
     document.querySelectorAll('[data-rdel]').forEach(b => b.onclick = () => { collect(); const [a, c] = b.dataset.rdel.split('-').map(Number); draft.teams[a].rows.splice(c, 1); paint(); });
     document.querySelectorAll('[data-tdel]').forEach(b => b.onclick = () => { collect(); const t = draft.teams[+b.dataset.tdel]; if ((t.rows || []).length && !confirm(`"${t.name}" 팀과 인원 ${t.rows.length}명 내용을 지울까요?`)) return; draft.teams.splice(+b.dataset.tdel, 1); paint(); });
-    $('#rTeamAdd').onclick = () => { collect(); draft.teams.push({ name: '새 팀', rows: [{ name: '', duties: '' }] }); paint(); };
+    $('#rTeamAdd').onclick = () => { collect(); draft.teams.push({ name: '새 팀', head: '', rows: [{ name: '', role: '', duties: '' }] }); paint(); };
   };
   openModal(`${modalHead(`새 버전 만들기 (v${nextVer})`)}
     <div class="mb">
@@ -211,7 +248,7 @@ function openRnrEditor(base){
   $('#rSave').onclick = async () => {
     collect();
     if (!draft.title) { $('#rTitle').focus(); toast('제목을 입력하세요', true); return; }
-    draft.teams = draft.teams.map(t => ({ name: t.name || '팀', rows: (t.rows || []).filter(r => r.name || r.duties) })).filter(t => t.rows.length || t.name);
+    draft.teams = draft.teams.map(t => ({ name: t.name || '팀', head: t.head || '', rows: (t.rows || []).filter(r => r.name || r.duties) })).filter(t => t.rows.length || t.name);
     if (!draft.teams.length) { toast('팀과 인원을 하나 이상 넣어 주세요', true); return; }
     closeModal();
     await saveRow('rnr', { id: uid(), version: nextVer, ...draft, created_by: me, created_at: nowIso() });
