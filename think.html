@@ -499,7 +499,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 15:10";
+    const BUILD = "2026-09-26 15:40";
     (async () => {
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
@@ -530,6 +530,12 @@
     let saveTimer = null;
     let editSeq = 0;
     let appReady = false;     // 처음 그리는 동안의 저장은 보내지 않음
+    let serverStamp = null;   // 마지막으로 서버와 맞춘 시각(updated_at). 다른 창이 그 뒤에 저장했는지 알아내는 기준
+    let localDirty = false;   // 이 창에서 고친 뒤 아직 서버에 못 보낸 것이 있는지
+    let firstEditAt = 0;      // 연달아 치기 시작한 때. 계속 치는 중이어도 5초에 한 번은 보냅니다
+    let pushing = false;      // 지금 서버로 보내는 중인지
+    let needRedraw = false;   // 글을 치는 중이라 화면 다시 그리기를 미뤄 둔 상태
+    let accessToken = null;   // 창을 닫는 순간에 쓰는 로그인 이용권
 
     // 앱 안에서는 이 셋으로만 읽고 씁니다
     function storeGet(key) {
@@ -537,21 +543,93 @@
       return (v === undefined || v === null) ? null : v;
     }
     function storeSet(key, value) {
-      STATE[key] = String(value);
+      STATE[key] = stampChanges(STATE[key], String(value));
       if (!appReady) return;
-      editSeq++;
-      cacheNow(true);
-      showStoreStatus("saving");
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(pushToServer, 700);   // 연달아 고치면 멈춘 뒤 한 번에
+      markEdited();
     }
     function storeDel(key) {
       delete STATE[key];
       if (!appReady) return;
+      markEdited();
+    }
+    function markEdited() {
       editSeq++;
+      localDirty = true;
       cacheNow(true);
+      showStoreStatus("saving");
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(pushToServer, 700);
+      const now = Date.now();
+      if (!firstEditAt) firstEditAt = now;
+      // 멈추면 0.7초 뒤에, 계속 치는 중이어도 5초에 한 번은 서버로 보냅니다
+      const wait = Math.max(0, Math.min(700, firstEditAt + 5000 - now));
+      saveTimer = setTimeout(pushToServer, wait);
+    }
+
+    // ── 항목(주제·탭)마다 마지막으로 고친 시각(ts)을 붙입니다 ──
+    // 창 두 개가 엇갈려 저장할 때 어느 쪽이 새것인지 고르는 기준입니다.
+    // 접기/펼치기(open)만 바뀐 건 내용이 아니므로 시각을 바꾸지 않습니다.
+    function parseList(str) {
+      if (typeof str !== "string") return null;
+      let v; try { v = JSON.parse(str); } catch (e) { return null; }
+      if (!Array.isArray(v)) return null;
+      if (!v.every(x => x && typeof x === "object" && x.id !== undefined)) return null;
+      return v;
+    }
+    function noteSig(x) {
+      const c = Object.assign({}, x);
+      delete c.open; delete c.ts;
+      return JSON.stringify(c);
+    }
+    function stampChanges(prevStr, nextStr) {
+      const list = parseList(nextStr);
+      if (!list) return nextStr;
+      const before = {};
+      (parseList(prevStr) || []).forEach(x => { before[x.id] = noteSig(x); });
+      const now = Date.now();
+      let changed = false;
+      list.forEach(x => {
+        if (before[x.id] !== noteSig(x)) { x.ts = now; changed = true; }
+      });
+      return changed ? JSON.stringify(list) : nextStr;
+    }
+
+    // ── 두 판을 합칩니다 (내 것 + 서버 것) ──
+    // 항목은 id 로 짝을 지어 ts 가 새것을 고르고, 한쪽에만 있는 항목은 살립니다.
+    // (지워지는 쪽보다 남는 쪽이 안전합니다.) 같은 항목이 두 자리(예: 목록과 휴지통)에
+    // 있으면 ts 가 새 자리에만 남깁니다.
+    function mergeDocs(local, server) {
+      local = local || {}; server = server || {};
+      const out = {};
+      const lists = {};
+      const keys = new Set(Object.keys(local).concat(Object.keys(server)));
+      keys.forEach(k => {
+        const a = parseList(local[k]), b = parseList(server[k]);
+        if (a && b) {
+          const pick = new Map();
+          a.forEach(x => pick.set(x.id, x));
+          b.forEach(x => {
+            const y = pick.get(x.id);
+            if (!y || (x.ts || 0) > (y.ts || 0)) pick.set(x.id, x);
+          });
+          const order = [], seen = new Set();
+          a.forEach(x => { if (!seen.has(x.id)) { order.push(pick.get(x.id)); seen.add(x.id); } });
+          b.forEach(x => { if (!seen.has(x.id)) { order.push(pick.get(x.id)); seen.add(x.id); } });
+          lists[k] = order;
+        } else if (a || b) {
+          lists[k] = a || b;
+        } else {
+          out[k] = (server[k] !== undefined) ? server[k] : local[k];
+        }
+      });
+      const where = {};
+      Object.keys(lists).forEach(k => lists[k].forEach(x => {
+        const w = where[x.id];
+        if (!w || (x.ts || 0) > w.ts) where[x.id] = { key: k, ts: x.ts || 0 };
+      }));
+      Object.keys(lists).forEach(k => {
+        out[k] = JSON.stringify(lists[k].filter(x => where[x.id].key === k));
+      });
+      return out;
     }
 
     // 이 기기에 임시로 남겨두기 (저장 실패로 날아가는 일이 없게)
@@ -564,36 +642,122 @@
       try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { return null; }
     }
 
+    // 서버로 보내기. 서버가 그 사이(다른 창·다른 기기에서) 바뀌었으면 덮어쓰지 않고
+    // 서버 것과 합친 뒤 다시 보냅니다. 그래서 어느 창에서 적었든 내용이 사라지지 않습니다.
     async function pushToServer() {
       clearTimeout(saveTimer);
+      firstEditAt = 0;
+      if (!me) return;
+      if (pushing) { saveTimer = setTimeout(pushToServer, 500); return; }   // 앞 저장이 끝나면 다시
+      pushing = true;
       const seq = editSeq;
       try {
-        const { error } = await sb.from("think_docs")
-          .upsert({ owner: me.id, data: STATE, updated_at: new Date().toISOString() }, { onConflict: "owner" });
-        if (error) throw error;
+        let saved = false;
+        for (let attempt = 0; attempt < 3 && !saved; attempt++) {
+          const stamp = new Date().toISOString();
+          let res;
+          if (serverStamp) {
+            res = await sb.from("think_docs")
+              .update({ data: STATE, updated_at: stamp })
+              .eq("owner", me.id).eq("updated_at", serverStamp)
+              .select("updated_at");
+          } else {
+            res = await sb.from("think_docs")
+              .upsert({ owner: me.id, data: STATE, updated_at: stamp }, { onConflict: "owner" })
+              .select("updated_at");
+          }
+          if (res.error) throw res.error;
+          if (res.data && res.data.length) {
+            serverStamp = res.data[0].updated_at;
+            saved = true;
+          } else {
+            // 그 사이 다른 창이 먼저 저장했음 → 서버 것과 합친 뒤 다시 시도
+            const ok = await pullAndMerge();
+            if (!ok) throw new Error("합치기 실패");
+          }
+        }
+        if (!saved) throw new Error("저장 순서가 계속 엇갈림");
 
-        if (seq === editSeq) cacheNow(false);
+        if (seq === editSeq) { cacheNow(false); localDirty = false; }
         showStoreStatus("ok");
-        saveHistory();          // 한 시간에 한 번 지난 내용 남기기
+        saveHistory();          // 10분에 한 번 지난 내용 남기기
       } catch (e) {
         showStoreStatus("fail");
+      } finally {
+        pushing = false;
       }
+      if (seq !== editSeq) saveTimer = setTimeout(pushToServer, 300);   // 보내는 동안 또 고쳤으면 한 번 더
     }
 
-    // 한 시간에 한 번, 지금 내용을 따로 남겨 둡니다 (실수로 지웠을 때 되돌리기용)
+    // 서버 것을 받아 지금 내용과 합칩니다
+    async function pullAndMerge() {
+      const { data, error } = await sb.from("think_docs").select("data, updated_at").eq("owner", me.id).maybeSingle();
+      if (error) return false;
+      if (!data) { serverStamp = null; return true; }
+      STATE = mergeDocs(STATE, data.data || {});
+      serverStamp = data.updated_at;
+      cacheNow(localDirty);
+      redrawSoon();
+      return true;
+    }
+
+    // 화면 다시 그리기. 글을 치는 중이면 커서가 날아가지 않게 손을 뗀 뒤로 미룹니다
+    function redrawSoon() {
+      const a = document.activeElement;
+      if (a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.isContentEditable)) { needRedraw = true; return; }
+      needRedraw = false;
+      try { drawLayout(); } catch (e) {}
+    }
+    document.addEventListener("focusout", () => {
+      if (needRedraw) setTimeout(() => { if (needRedraw) redrawSoon(); }, 50);
+    });
+
+    // 창으로 돌아왔을 때: 다른 창·기기에서 더 새로 저장한 것이 있으면 받아옵니다
+    async function refreshIfChanged() {
+      if (!appReady || !me || pushing) return;
+      if (localDirty) { pushToServer(); return; }
+      try {
+        const { data } = await sb.from("think_docs").select("updated_at").eq("owner", me.id).maybeSingle();
+        if (data && data.updated_at !== serverStamp) await pullAndMerge();
+      } catch (e) {}
+    }
+    window.addEventListener("focus", refreshIfChanged);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshIfChanged();
+      else if (localDirty) pushToServer();          // 다른 탭으로 옮길 때 바로 보냄
+    });
+
+    // 15초마다: 못 보낸 것이 남아 있으면 다시 보냅니다
+    setInterval(() => { if (appReady && localDirty && !pushing) pushToServer(); }, 15000);
+
+    // 10분에 한 번, 지금 내용을 따로 남겨 둡니다 (실수로 지웠을 때 되돌리기용)
     async function saveHistory() {
       const last = Number(localStorage.getItem(HIST_KEY) || 0);
-      if (Date.now() - last < 3600000) return;
+      if (Date.now() - last < 600000) return;
       localStorage.setItem(HIST_KEY, String(Date.now()));
       try {
         await sb.from("think_history").insert({ id: crypto.randomUUID(), owner: me.id, data: STATE });
       } catch (e) {}
     }
 
-    window.addEventListener("pagehide", () => {
-      const c = readCache();
-      if (c && c.dirty) pushToServer();
-    });
+    // 창을 닫는 순간: 보통 방식은 창이 닫히면서 끊기므로, 닫혀도 끝까지 가는 방식(keepalive)으로 보냅니다
+    function flushOnClose() {
+      if (!localDirty || !me || !accessToken) return;
+      clearTimeout(saveTimer);
+      const body = JSON.stringify({ data: STATE, updated_at: new Date().toISOString() });
+      if (body.length > 60000) { pushToServer(); return; }     // keepalive 는 64KB 까지만 됩니다
+      let url = SUPABASE_URL + "/rest/v1/think_docs?owner=eq." + me.id;
+      if (serverStamp) url += "&updated_at=eq." + encodeURIComponent(serverStamp);
+      try {
+        fetch(url, {
+          method: "PATCH", keepalive: true, body: body,
+          headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + accessToken,
+                     "Content-Type": "application/json", Prefer: "return=minimal" }
+        });
+        // 결과는 기다릴 수 없습니다. 임시 보관본은 dirty 로 남겨 두어, 다음에 열 때 서버 것과 합쳐 맞춥니다
+      } catch (e) {}
+    }
+    window.addEventListener("pagehide", flushOnClose);
 
     function showStoreStatus(state) {
       const el = document.getElementById("storeStatus");
@@ -725,7 +889,13 @@
 
       dbg("A. 로그인확인 통과", me.email);
       if (typeof step === "function") step("④ 내용 불러오는 중…");
-      const { data, error } = await sb.from("think_docs").select("data").eq("owner", me.id).maybeSingle();
+      try {
+        const ses = await sb.auth.getSession();
+        accessToken = (ses.data && ses.data.session) ? ses.data.session.access_token : null;
+      } catch (e) {}
+      sb.auth.onAuthStateChange((ev, session) => { if (session && session.access_token) accessToken = session.access_token; });
+
+      const { data, error } = await sb.from("think_docs").select("data, updated_at").eq("owner", me.id).maybeSingle();
       if (error) {
         document.getElementById("gate").hidden = false;
         document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + error.message;
@@ -733,14 +903,17 @@
         return;
       }
 
+      serverStamp = data ? data.updated_at : null;
+      const serverData = (data && data.data) ? data.data : {};
       const cache = readCache();
       if (cache && cache.dirty && cache.data) {
-        // 지난번에 저장하지 못하고 남아 있던 내용이 있으면 그것을 살립니다
-        STATE = cache.data;
+        // 지난번에 저장하지 못하고 남아 있던 내용이 있으면 서버 것과 합쳐 살립니다
+        STATE = mergeDocs(cache.data, serverData);
         appReady = true;
+        localDirty = true;
         pushToServer();
       } else {
-        STATE = (data && data.data) ? data.data : {};
+        STATE = serverData;
       }
 
       dbg("C. 내용 받음", "항목 " + Object.keys(STATE).length + "개");
