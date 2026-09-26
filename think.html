@@ -205,6 +205,7 @@
       background: #fff; color: #c96442; border: 1px solid #e2ddd4;
     }
     .add-board:hover { background: #c96442; color: #fff; }
+    .topbar-left { display: flex; align-items: center; gap: 8px; }
 
     /* 탭을 나란히 놓는 틀. 넓이를 직접 정하므로 넘치면 옆으로 넘겨서 봅니다 */
     .layout {
@@ -473,7 +474,10 @@
   </div>
 
   <div class="topbar" id="topbar" hidden>
-    <button id="addBoard" class="add-board">+ 새 탭</button>
+    <div class="topbar-left">
+      <button id="addBoard" class="add-board">+ 새 탭</button>
+      <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt)로 내려받습니다">📄 추출</button>
+    </div>
     <div class="topbar-right">
       <div id="storeStatus" class="store-status" hidden></div>
       <button class="logout" id="logout">로그아웃</button>
@@ -495,7 +499,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 09:00";
+    const BUILD = "2026-09-26 14:30";
     (async () => {
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
@@ -820,6 +824,68 @@
       catch (e) { return []; }
     }
     function saveBoards(list) { storeSet(BOARDS_KEY, JSON.stringify(list)); }
+
+    // ══ 추출: 적은 내용 전부를 메모장용 텍스트 파일(.txt)로 내려받기 ══
+    // 탭마다 주제 → 내용 순서로 적고, 보관함도 뒤에 붙입니다. 휴지통은 뺍니다.
+    function pad2(n) { return String(n).padStart(2, "0"); }
+    function readList(key) { try { return JSON.parse(storeGet(key)) || []; } catch (e) { return []; } }
+
+    function buildExportText() {
+      const d = new Date();
+      const stamp = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+                  + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+      const L = [];
+      L.push("파고들기  (추출: " + stamp + ")");
+      L.push("");
+
+      const boards = loadBoards();
+      boards.forEach((board) => {
+        const list = readList(board.key);
+        const arch = readList(board.key + "_archive");
+        L.push("================================================");
+        L.push("■ " + (board.title || "제목 없음") + "  (주제 " + list.length + "개, 보관 " + arch.length + "개)");
+        L.push("================================================");
+        L.push("");
+
+        const put = (note, extra) => {
+          L.push("▶ " + (note.title || "제목 없음") + (extra || ""));
+          L.push("------------------------------------------------");
+          const body = (note.body || "").replace(/\r\n/g, "\n").trim();
+          if (body) body.split("\n").forEach((line) => L.push(line));   // 줄마다 따로 넣어야 메모장 줄바꿈으로 통일됨
+          else L.push("(내용 없음)");
+          L.push("");
+          L.push("");
+        };
+
+        if (!list.length) { L.push("(주제 없음)"); L.push(""); }
+        list.forEach((note) => put(note));
+
+        if (arch.length) {
+          L.push("[보관함]");
+          L.push("");
+          arch.forEach((note) => put(note, note.archivedAt ? "  (" + note.archivedAt + " 보관)" : ""));
+        }
+      });
+
+      return L.join("\r\n");   // 메모장은 \r\n 줄바꿈을 씁니다
+    }
+
+    function exportText() {
+      const d = new Date();
+      const name = "파고들기_" + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate())
+                 + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + ".txt";
+      // 맨 앞의 ﻿ 는 UTF-8 표시(BOM). 메모장이 한글을 깨뜨리지 않게 해 줍니다
+      const blob = new Blob(["﻿" + buildExportText()], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    document.getElementById("exportBtn").addEventListener("click", exportText);
 
     function newId() {
       return "b" + Date.now() + Math.random().toString(16).slice(2, 6);
