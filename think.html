@@ -179,6 +179,7 @@
     .note-item.dragging { opacity: 0.35; }
     .note-item.drop-above { box-shadow: inset 0 3px 0 #c96442; }
     .note-item.drop-below { box-shadow: inset 0 -3px 0 #c96442; }
+    .card.drop-into { box-shadow: 0 0 0 2px #c96442, 0 4px 24px rgba(0,0,0,0.08); }
     /* 오른쪽 위 저장 상태 표시 */
     .store-status {
       position: fixed; top: 7px; right: 20px; z-index: 50;
@@ -1295,7 +1296,7 @@
 
       layout.appendChild(card);
 
-      return { card: card, h1: h1, mark: mark, addBtn: addBtn, list: list,
+      return { card: card, body: body, h1: h1, mark: mark, addBtn: addBtn, list: list,
                archHead: archHead, archTitle: archTitle, archList: archList,
                trashHead: trashHead, trashTitle: trashTitle, trashClear: trashClear,
                trashList: trashList };
@@ -1371,8 +1372,11 @@
     // 제목만 죽 보이다가 제목을 한 번 누르면 아래로 펼쳐지고,
     // 두 번 누르면 이름을 고칩니다. 끌어다 순서를 바꿀 수 있고,
     // 지운 것은 그 탭의 휴지통에 모입니다.
+    // 끌기 상태는 탭 전체가 함께 씁니다. 그래야 다른 탭 위에 놓았을 때 어디서 왔는지 압니다.
+    let DRAG = null;            // { key: 출발 탭의 저장 자리, idx: 그 탭에서의 자리 번호 }
+    const BOARD_API = {};       // 저장 자리(key) → 그 탭의 load/save/draw
+
     function createBoard(B, el) {
-      let dragFrom = null;      // 지금 끌고 있는 항목의 자리 번호
       let trashOpen = false;
       let renameNext = null;    // 새로 만든 직후 바로 이름을 고칠 항목
       let focusBodyNext = null; // 제목에서 엔터를 친 뒤 생각 칸으로 커서를 보낼 항목
@@ -1400,6 +1404,41 @@
         save(all);
         draw();
       }
+
+      // 다른 탭에서 끌어온 주제를 이 탭의 to 번째 자리에 넣습니다 (below 면 그 아래)
+      function takeFrom(src, to, below) {
+        const from = BOARD_API[src.key];
+        if (!from) return;
+        const srcList = from.load();
+        const item = srcList.splice(src.idx, 1)[0];
+        if (!item) return;
+        from.save(srcList);
+        const all = load();
+        let target = (to === null) ? all.length : (below ? to + 1 : to);
+        all.splice(target, 0, item);
+        save(all);
+        from.draw();
+        draw();
+      }
+      BOARD_API[B.key] = { load: load, save: save, draw: () => draw() };
+
+      // 항목이 아닌 카드의 빈 자리(빈 탭, 목록 맨 아래)에 놓으면 맨 끝에 붙습니다
+      el.body.addEventListener("dragover", (e) => {
+        if (!DRAG || e.target.closest(".note-item")) { el.card.classList.remove("drop-into"); return; }
+        e.preventDefault();
+        el.card.classList.add("drop-into");
+      });
+      el.body.addEventListener("dragleave", (e) => {
+        if (!el.body.contains(e.relatedTarget)) el.card.classList.remove("drop-into");
+      });
+      el.body.addEventListener("drop", (e) => {
+        el.card.classList.remove("drop-into");
+        if (!DRAG || e.target.closest(".note-item")) return;
+        e.preventDefault();
+        const src = DRAG; DRAG = null;
+        if (src.key === B.key) move(src.idx, load().length, false);
+        else takeFrom(src, null, false);
+      });
 
       function setOpen(id, open) {
         const all = load();
@@ -1475,15 +1514,21 @@
           item.draggable = true;
 
           item.ondragstart = (e) => {
-            dragFrom = idx;
+            DRAG = { key: B.key, idx: idx };
             e.dataTransfer.effectAllowed = "move";
             e.dataTransfer.setData("text/plain", "");   // 파이어폭스에서 필요
             item.classList.add("dragging");
           };
-          item.ondragend = () => { dragFrom = null; draw(); };
+          item.ondragend = () => {
+            DRAG = null;
+            document.querySelectorAll(".card.drop-into").forEach(c => c.classList.remove("drop-into"));
+            draw();
+          };
           item.ondragover = (e) => {
-            if (dragFrom === null || dragFrom === idx) return;
+            if (!DRAG || (DRAG.key === B.key && DRAG.idx === idx)) return;
             e.preventDefault();
+            e.stopPropagation();
+            el.card.classList.remove("drop-into");
             const rect = item.getBoundingClientRect();
             const below = (e.clientY - rect.top) > rect.height / 2;
             item.classList.toggle("drop-below", below);
@@ -1494,8 +1539,12 @@
             e.preventDefault();
             const below = item.classList.contains("drop-below");
             item.classList.remove("drop-above", "drop-below");
-            if (dragFrom !== null && dragFrom !== idx) move(dragFrom, idx, below);
-            dragFrom = null;
+            e.stopPropagation();
+            el.card.classList.remove("drop-into");
+            if (!DRAG) return;
+            const src = DRAG; DRAG = null;
+            if (src.key === B.key) { if (src.idx !== idx) move(src.idx, idx, below); }
+            else takeFrom(src, idx, below);
           };
 
           // ── 제목 줄 ──
