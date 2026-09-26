@@ -37,9 +37,8 @@
   .org .head::after,.org .tm::after{content:"";position:absolute;left:50%;bottom:-9px;width:1px;height:8px;background:var(--line2)}
   .org .tm{background:var(--bg3);font-weight:600;font-size:13px}
   .org .mem{display:flex;flex-direction:column;gap:5px}
-  .org .mem .p{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:5px 10px;background:var(--bg);font-size:13px}
+  .org .mem .p{display:flex;justify-content:center;align-items:center;text-align:center;border:1px solid var(--line);border-radius:var(--radius);padding:5px 10px;background:var(--bg);font-size:13px}
   .org .mem .p b{font-weight:600;white-space:nowrap}
-  .org .mem .p span{font-size:11px;color:var(--fg2);text-align:right;word-break:keep-all;min-width:24px;min-height:14px}
   @media (max-width:700px){.org{grid-template-columns:1fr !important}.org .head{grid-column:auto !important}}
   .rnr .fold{border:0;background:transparent;color:var(--fg2);font-size:12px;padding:2px 6px;border-radius:4px}
   .rnr .fold:hover{background:var(--bg3)}
@@ -47,7 +46,7 @@
   .tbox{border:1px solid var(--line2);border-radius:var(--radius);padding:10px;margin-bottom:10px;background:var(--bg2)}
   .tbox .th{display:flex;gap:6px;align-items:center;margin-bottom:8px}
   .tbox .th input{flex:1;border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font-weight:600}
-  .rrow{display:grid;grid-template-columns:110px 150px 1fr 28px;gap:6px;align-items:start;margin-bottom:6px}
+  .rrow{display:grid;grid-template-columns:110px 1fr 28px;gap:6px;align-items:start;margin-bottom:6px}
   .tbox .th .hd-in{flex:0 0 220px;font-weight:400}
   .rrow input,.rrow textarea{border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;width:100%;font:inherit;background:var(--bg)}
   .rrow textarea{min-height:64px;resize:vertical;font-size:13px}
@@ -71,7 +70,7 @@
 
 /* ================================================================
    업무 분장 (R&R) — 버전으로 쌓임. 첫 화면에는 최신 버전, 이전 버전은 언제든 열람
-   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, head(헤드 이름), rows:[{name, role(조직도용 짧은 담당), duties}]}], footer(하단 안내문) }
+   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, head(헤드 이름), rows:[{name, duties}]  (예전 role 칸은 더 이상 안 씀)}], footer(하단 안내문) }
    조직도는 teams 에서 바로 그림: 팀 순서대로 나란히, 이웃 팀의 head 가 같으면 헤드 상자 하나가 그 팀들 위에 걸침
 ================================================================ */
 const R = () => (DATA.rnr || []).slice().sort((a, b) => (b.version || 0) - (a.version || 0));
@@ -124,7 +123,7 @@ function orgHtml(v, editable){
     const all = t.rows || [], head = (t.head || '').trim();
     const rows = all.filter(r => r.name && r.name.trim() !== head);
     return `<div><div class="box tm">${esc(t.name)}</div><div class="mem" style="margin-top:10px">
-      ${rows.map(r => `<div class="p"><b${ed('name', ti, all.indexOf(r))}>${esc(fullName(r.name))}</b><span${ed('role', ti, all.indexOf(r))}>${esc(r.role || '')}</span></div>`).join('') || '<div class="hint" style="text-align:center">인원 없음</div>'}
+      ${rows.map(r => `<div class="p"><b${ed('name', ti, all.indexOf(r))}>${esc(fullName(r.name))}</b></div>`).join('') || '<div class="hint" style="text-align:center">인원 없음</div>'}
     </div></div>`;
   }).join('');
   return `<div class="org" style="grid-template-columns:repeat(${teams.length},1fr)">${heads}${body}</div>`;
@@ -179,7 +178,7 @@ function rnrHtml(){
       <button class="btn sm" id="rnrHist">이전 버전${R().length > 1 ? ` (${R().length - 1})` : ''}</button>
       ${admin ? `<button class="btn sm primary" id="rnrNew">새 버전 만들기</button>` : ''}
       <button class="fold" id="rnrFold">${rnrFold ? '펼치기 ▾' : '접기 ▴'}</button></div>
-    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${admin ? '<div class="note">✎ 조직도의 헤드·담당, 표의 이름·업무·안내문·제목을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다 (현재 버전에 저장). 월이 바뀌어 크게 바꿀 때는 <b>새 버전 만들기</b>.</div>' : ''}${rnrBodyHtml(cur, admin)}</div>`}
+    ${rnrFold ? '' : `<div class="body">${cur.note && cur.version > 1 ? `<div class="note">이번 버전 변경 요약: ${esc(cur.note)}</div>` : ''}${admin ? '<div class="note">✎ 조직도의 헤드, 표의 이름·업무·안내문·제목을 <b>더블클릭</b>하면 그 자리에서 바로 고칠 수 있습니다 (현재 버전에 저장). 월이 바뀌어 크게 바꿀 때는 <b>새 버전 만들기</b>.</div>' : ''}${rnrBodyHtml(cur, admin)}</div>`}
   </div>`;
 }
 function bindRnr(){
@@ -211,7 +210,7 @@ function openRnrEditor(base){
   const draft = { title: d.title || '', effective_date: todayStr(), note: '', teams: d.teams, footer: d.footer || '' };
   const teamsHtml = () => draft.teams.map((t, ti) => `<div class="tbox" data-ti="${ti}">
       <div class="th"><input value="${esc(t.name)}" data-tname="${ti}" placeholder="팀 이름"><input class="hd-in" value="${esc(t.head || '')}" data-thead="${ti}" placeholder="헤드 이름 (조직도 위 상자)"><button class="btn sm danger" data-tdel="${ti}">팀 삭제</button></div>
-      ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><input value="${esc(r.role || '')}" data-rrole="${ti}-${ri}" placeholder="담당 (조직도용, 짧게)"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
+      ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
       <button class="addrow2" data-radd="${ti}">＋ 인원 추가</button>
     </div>`).join('') + `<button class="addrow2" id="rTeamAdd">＋ 팀 추가</button>`;
   /* 화면의 입력값을 draft 에 반영 */
@@ -219,7 +218,6 @@ function openRnrEditor(base){
     draft.title = $('#rTitle').value.trim(); draft.effective_date = $('#rDate').value; draft.note = $('#rNote').value.trim(); draft.footer = $('#rFooter').value.trim();
     document.querySelectorAll('[data-tname]').forEach(i => draft.teams[+i.dataset.tname].name = i.value.trim());
     document.querySelectorAll('[data-thead]').forEach(i => draft.teams[+i.dataset.thead].head = i.value.trim());
-    document.querySelectorAll('[data-rrole]').forEach(i => { const [a, b] = i.dataset.rrole.split('-').map(Number); draft.teams[a].rows[b].role = i.value.trim(); });
     document.querySelectorAll('[data-rname]').forEach(i => { const [a, b] = i.dataset.rname.split('-').map(Number); draft.teams[a].rows[b].name = i.value.trim(); });
     document.querySelectorAll('[data-rd]').forEach(i => { const [a, b] = i.dataset.rd.split('-').map(Number); draft.teams[a].rows[b].duties = i.value.trim(); });
   };
