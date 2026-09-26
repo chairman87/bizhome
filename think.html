@@ -11,8 +11,6 @@
     body {
       font-family: "맑은 고딕", sans-serif;
       background: #f4f1ea;
-      display: flex;
-      justify-content: center;
       padding: 44px 20px 32px;
       margin: 0;
     }
@@ -27,6 +25,7 @@
 
       /* 내용이 적어도 카드는 줄어들지 않는 고정 높이 */
       height: calc(100vh - 76px);
+      height: calc(100dvh - 76px);  /* 아이패드·휴대폰: 주소창을 뺀 실제 보이는 높이 */
       min-height: 560px;
       display: flex;
       flex-direction: column;
@@ -213,11 +212,35 @@
       width: max-content; margin: 0 auto;
     }
 
+    /* ── 화면이 좁을 때 (아이패드·휴대폰) ──
+       fit   : 탭들을 화면 폭에 맞게 같은 비율로 줄여서 나란히 둡니다
+       swipe : 그래도 안 들어가면(휴대폰) 탭 하나가 화면을 다 쓰고, 옆으로 밀어 넘깁니다
+       어느 쪽인지는 fitLayout() 이 화면 폭을 재서 정합니다 */
+    body.fit .card, body.swipe .card { padding: 18px; }
+    body.fit .card-grip, body.swipe .card-grip { display: none; }
+    body.swipe { padding-left: 0; padding-right: 0; }
+    body.swipe .layout {
+      width: 100%; box-sizing: border-box; gap: 12px; padding: 0 12px;
+      overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+    body.swipe .card { flex: 0 0 calc(100% - 24px); scroll-snap-align: start; }
+    body.swipe .card:last-child { scroll-snap-align: end; }
+
+    /* 터치 기기: 입력칸 글자가 16px보다 작으면 iOS 가 화면을 저절로 확대해서 틀어집니다 */
+    @media (hover: none) and (pointer: coarse) {
+      .gate-box input, .note-title-input, .note-body,
+      .board-big .note-body, .board-big .note-title-input { font-size: 16px; }
+      .board-big .note-title-input { font-size: 17px; }
+      .card-head h1 { font-size: 19px; }
+      .topbar .store-status { max-width: 40vw; }
+    }
+
     /* 탭 오른쪽 끝을 잡고 끌면 넓이가 바뀝니다 */
     .card { position: relative; }
     .card-grip {
       position: absolute; top: 0; right: -10px; width: 20px; height: 100%;
-      cursor: col-resize; z-index: 5;
+      cursor: col-resize; z-index: 5; touch-action: none;
     }
     .card-grip::after {
       content: ""; position: absolute; top: 50%; left: 9px;
@@ -472,7 +495,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 00:06";
+    const BUILD = "2026-09-26 09:00";
     (async () => {
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
@@ -876,6 +899,7 @@
       const card = document.createElement("div");
       card.className = "card" + (board.compact ? "" : " board-big");
       card.style.width = (board.width || DEFAULT_W) + "px";
+      card.dataset.width = board.width || DEFAULT_W;   // 원래 넓이 (좁은 화면에서 줄일 때의 기준)
 
       const top = document.createElement("div");
       top.className = "card-top";
@@ -966,7 +990,7 @@
       const grip = document.createElement("div");
       grip.className = "card-grip";
       grip.title = "끌어서 넓이 조절";
-      grip.addEventListener("mousedown", (e) => {
+      grip.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         const startX = e.clientX;
         const startW = card.getBoundingClientRect().width;
@@ -977,14 +1001,18 @@
           card.style.width = w + "px";
         };
         const onUp = () => {
-          document.removeEventListener("mousemove", onMove);
-          document.removeEventListener("mouseup", onUp);
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          document.removeEventListener("pointercancel", onUp);
           document.body.classList.remove("resizing");
           setBoardWidth(board.id, card.getBoundingClientRect().width);
+          card.dataset.width = card.getBoundingClientRect().width;
           flashMark(mark);
+          fitLayout();
         };
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
       });
       card.appendChild(grip);
 
@@ -1010,7 +1038,50 @@
           document.getSelection().selectAllChildren(el.h1);
         }
       });
+      fitLayout();
     }
+
+    // 화면 폭에 맞춰 탭 넓이를 정합니다 (아이패드·휴대폰에서 잘리지 않게)
+    //   다 들어감      → 저장된 넓이 그대로
+    //   조금 넘침      → 같은 비율로 줄여서 나란히 (fit)
+    //   그래도 안 들어감 → 탭 하나씩 화면 가득, 옆으로 밀어 넘김 (swipe)
+    const LAYOUT_GAP = 20, PAGE_SIDE = 40, FIT_MIN_W = 280;
+    function fitLayout() {
+      const cards = Array.from(document.querySelectorAll("#layout > .card"));
+      document.body.classList.remove("fit", "swipe");
+      if (!cards.length) return;
+
+      const want = cards.map(c => Number(c.dataset.width) || DEFAULT_W);
+      const gaps = LAYOUT_GAP * (cards.length - 1);
+      const avail = document.documentElement.clientWidth - PAGE_SIDE;
+      const sum = want.reduce((a, b) => a + b, 0);
+
+      if (sum + gaps <= avail) {
+        cards.forEach((c, i) => { c.style.width = want[i] + "px"; });
+        return;
+      }
+      const factor = (avail - gaps) / sum;
+      const scaled = want.map(w => Math.floor(w * factor));
+      if (scaled.every(w => w >= FIT_MIN_W)) {
+        document.body.classList.add("fit");
+        cards.forEach((c, i) => { c.style.width = scaled[i] + "px"; });
+        return;
+      }
+      document.body.classList.add("swipe");
+      cards.forEach(c => { c.style.width = ""; });   // 넓이는 CSS(body.swipe .card)가 정함
+    }
+    // 폭이 바뀌면(회전 등) 펼쳐 둔 글 칸의 높이도 새 폭에 맞춰 다시 잽니다
+    function regrowAll() {
+      document.querySelectorAll("textarea.note-body").forEach(ta => {
+        ta.style.height = "auto";
+        ta.style.height = (ta.scrollHeight + 2) + "px";
+      });
+    }
+    let fitTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(() => { fitLayout(); regrowAll(); }, 80);
+    });
 
     function flashMark(mark) {
       if (!mark) return;
