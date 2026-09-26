@@ -1098,6 +1098,7 @@
       let dragFrom = null;      // 지금 끌고 있는 항목의 자리 번호
       let trashOpen = false;
       let renameNext = null;    // 새로 만든 직후 바로 이름을 고칠 항목
+      let focusBodyNext = null; // 제목에서 엔터를 친 뒤 생각 칸으로 커서를 보낼 항목
 
       const load      = () => { try { return JSON.parse(storeGet(B.key)) || []; }      catch (e) { return []; } };
       const loadTrash = () => { try { return JSON.parse(storeGet(B.trashKey)) || []; } catch (e) { return []; } };
@@ -1245,6 +1246,7 @@
               const n = all.find(x => x.id === note.id);
               if (n) {
                 n.title = ti.value.trim() || "제목 없음";
+                if (focusBodyNext === note.id) n.open = true;   // 엔터로 넘어가면 생각 칸이 보이게
                 save(all);
               }
               draw();
@@ -1252,7 +1254,8 @@
 
             ti.addEventListener("blur", finish);
             ti.addEventListener("keydown", (e) => {
-              if (e.key === "Enter") { e.preventDefault(); ti.blur(); }
+              if (e.isComposing) return;                        // 한글 조합 중 엔터는 무시
+              if (e.key === "Enter") { e.preventDefault(); focusBodyNext = note.id; ti.blur(); }
               if (e.key === "Escape") { ti.value = note.title || ""; ti.blur(); }
             });
             // 입력칸 안에서 누른 건 접기/펼치기로 새지 않게
@@ -1336,8 +1339,23 @@
             });
             ta.addEventListener("blur", () => { clearTimeout(bodyTimer); saveBody(); });
 
+            // 엔터 = 완료(저장하고 나감), Shift+엔터 = 줄바꿈
+            ta.addEventListener("keydown", (e) => {
+              if (e.isComposing) return;                        // 한글 조합 중 엔터는 무시
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); }
+            });
+
             item.appendChild(ta);
             setTimeout(grow, 0);
+
+            // 제목에서 엔터를 쳐서 넘어온 항목이면 생각 칸에 커서를 놓습니다
+            if (focusBodyNext === note.id) {
+              focusBodyNext = null;
+              setTimeout(() => {
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+              }, 0);
+            }
           }
 
           box.appendChild(item);
