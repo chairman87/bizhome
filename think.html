@@ -499,17 +499,27 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 15:40";
-    (async () => {
+    const BUILD = "2026-09-26 15:55";
+    let lastBuildCheck = 0;
+    async function checkBuild() {
+      if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
+      lastBuildCheck = Date.now();
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
         const text = await res.text();
         const m = text.match(/const BUILD = "([^"]+)"/);
         if (m && m[1] > BUILD) {
+          // 못 보낸 글이 있으면 먼저 보내고 나서 새 판으로 바꿉니다
+          if (typeof localDirty !== "undefined" && localDirty) { try { await pushToServer(); } catch (e) {} }
+          if (typeof localDirty !== "undefined" && localDirty) return;
           location.replace(location.pathname + "?v=" + encodeURIComponent(m[1]));
         }
       } catch (e) {}
-    })();
+    }
+    checkBuild();
+    // 오래 열어 둔 창(특히 휴대폰)이 옛 판으로 계속 저장하는 일을 막기 위해, 돌아올 때마다 다시 확인합니다
+    window.addEventListener("focus", checkBuild);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkBuild(); });
 
     // ══ 저장 장치 ══════════════════════════════════════════
     // 적은 내용은 이 브라우저가 아니라 Supabase(think_docs 표)에 저장됩니다.
@@ -633,10 +643,17 @@
     }
 
     // 이 기기에 임시로 남겨두기 (저장 실패로 날아가는 일이 없게)
+    let lastCacheAt = 0;   // 이 창이 마지막으로 임시 보관본을 적은 때
     function cacheNow(dirty) {
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: STATE, dirty: !!dirty, at: Date.now() }));
+        lastCacheAt = Date.now();
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: STATE, dirty: !!dirty, at: lastCacheAt }));
       } catch (e) {}
+    }
+    // 저장이 끝난 뒤 '보낼 것 없음'으로 바꿀 때: 그 사이 다른 창이 적어 둔 것이 있으면 건드리지 않습니다
+    function cacheClearIfMine() {
+      const c = readCache();
+      if (!c || c.at === lastCacheAt) cacheNow(false);
     }
     function readCache() {
       try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { return null; }
@@ -678,7 +695,7 @@
         }
         if (!saved) throw new Error("저장 순서가 계속 엇갈림");
 
-        if (seq === editSeq) { cacheNow(false); localDirty = false; }
+        if (seq === editSeq) { cacheClearIfMine(); localDirty = false; }
         showStoreStatus("ok");
         saveHistory();          // 10분에 한 번 지난 내용 남기기
       } catch (e) {
