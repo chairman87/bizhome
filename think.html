@@ -1099,6 +1099,7 @@
       let trashOpen = false;
       let renameNext = null;    // 새로 만든 직후 바로 이름을 고칠 항목
       let focusBodyNext = null; // 제목에서 엔터를 친 뒤 생각 칸으로 커서를 보낼 항목
+      let lastDoneBody = null;  // 탭으로 완료한 항목. Shift+탭이면 여기로 되돌아갑니다
 
       const load      = () => { try { return JSON.parse(storeGet(B.key)) || []; }      catch (e) { return []; } };
       const loadTrash = () => { try { return JSON.parse(storeGet(B.trashKey)) || []; } catch (e) { return []; } };
@@ -1255,7 +1256,7 @@
             ti.addEventListener("blur", finish);
             ti.addEventListener("keydown", (e) => {
               if (e.isComposing) return;                        // 한글 조합 중 엔터는 무시
-              if (e.key === "Enter") { e.preventDefault(); focusBodyNext = note.id; ti.blur(); }
+              if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey)) { e.preventDefault(); focusBodyNext = note.id; ti.blur(); }
               if (e.key === "Escape") { ti.value = note.title || ""; ti.blur(); }
             });
             // 입력칸 안에서 누른 건 접기/펼치기로 새지 않게
@@ -1339,10 +1340,10 @@
             });
             ta.addEventListener("blur", () => { clearTimeout(bodyTimer); saveBody(); });
 
-            // 엔터 = 완료(저장하고 나감), Shift+엔터 = 줄바꿈
+            // 엔터 = 줄바꿈(그대로), 탭 = 완료(저장하고 나감)
             ta.addEventListener("keydown", (e) => {
-              if (e.isComposing) return;                        // 한글 조합 중 엔터는 무시
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); }
+              if (e.isComposing) return;                        // 한글 조합 중에는 무시
+              if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); lastDoneBody = note.id; window.__lastDoneBoard = B.key; ta.blur(); }
             });
 
             item.appendChild(ta);
@@ -1492,6 +1493,19 @@
           box.appendChild(row);
         });
       }
+
+      document.addEventListener("keydown", (e) => {
+        if (!(e.key === "Tab" && e.shiftKey) || !lastDoneBody || window.__lastDoneBoard !== B.key) return;
+        const a = document.activeElement;
+        if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
+        e.preventDefault();
+        const all = load();
+        const n = all.find(x => x.id === lastDoneBody);
+        if (!n) { lastDoneBody = null; return; }
+        if (!n.open) { n.open = true; save(all); }
+        focusBodyNext = n.id;   // 다시 그리면서 그 칸에 커서를 놓습니다
+        draw();
+      });
 
       el.addBtn.addEventListener("click", () => {
         const all = load();
