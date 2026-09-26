@@ -476,7 +476,7 @@
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
       <button id="addBoard" class="add-board">+ 새 탭</button>
-      <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt)로 내려받습니다">📄 추출</button>
+      <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
     <div class="topbar-right">
       <div id="storeStatus" class="store-status" hidden></div>
@@ -499,7 +499,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 14:30";
+    const BUILD = "2026-09-26 15:10";
     (async () => {
       try {
         const res = await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" });
@@ -870,12 +870,10 @@
       return L.join("\r\n");   // 메모장은 \r\n 줄바꿈을 씁니다
     }
 
-    function exportText() {
-      const d = new Date();
-      const name = "파고들기_" + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate())
-                 + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + ".txt";
+    // 글을 메모장용 .txt 파일로 내려받습니다
+    function downloadText(name, text) {
       // 맨 앞의 ﻿ 는 UTF-8 표시(BOM). 메모장이 한글을 깨뜨리지 않게 해 줍니다
-      const blob = new Blob(["﻿" + buildExportText()], { type: "text/plain;charset=utf-8" });
+      const blob = new Blob(["﻿" + text], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -884,6 +882,29 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    // 파일 이름에 못 쓰는 글자(\ / : * ? " < > |)를 빼고 길이를 줄입니다
+    function safeFileName(t) {
+      return (t || "제목 없음").replace(/[\\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || "제목 없음";
+    }
+    function dateTag() {
+      const d = new Date();
+      return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + "_" + pad2(d.getHours()) + pad2(d.getMinutes());
+    }
+
+    // 전체 추출: 모든 탭
+    function exportText() {
+      downloadText("파고들기_" + dateTag() + ".txt", buildExportText());
+    }
+
+    // 주제 하나만 추출: 제목 + 내용
+    function exportNote(note) {
+      const body = (note.body || "").replace(/\r\n/g, "\n").trim();
+      const L = [note.title || "제목 없음", "------------------------------------------------"];
+      if (body) body.split("\n").forEach((line) => L.push(line));
+      else L.push("(내용 없음)");
+      L.push("");
+      downloadText(safeFileName(note.title) + "_" + dateTag() + ".txt", L.join("\r\n"));
     }
     document.getElementById("exportBtn").addEventListener("click", exportText);
 
@@ -1335,6 +1356,16 @@
             ti.focus();
             ti.select();
           }
+
+          const exp = document.createElement("button");
+          exp.className = "note-archive";
+          exp.textContent = "추출";
+          exp.title = "이 주제만 메모장용 텍스트 파일(.txt)로 내려받기";
+          exp.addEventListener("click", (e) => {
+            e.stopPropagation();
+            exportNote(note);
+          });
+          head.appendChild(exp);
 
           const arch = document.createElement("button");
           arch.className = "note-archive";
