@@ -166,6 +166,24 @@
     /* 보관함 줄의 날짜 */
     .note-arch-date { flex-shrink: 0; font-size: 11px; color: #ccc; margin-right: 4px; }
 
+    /* 구분 줄(공격·수비 같은 소제목). 주제 목록 안에 끼워 넣고, 그 아래로 주제를 끌어다 둡니다 */
+    .note-item.is-head { border-bottom: none; margin-top: 14px; }
+    .note-item.is-head:first-child { margin-top: 0; }
+    .note-item.is-head .note-head { padding: 6px 0 4px; cursor: grab; border-bottom: 2px solid #c96442; }
+    .note-item.is-head .note-head:hover { background: none; }
+    .note-item.is-head .note-arrow { display: none; }
+    .note-item.is-head .note-title-text,
+    .board-big .note-item.is-head .note-title-text {
+      font-size: 13px; font-weight: bold; color: #c96442; letter-spacing: 2px; text-transform: uppercase;
+    }
+    .note-item.is-head .note-title-input,
+    .board-big .note-item.is-head .note-title-input { font-size: 13px; font-weight: bold; color: #c96442; }
+    .note-item.is-head .note-del { color: #e8ddd3; }
+    /* '+ 구분' 작은 단추 (새 주제 단추 아래 오른쪽) */
+    .add-head-row { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+    .add-head { padding: 2px 6px; font-size: 11px; background: none; color: #c9b8a8; }
+    .add-head:hover { background: none; color: #c96442; }
+
     /* 메모 휴지통 목록 */
     .note-trash-row {
       display: flex; align-items: center; gap: 6px;
@@ -500,7 +518,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-26 15:55";
+    const BUILD = "2026-09-27 00:10";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -942,6 +960,7 @@
       // 화면 그리기. 여기서 문제가 나면 빈 화면이 되지 않도록 붙잡아 알립니다
       try {
         migrateBoards();
+        seedHeads();
         dbg("D. 탭 목록 준비", storeGet("boards") || "(없음)");
         drawLayout();
         dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
@@ -1034,11 +1053,12 @@
         const list = readList(board.key);
         const arch = readList(board.key + "_archive");
         L.push("================================================");
-        L.push("■ " + (board.title || "제목 없음") + "  (주제 " + list.length + "개, 보관 " + arch.length + "개)");
+        L.push("■ " + (board.title || "제목 없음") + "  (주제 " + list.filter(x => !x.head).length + "개, 보관 " + arch.length + "개)");
         L.push("================================================");
         L.push("");
 
         const put = (note, extra) => {
+          if (note.head) { L.push("── " + (note.title || "구분") + " ──"); L.push(""); return; }
           L.push("▶ " + (note.title || "제목 없음") + (extra || ""));
           L.push("------------------------------------------------");
           const body = (note.body || "").replace(/\r\n/g, "\n").trim();
@@ -1128,6 +1148,22 @@
         });
       }
       storeSet(BOARDS_KEY, JSON.stringify(list));
+    }
+
+    // 처음 한 번: 맨 왼쪽 탭의 주제 목록 맨 위에 '공격', 맨 아래에 '수비' 구분 줄을 넣습니다 (2026-09-27).
+    // 주제 자체는 건드리지 않습니다. 이후에는 사용자가 끌어서 나눕니다.
+    function seedHeads() {
+      if (storeGet("headsSeeded") !== null) return;
+      const boards = loadBoards();
+      if (!boards.length) return;
+      const first = boards[0];
+      const list = readList(first.key);
+      if (!list.some(x => x.head)) {
+        list.unshift({ id: newId(), head: true, title: "공격" });
+        list.push({ id: newId(), head: true, title: "수비" });
+        storeSet(first.key, JSON.stringify(list));
+      }
+      storeSet("headsSeeded", "1");
     }
 
     function addBoard() {
@@ -1227,6 +1263,15 @@
       addBtn.textContent = "+ 새 주제";
       top.appendChild(addBtn);
 
+      const addHeadRow = document.createElement("div");
+      addHeadRow.className = "add-head-row";
+      const addHeadBtn = document.createElement("button");
+      addHeadBtn.className = "add-head";
+      addHeadBtn.textContent = "+ 구분";
+      addHeadBtn.title = "'공격'·'수비' 같은 구분 줄을 넣습니다. 끌어서 옮기고, 그 아래로 주제를 끌어다 둡니다";
+      addHeadRow.appendChild(addHeadBtn);
+      top.appendChild(addHeadRow);
+
       card.appendChild(top);
 
       const body = document.createElement("div");
@@ -1296,7 +1341,7 @@
 
       layout.appendChild(card);
 
-      return { card: card, body: body, h1: h1, mark: mark, addBtn: addBtn, list: list,
+      return { card: card, body: body, h1: h1, mark: mark, addBtn: addBtn, addHeadBtn: addHeadBtn, list: list,
                archHead: archHead, archTitle: archTitle, archList: archList,
                trashHead: trashHead, trashTitle: trashTitle, trashClear: trashClear,
                trashList: trashList };
@@ -1508,7 +1553,7 @@
 
         list.forEach((note, idx) => {
           const item = document.createElement("div");
-          item.className = "note-item";
+          item.className = "note-item" + (note.head ? " is-head" : "");
 
           // ── 끌어다 순서 바꾸기 ──
           item.draggable = true;
@@ -1558,7 +1603,7 @@
 
           const tt = document.createElement("span");
           tt.className = "note-title-text";
-          tt.textContent = note.title || "제목 없음";
+          tt.textContent = note.title || (note.head ? "구분" : "제목 없음");
           head.appendChild(tt);
 
           // 이름 고치기 (두 번 눌렀을 때, 또는 새로 만든 직후)
@@ -1566,14 +1611,14 @@
             const ti = document.createElement("input");
             ti.className = "note-title-input";
             ti.value = note.title || "";
-            ti.placeholder = "무엇을 고민할지 적어보세요";
+            ti.placeholder = note.head ? "구분 이름 (예: 공격, 수비)" : "무엇을 고민할지 적어보세요";
 
             const finish = () => {
               const all = load();
               const n = all.find(x => x.id === note.id);
               if (n) {
-                n.title = ti.value.trim() || "제목 없음";
-                if (focusBodyNext === note.id) n.open = true;   // 엔터로 넘어가면 생각 칸이 보이게
+                n.title = ti.value.trim() || (n.head ? "구분" : "제목 없음");
+                if (focusBodyNext === note.id && !n.head) n.open = true;   // 엔터로 넘어가면 생각 칸이 보이게
                 save(all);
               }
               draw();
@@ -1594,6 +1639,27 @@
             tt.replaceWith(ti);
             ti.focus();
             ti.select();
+          }
+
+          if (note.head) {
+            // 구분 줄: 지우기(×)만. 아래 주제는 그대로 남습니다
+            const del = document.createElement("button");
+            del.className = "note-del";
+            del.textContent = "×";
+            del.title = "이 구분 줄 지우기 (아래 주제는 그대로 남습니다)";
+            del.addEventListener("click", (e) => {
+              e.stopPropagation();
+              if (!confirm("'" + (note.title || "구분") + "' 구분 줄을 지울까요?\n아래 주제들은 그대로 남습니다.")) return;
+              const all = load();
+              const at = all.findIndex(x => x.id === note.id);
+              if (at !== -1) { all.splice(at, 1); save(all); draw(); }
+            });
+            head.appendChild(del);
+            head.addEventListener("dblclick", () => startRename());
+            item.appendChild(head);
+            box.appendChild(item);
+            if (renameNext === note.id) { renameNext = null; startRename(); }
+            return;
           }
 
           const exp = document.createElement("button");
@@ -1846,8 +1912,19 @@
       el.addBtn.addEventListener("click", () => {
         const all = load();
         const item = { id: newId(), title: "새 주제", body: "", open: true };
-        all.unshift(item);       // 새로 만든 것이 맨 위로
+        // 새로 만든 것이 맨 위로. 맨 위가 구분 줄(예: 공격)이면 그 바로 아래에
+        all.splice(all.length && all[0].head ? 1 : 0, 0, item);
         renameNext = item.id;    // 그리고 바로 제목을 고칠 수 있게
+        save(all);
+        draw();
+      });
+
+      // 구분 줄 추가: 목록 맨 위에 넣고 바로 이름을 고칩니다
+      el.addHeadBtn.addEventListener("click", () => {
+        const all = load();
+        const item = { id: newId(), head: true, title: "구분" };
+        all.unshift(item);
+        renameNext = item.id;
         save(all);
         draw();
       });
