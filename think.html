@@ -271,6 +271,19 @@
     .card-grip:hover::after { opacity: 1; }
     body.resizing { cursor: col-resize; user-select: none; }
 
+    /* 탭 제목 왼쪽 손잡이(⠿)를 끌어서 다른 탭 위에 놓으면 탭 순서가 바뀝니다 */
+    .card-move {
+      flex: 0 0 auto; align-self: center; margin-right: 6px;
+      font-size: 16px; line-height: 1; color: #e5e0d8;
+      cursor: grab; user-select: none; -webkit-user-select: none;
+    }
+    .card-move:hover { color: #c96442; }
+    .card-move:active { cursor: grabbing; }
+    .card.card-dragging { opacity: 0.35; }
+    .card.card-drop-left  { box-shadow: -5px 0 0 #c96442, 0 4px 24px rgba(0,0,0,0.08); }
+    .card.card-drop-right { box-shadow:  5px 0 0 #c96442, 0 4px 24px rgba(0,0,0,0.08); }
+    body.swipe .card-move { display: none; }   /* 휴대폰(한 탭씩 넘겨 보기)에서는 끌 수 없으므로 숨김 */
+
     /* 탭 지우기 (제목 줄 오른쪽 끝) */
     .card-del {
       padding: 0 2px; margin-left: 8px; font-size: 15px;
@@ -518,7 +531,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-09-27 00:10";
+    const BUILD = "2026-10-02 11:05";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1200,6 +1213,22 @@
       saveBoards(list);
     }
 
+    // 탭 순서 바꾸기: fromId 탭을 toId 탭의 앞(또는 after 면 뒤)으로 옮깁니다
+    let CARD_DRAG = null;   // 지금 끌고 있는 탭의 id
+    function moveBoard(fromId, toId, after) {
+      if (fromId === toId) return;
+      const list = loadBoards();
+      const fi = list.findIndex(b => b.id === fromId);
+      if (fi < 0) return;
+      const item = list.splice(fi, 1)[0];
+      let ti = list.findIndex(b => b.id === toId);
+      if (ti < 0) return;
+      if (after) ti += 1;
+      list.splice(ti, 0, item);
+      saveBoards(list);
+      drawLayout();
+    }
+
     function setBoardTitle(id, title) {
       const list = loadBoards();
       const b = list.find(x => x.id === id);
@@ -1220,6 +1249,51 @@
 
       const headRow = document.createElement("div");
       headRow.className = "card-head";
+
+      // 손잡이(⠿): 끌어서 탭 순서 바꾸기
+      const moveBtn = document.createElement("span");
+      moveBtn.className = "card-move";
+      moveBtn.textContent = "⠿";
+      moveBtn.title = "끌어서 탭 순서 바꾸기";
+      moveBtn.draggable = true;
+      moveBtn.addEventListener("dragstart", (e) => {
+        CARD_DRAG = board.id;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");   // 파이어폭스에서 필요
+        try { e.dataTransfer.setDragImage(card, 24, 24); } catch (err) {}
+        card.classList.add("card-dragging");
+      });
+      moveBtn.addEventListener("dragend", () => {
+        CARD_DRAG = null;
+        card.classList.remove("card-dragging");
+        document.querySelectorAll(".card-drop-left, .card-drop-right")
+          .forEach(c => c.classList.remove("card-drop-left", "card-drop-right"));
+      });
+      headRow.appendChild(moveBtn);
+
+      // 다른 탭을 끌어와 이 탭의 왼쪽 반/오른쪽 반에 놓으면 그 앞/뒤로 들어갑니다
+      card.addEventListener("dragover", (e) => {
+        if (!CARD_DRAG || CARD_DRAG === board.id) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = card.getBoundingClientRect();
+        const right = (e.clientX - rect.left) > rect.width / 2;
+        card.classList.toggle("card-drop-right", right);
+        card.classList.toggle("card-drop-left", !right);
+      });
+      card.addEventListener("dragleave", (e) => {
+        if (!card.contains(e.relatedTarget)) card.classList.remove("card-drop-left", "card-drop-right");
+      });
+      card.addEventListener("drop", (e) => {
+        if (!CARD_DRAG) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const after = card.classList.contains("card-drop-right");
+        card.classList.remove("card-drop-left", "card-drop-right");
+        document.querySelectorAll(".card.card-dragging").forEach(c => c.classList.remove("card-dragging"));
+        const src = CARD_DRAG; CARD_DRAG = null;
+        moveBoard(src, board.id, after);
+      });
 
       const h1 = document.createElement("h1");
       h1.contentEditable = "plaintext-only";
