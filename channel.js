@@ -166,9 +166,9 @@ function slRender(p){
     </aside>
     <section class="slm" id="logwrap">${!DATA.projects ? `<div class="slempty">프로젝트 저장 표가 아직 없습니다.</div>` : agenda ? agendaHtml() : !p ? `<div class="slempty"><div class="big">프로젝트 채널</div>프로젝트 하나의 자료와 의견, 결정이 날짜순으로 쌓이는 곳입니다.<br>왼쪽의 <b>＋ 채널 추가</b>로 첫 채널을 만들어 보세요.</div>` : `
       <div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2><span class="hash">#</span> ${esc(p.name)}</h2>${p.status !== '진행중' ? stP(p.status) : ''}
-        <span class="ldr ${p.owner ? '' : 'none'}" title="프로젝트 리더 (⚙ 설정에서 바꿉니다)"><span class="lb">리더</span>${p.owner ? avatar(p.owner) + '<b>' + esc(fullName(p.owner)) + '</b>' : '<b>미정</b>'}</span>
+        <span class="ldr ${p.owner ? '' : 'none'}" title="프로젝트 리더 (⚙ 설정에서 바꿉니다)"><span class="lb">리더</span>${p.owner ? avatar(p.owner) + '<b>' + esc(fullName(p.owner)) + '</b>' : '<b>미정</b>'}</span><button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button>
         <span class="sp"></span>${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
-        ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}<button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button></div>
+        ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}</div>
       <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
