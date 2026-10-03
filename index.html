@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610031831">
-<script src="common.js?v=202610031831"></script>
+<link rel="stylesheet" href="common.css?v=202610031932">
+<script src="common.js?v=202610031932"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -75,6 +75,25 @@
   .nrow .rd{font-size:11px;color:var(--fg3);margin-left:6px}
   .nboard .hd:last-child{border-bottom:0}
   .nboard .none{padding:14px;color:var(--fg3);font-size:13px;text-align:center}
+  /* 이달의 목표 판 (업무공유 판 아래) */
+  .goals .hd .mnav{display:inline-flex;align-items:center;gap:2px;margin-left:6px}
+  .goals .hd .mnav button{border:1px solid var(--line2);background:var(--bg);border-radius:4px;padding:0 7px;font-size:12px;line-height:20px;color:var(--fg2)}
+  .goals .hd .mnav button:hover{background:var(--bg3);color:var(--fg)}
+  .goals .hd .mnav button:disabled{opacity:.35;cursor:default}
+  .goals .hd .act{border:0;background:transparent;font-size:12px;color:var(--fg2);padding:0}
+  .goals .hd .act:hover{color:var(--fg)}
+  .grow{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.5}
+  .grow:last-child{border-bottom:0}
+  .grow .no{flex:none;width:22px;height:22px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .grow .tx{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;font-weight:500}
+  .grow.done .tx{color:var(--fg3);text-decoration:line-through;font-weight:400}
+  .grow.done .no{background:#dcfce7;color:#15803d}
+  .grow .ck{flex:none;font-size:11px;border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--fg2);background:var(--bg);white-space:nowrap}
+  .grow.done .ck{background:#dcfce7;border-color:#bbf7d0;color:#15803d;font-weight:600}
+  button.ck{cursor:pointer}
+  button.ck:hover{filter:brightness(.95)}
+  .goals .gnote{padding:8px 14px;font-size:12px;color:var(--fg2);background:var(--bg2);white-space:pre-wrap;border-top:1px solid var(--line)}
+  #gItems{min-height:170px}
   @media(max-width:640px){.nrow{grid-template-columns:1fr 70px}.nrow .by,.nrow .dt{display:none}}
   .content{white-space:pre-wrap;line-height:1.6;font-size:14px}
 </style>
@@ -181,7 +200,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
     ${editing ? `<div class="editbar">✎ 편집 중: 폴더와 페이지를 <b>끌어서</b> 순서를 바꾸거나 페이지를 다른 폴더로 옮길 수 있습니다(화살표 버튼도 됩니다). 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
-    ${editing ? '' : noticeBoard(notices) + decisionBoard()}
+    ${editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
@@ -207,6 +226,7 @@ function render(){
   const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; render(); };
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-notice]').forEach(el => el.onclick = () => openNotice(el.dataset.notice));
+  bindGoals();
   document.querySelectorAll('[data-decision]').forEach(el => el.onclick = e => { if (e.target.closest('[data-dok]')) { confirmDecision(el.dataset.decision); return; } openDecision(el.dataset.decision); });
   document.querySelectorAll('[data-soon]').forEach(b => b.onclick = () => toast(`"${b.dataset.soon}" 화면은 아직 준비 중입니다`));
   document.querySelectorAll('[data-padd]').forEach(b => b.onclick = () => openPage(null, b.dataset.padd));
@@ -451,7 +471,68 @@ function openDecision(id){
   const ok = $('#dOk'); if (ok) ok.onclick = () => { closeModal(); confirmDecision(id); };
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'decisions', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms'], render });
+/* ---------- 홈의 '이달의 목표' 판 (업무공유 판 아래) ----------
+   한 달 = goals 표 한 줄 { month:'YYYY-MM', items:[{text, done}], note }. 관리자만 적고 고치며, 달성한 줄은 체크. ‹ › 로 다른 달도 봄 */
+const thisMonth = () => todayStr().slice(0, 7);
+let goalMonth = null;   // 보고 있는 달 (null = 이번 달)
+const gMonth = () => goalMonth || thisMonth();
+const addMonth = (ym, n) => { const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const goalOf = ym => (DATA.goals || []).find(g => g.month === ym) || null;
+const gItems = g => g && Array.isArray(g.items) ? g.items.filter(x => x && x.text) : [];
+function goalBoard(){
+  if (!DATA.goals) return '';
+  const ym = gMonth(), g = goalOf(ym), items = gItems(g), admin = isAdmin(), cur = ym === thisMonth();
+  const months = (DATA.goals || []).filter(x => gItems(x).length).map(x => x.month);
+  if (!admin && !months.length) return '';   // 아직 아무 달도 적지 않았으면 팀원에게는 판을 안 보임
+  const hasPrev = months.some(m => m < ym), hasNext = ym < thisMonth() || (admin && ym <= thisMonth());   // 관리자는 다음 달 목표를 미리 적을 수 있음
+  const done = items.filter(i => i.done).length;
+  return `<section class="nboard goals">
+    <div class="hd"><h2>🎯 ${Number(ym.slice(5, 7))}월 목표 <span class="cnt">${items.length ? `${done}/${items.length} 달성` : ''}${cur ? '' : ` · ${ym.slice(0, 4)}년`}</span>
+      <span class="mnav"><button data-gnav="-1" ${hasPrev ? '' : 'disabled'} title="이전 달">‹</button><button data-gnav="1" ${hasNext ? '' : 'disabled'} title="다음 달">›</button>${cur ? '' : '<button data-gnav="0" title="이번 달로">이번 달</button>'}</span></h2>
+      ${admin ? `<button class="act" id="goalEdit">${items.length ? '✎ 목표 고치기' : '＋ 목표 적기'}</button>` : ''}</div>
+    ${items.length ? items.map((it, i) => `<div class="grow ${it.done ? 'done' : ''}"><span class="no">${it.done ? '✓' : i + 1}</span><span class="tx">${linkify(it.text)}</span>
+      ${admin ? `<button class="ck" data-gdone="${i}" title="눌러서 달성 표시를 바꿉니다">${it.done ? '✓ 달성' : '달성 체크'}</button>` : (it.done ? '<span class="ck">✓ 달성</span>' : '')}</div>`).join('')
+    : `<div class="none">${Number(ym.slice(5, 7))}월 목표가 아직 없습니다.${admin ? ' 오른쪽 위 <b>＋ 목표 적기</b>로 적어 주세요.' : ''}</div>`}
+    ${g && g.note ? `<div class="gnote">${linkify(g.note)}</div>` : ''}
+  </section>`;
+}
+function bindGoals(){
+  document.querySelectorAll('[data-gnav]').forEach(b => b.onclick = () => {
+    const n = Number(b.dataset.gnav), ym = gMonth();
+    if (n === 0) goalMonth = null;
+    else if (n > 0) goalMonth = addMonth(ym, 1);
+    else { const prev = (DATA.goals || []).filter(x => gItems(x).length && x.month < ym).map(x => x.month).sort().pop(); if (prev) goalMonth = prev; }
+    if (goalMonth === thisMonth()) goalMonth = null;
+    render();
+  });
+  const ge = $('#goalEdit'); if (ge) ge.onclick = openGoalEdit;
+  document.querySelectorAll('[data-gdone]').forEach(b => b.onclick = async () => {
+    if (!isAdmin()) return; const g = goalOf(gMonth()); if (!g) return;
+    const items = gItems(g).map((it, i) => i === Number(b.dataset.gdone) ? { ...it, done: !it.done } : it);
+    await saveRow('goals', { ...g, items, updated_by: me });
+  });
+}
+/* 목표 적기·고치기 (관리자): 한 줄에 목표 하나. 이미 달성 체크한 줄은 글자가 같으면 체크가 유지됨 */
+function openGoalEdit(){
+  if (!isAdmin()) return;
+  const ym = gMonth(), g = goalOf(ym), items = gItems(g);
+  openModal(`${modalHead(`🎯 ${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월 목표`)}
+    <div class="mb">
+      <div class="f"><label>목표 (한 줄에 하나씩)</label><textarea id="gItems" placeholder="예:\n레모너리 월 매출 5억\n흑생마 쿠팡 로켓그로스 입점\n신규 영상 60개 제작">${esc(items.map(i => i.text).join('\n'))}</textarea></div>
+      <div class="f"><label>덧붙이는 말 (선택 · 목표 아래 작은 글씨)</label><textarea id="gNote" style="min-height:50px" placeholder="예: 추석 연휴(10/3~9) 감안한 목표입니다">${esc(g && g.note || '')}</textarea></div>
+      <div class="hint">홈 화면 업무공유 아래에 모든 팀원에게 보입니다. 달성한 목표는 홈에서 <b>달성 체크</b>를 누르면 표시됩니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="gSave">저장</button></div>`, { wide: true });
+  $('#gItems').focus();
+  $('#gSave').onclick = async () => {
+    const lines = $('#gItems').value.split('\n').map(x => x.replace(/^\s*(?:[-*•·]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+    const next = lines.map(text => ({ text, done: !!(items.find(i => i.text === text) || {}).done }));
+    const row = { id: g ? g.id : uid(), month: ym, items: next, note: $('#gNote').value.trim() || null, created_by: g ? g.created_by : me, created_at: g ? g.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('goals', row); toast('목표를 저장했습니다');
+  };
+}
+
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms'], render });
 </script>
 </body>
 </html>
