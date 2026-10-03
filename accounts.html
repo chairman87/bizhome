@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610031616">
-<script src="common.js?v=202610031616"></script>
+<link rel="stylesheet" href="common.css?v=202610031826">
+<script src="common.js?v=202610031826"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -69,7 +69,9 @@ if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 
 const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9', '기타': 'c9' };
 const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
 const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
-const ALL = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
+const VIS = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
+const ALL = () => VIS().filter(a => !a.unused);   // 지금 쓰는 계정 (전체·구분 탭)
+const OFF = () => VIS().filter(a => a.unused);    // 사용안함으로 빼 둔 계정 ('사용안함' 탭에만 보임, 원래 구분은 그대로 남음)
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
 let view = 'all';   // 열 때마다 항상 '전체' 탭부터
 let q = '';
@@ -84,12 +86,12 @@ function expHtml(d){ if (!d) return '<span class="hint">-</span>'; const n = day
 const feeHtml = a => Number(a.fee) > 0 ? `${won(a.fee)}${a.cycle && a.cycle !== '없음' ? '/' + a.cycle : ''}` : (a.cycle === '없음' && a.fee === 0 ? '무료' : '');
 const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : '';
 const pwHtml = a => `<span class="pw"><span class="v mono">${a.password ? (shown[a.id] ? esc(a.password) : '••••••••') : '<span class="hint">-</span>'}</span>${a.password ? `<button class="ib" data-eye="${a.id}">${shown[a.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(a.password)}">복사</button>` : ''}</span>`;
-function normalize(table, a){ return { ...a, admin_only: !!a.admin_only, cycle: CYCLES.includes(a.cycle) ? a.cycle : (Number(a.fee) > 0 ? '월' : '없음') }; }
+function normalize(table, a){ return { ...a, admin_only: !!a.admin_only, unused: !!a.unused, cycle: CYCLES.includes(a.cycle) ? a.cycle : (Number(a.fee) > 0 ? '월' : '없음') }; }
 
 /* ---------- 화면 ---------- */
 function render(){
   if (view === 'subs') view = 'all';
-  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g }))];   // 운영계정의 '기타' 탭은 비어 있어도 항상 맨 뒤에
+  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g })), null, { key: 'off', label: '사용안함' + (OFF().length ? ` ${OFF().length}` : '') }];   // 운영계정의 '기타' 탭은 비어 있어도 항상 구분 맨 뒤에, '사용안함'은 따로 맨 끝
   if (!tabs.some(t => t && t.key === view)) view = 'all';
   $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
@@ -101,14 +103,14 @@ function render(){
   bindView();
 }
 function listOf(){
-  const base = view.startsWith('g:') ? ALL().filter(a => a.group_name === view.slice(2)) : ALL();
+  const base = view === 'off' ? OFF() : view.startsWith('g:') ? ALL().filter(a => a.group_name === view.slice(2)) : ALL();
   const s = q.trim().toLowerCase();
   return base.filter(a => !s || [a.service, a.login_id, a.purpose, a.company, a.owner, a.memo, a.url, a.group_name, a.shared_with].some(v => (v || '').toLowerCase().includes(s)));
 }
 function statsHtml(){
   const all = ALL();
   return `<div class="stats">
-    <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개</div></div>
+    <div class="stat"><div class="l">계정</div><div class="v">${all.length}개</div><div class="s">구분 ${groups().length}개${OFF().length ? ` · 사용안함 ${OFF().length}개` : ''}</div></div>
     <div class="stat"><div class="l">비밀번호 비어 있음</div><div class="v ${all.filter(a => !a.password).length ? 'orange' : ''}">${all.filter(a => !a.password).length}개</div><div class="s">계정을 열어 넣어 두세요</div></div>
     <div class="stat"><div class="l">${DEPT === '마케팅' ? '운영계정 (업무지원)' : '마케팅계정 (마케팅)'}</div><div class="v" style="font-size:14px"><a href="accounts.html${DEPT === '마케팅' ? '' : '?dept=마케팅'}">🔐 ${DEPT === '마케팅' ? '업무지원 > 운영계정' : '마케팅 > 마케팅계정'} →</a></div><div class="s">구분이 ${DEPT === '마케팅' ? '인스타그램·기타 마케팅·제품' : '그 외'}인 계정은 저쪽에</div></div>
   </div>`;
@@ -122,7 +124,7 @@ function tableHtml(){
     : sortBy(listOf(), sort, { fee: f => Number(f) || 0 });
   const showGroup = !view.startsWith('g:');
   const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', PURPOSE_LABEL], ...(DEPT === '마케팅' ? [['company', '사업자']] : []), ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
-  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'g:' + ETC ? '기타로 옮긴 계정이 없습니다.<br>안 쓰는 계정을 열어 <b>구분</b>을 <b>기타</b>로 바꾸면 여기로 모입니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
+  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'off' ? '사용안함으로 빼 둔 계정이 없습니다.<br>안 쓰는 계정은 그 줄의 <b>사용안함</b> 버튼을 누르면 여기로 옮겨집니다.' : view === 'g:' + ETC ? '기타로 옮긴 계정이 없습니다.<br>안 쓰는 계정을 열어 <b>구분</b>을 <b>기타</b>로 바꾸면 여기로 모입니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
   return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       ${showGroup ? `<td><span class="grp ${grpCls(a.group_name)}">${esc(a.group_name || '-')}</span></td>` : ''}
@@ -135,7 +137,7 @@ function tableHtml(){
       <td>${who(a.owner)}</td>
       <td class="small">${esc(a.shared_with || '')}</td>
       <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
-      <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button></td>
+      <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button>${a.unused ? `<button class="btn sm primary" data-on="${a.id}" title="다시 쓰는 계정으로 되돌립니다">다시 사용</button>` : `<button class="btn sm" data-off="${a.id}" title="안 쓰는 계정을 사용안함 탭으로 빼 둡니다 (지우지는 않음)" style="color:var(--fg2)">사용안함</button>`}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 function renderView(){ $('#view').innerHTML = tableHtml(); bindView(); }
@@ -145,12 +147,19 @@ function bindView(){
   document.querySelectorAll('[data-eye]').forEach(b => b.onclick = e => { e.stopPropagation(); shown[b.dataset.eye] = !shown[b.dataset.eye]; renderView(); });
   document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(b.dataset.copy); toast('복사했습니다'); } catch { toast('복사할 수 없습니다. 직접 선택해서 복사하세요', true); } });
   document.querySelectorAll('[data-edit]').forEach(b => b.onclick = e => { e.stopPropagation(); openEdit(b.dataset.edit); });
+  document.querySelectorAll('[data-off],[data-on]').forEach(b => b.onclick = e => { e.stopPropagation(); setUnused(b.dataset.off || b.dataset.on, !!b.dataset.off); });
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openEdit(tr.dataset.id); });
 }
 
+/* 사용안함으로 빼기 / 다시 사용 (지우지 않고 '사용안함' 탭으로 옮김) */
+async function setUnused(id, unused){
+  const a = VIS().find(x => x.id === id); if (!a) return;
+  await saveRow('accounts', { ...a, unused, updated_by: me });
+  toast(unused ? `"${a.service}" 을(를) 사용안함으로 옮겼습니다` : `"${a.service}" 을(를) 다시 사용으로 되돌렸습니다`);
+}
 /* ---------- 추가·수정 창 ---------- */
 function openEdit(id, preset = {}){
-  const a = id ? ALL().find(x => x.id === id) : null;
+  const a = id ? VIS().find(x => x.id === id) : null;
   const d = a || { group_name: DEPT === '마케팅' ? (view.startsWith('g:') ? view.slice(2) : MARKETING_GROUPS[0]) : (view.startsWith('g:') ? view.slice(2) : ''), service: '', url: '', purpose: '', login_id: '', password: '', owner: '', shared_with: '', fee: '', cycle: '없음', billing_day: '', start_date: '', end_date: '', admin_only: false, memo: '', ...preset };
   openModal(`${modalHead(a ? '계정 정보' : '계정 추가')}
     <div class="mb">
@@ -175,6 +184,7 @@ function openEdit(id, preset = {}){
         <div class="f"><label>공유 사용자</label><input id="aShared" value="${esc(d.shared_with || '')}" placeholder="예: 류수연, 김채은"></div>
       </div>
       <div class="f"><label>비고</label><textarea id="aMemo" placeholder="추가 인증 방법, 주의사항, 업체코드 등">${esc(d.memo || '')}</textarea></div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aUnused" ${d.unused ? 'checked' : ''}> 사용안함 (안 쓰는 계정 · '사용안함' 탭으로 빼 둠)</label>
       ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aAdminOnly" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기 (팀원에게는 숨김)</label>` : ''}
       ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
     </div>
@@ -192,7 +202,7 @@ function openEdit(id, preset = {}){
     const service = $('#aService').value.trim(); if (!service) { $('#aService').focus(); toast('서비스 이름을 입력하세요', true); return; }
     const row = { id: a ? a.id : uid(), group_name: $('#aGroup').value.trim() || null, service, url: $('#aUrl').value.trim() || null, purpose: $('#aPurpose').value.trim() || null,
       login_id: $('#aId').value.trim() || null, password: $('#aPw').value.trim() || null, owner: $('#aOwner').value || null, shared_with: $('#aShared').value.trim() || null,
-      admin_only: $('#aAdminOnly') ? $('#aAdminOnly').checked : !!(a && a.admin_only), memo: $('#aMemo').value.trim() || null,
+      admin_only: $('#aAdminOnly') ? $('#aAdminOnly').checked : !!(a && a.admin_only), unused: $('#aUnused').checked, memo: $('#aMemo').value.trim() || null,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
     if ($('#aCompany')) row.company = $('#aCompany').value || null;   // 사업자 칸은 마케팅계정에서만
     else if (a && a.company) row.company = a.company;
