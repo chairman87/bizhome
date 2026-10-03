@@ -61,13 +61,15 @@ function talkEvents(p){
   if (typeof talkExtraEvents === 'function') talkExtraEvents(p, ev);
   return ev.filter(e => e.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
-const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; };
+const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip ${cardUnread(c) ? 'unread' : ''}" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; };
 function talkHtml(p){
   if (!DATA.project_cards) return cardsHtml(p);
   const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
   let last = '';
+  const from = newFrom[p.id]; let lined = false;   // 이 채널에 들어왔을 때까지 읽은 시각 → 그 뒤에 남이 올린 첫 글 앞에 '새 글' 선
   const rows = list.map(e => {
-    const day = fmtDateTime(e.at).slice(0, 10), head = day === last ? '' : `<div class="tday"><span>${dayLabel(day.replace(/\//g, '-'))}</span></div>`; last = day;
+    const day = fmtDateTime(e.at).slice(0, 10); let head = day === last ? '' : `<div class="tday"><span>${dayLabel(day.replace(/\//g, '-'))}</span></div>`; last = day;
+    if (!lined && from != null && e.by !== me && String(e.at) > from) { lined = true; head += '<div class="tnew"><span>새 글</span></div>'; }
     const body = e.type === 'msg' ? `${e.log.body ? `<div class="mt">${linkify(e.log.body)}</div>` : ''}${filesHtml(e.log.files)}`
       : e.type === 'card' ? `${e.card.memo ? `<div class="mt">${linkify(e.card.memo)}</div>` : ''}${cardChip(e.card, e.rev)}`
       : e.type === 'rev' ? `<div class="mt sys">${e.rev.no}차 수정본을 올렸습니다${e.rev.memo ? ' — ' + esc(e.rev.memo) : ''}</div>${cardChip(e.card, e.rev)}`
@@ -111,7 +113,7 @@ function bindTalk(p){
   $('#tkKind').onchange = () => { c.ckind = $('#tkKind').value; };
   const grow = () => { body.style.height = 'auto'; body.style.height = Math.min(220, body.scrollHeight) + 'px'; };
   body.oninput = () => { c.text = body.value; grow(); paint(); }; grow();
-  body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendTalk(p); } };   // 한글 조합 중 Enter 는 무시
+  body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isTouch()) { e.preventDefault(); sendTalk(p); } };   // 한글 조합 중 Enter 는 무시. 휴대폰에서는 Enter = 줄바꿈, ➤ 로 보냄
   $('#cSend').onclick = () => sendTalk(p);
   const more = $('#talkMore'); if (more) more.onclick = () => { talkLimit += 100; talkStick = false; render(); };
   document.querySelectorAll('#tscroll [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
@@ -129,7 +131,7 @@ function slRender(p){
   const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
   const act = P().filter(x => x.status !== '완료').sort(byName), done = P().filter(x => x.status === '완료').sort(byName);
-  const item = x => { const pend = cardsOf(x.id).filter(c => c.status === '결정 대기').length, d = daysAgo(projLastAt(x.id)); return `<button class="slch ${p && x.id === p.id ? 'on' : ''}" data-open="${x.id}" title="${d == null ? '아직 기록 없음' : '마지막 기록 ' + (d === 0 ? '오늘' : d + '일 전')}"><span class="hash">#</span><span class="nm">${esc(x.name)}</span>${d != null && d >= 7 && x.status !== '완료' ? '<span class="stale" title="7일 넘게 기록이 없습니다">●</span>' : ''}${pend ? `<span class="bd" title="결정 대기 ${pend}건">${pend}</span>` : ''}</button>`; };
+  const item = x => { const un = unreadOf(x.id), pend = cardsOf(x.id).filter(c => c.status === '결정 대기').length, d = daysAgo(projLastAt(x.id)); return `<button class="slch ${p && x.id === p.id ? 'on' : ''} ${un ? 'unread' : ''}" data-open="${x.id}" title="${d == null ? '아직 기록 없음' : '마지막 기록 ' + (d === 0 ? '오늘' : d + '일 전')}${pend ? ' · 결정 대기 ' + pend + '건' : ''}"><span class="hash">#</span><span class="nm">${esc(x.name)}</span>${d != null && d >= 7 && x.status !== '완료' ? '<span class="stale" title="7일 넘게 기록이 없습니다">●</span>' : ''}${un ? `<span class="bd" title="안 읽은 새 글 ${un}건">${un}</span>` : pend ? `<span class="pd" title="결정 대기 ${pend}건">⏳${pend}</span>` : ''}</button>`; };
   const agenda = cur === AGENDA, pendAll = CARDS().filter(c => c.status === '결정 대기' && P().some(x => x.id === c.project_id && x.status !== '완료')).length;
   const mem = p ? (Array.isArray(p.members) ? p.members : []).filter(n => n !== p.owner) : [];
   const pend = p ? cardsOf(p.id).filter(c => c.status === '결정 대기').length : 0;
@@ -150,9 +152,11 @@ function slRender(p){
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
       ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : cardsHtml(p)}</div></div>`}`}
     </section></div>`;
+  { const tot = P().filter(x => x.status !== '완료').reduce((n, x) => n + unreadOf(x.id), 0); document.title = (tot ? `(${tot}) ` : '') + '프로젝트'; }   // 브라우저 탭 제목에 안 읽은 수
+  if (READS === null) loadReads();
   bindHeader(() => {}, null, m => `리더인 채널 ${P().filter(x => x.owner === m.name && x.status !== '완료').length}개`);
   slFit();
-  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
+  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { Object.keys(newFrom).forEach(k => delete newFrom[k]); cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
   const np = $('#newP'); if (np) np.onclick = () => openProject(null);
   if (agenda) { bindAgenda(); const sm = $('#slMenu'); if (sm) sm.onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); }; if (CV && $('#cvExtra')) refreshCardSide(CV.id); return; }
   if (!p) return;
@@ -161,7 +165,7 @@ function slRender(p){
   $('#editP').onclick = () => openProject(p.id);
   bindChHead(p);
   if (QCARD && !openedCard) { openedCard = true; setTimeout(() => openCard(QCARD), 0); }
-  if (tab === 'cards') bindCards(p); else if (tab === 'decs') bindDecs(p); else bindTalk(p);
+  if (tab === 'cards') bindCards(p); else if (tab === 'decs') bindDecs(p); else { bindTalk(p); markChannelSeen(p); }
   if (CV && $('#cvExtra')) refreshCardSide(CV.id);   // 카드 창이 열려 있으면 댓글·결정을 최신으로
   const sc = $('#tscroll');
   if (sc) { sc.dataset.tab = tab; sc.dataset.pid = p.id;
@@ -192,7 +196,7 @@ function cardListHtml(p){
   return `<div class="cgrid">${list.map(c => {
     const fs = cardFiles(c), img = fs.find(isImg), n = revsOf(c).length;
     return `<div class="ccard st-${c.status.replace(/\s/g, '')}" data-card="${c.id}">
-      <div class="ct"><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button><span class="kd">${esc(c.kind || '기타')}</span>${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
+      <div class="ct">${cardUnread(c) ? '<span class="nw">새 글</span>' : ''}<button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button><span class="kd">${esc(c.kind || '기타')}</span>${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
       <h3>${esc(c.title)}</h3>
       ${c.memo ? `<div class="cm2">${esc(c.memo)}</div>` : ''}
       <div class="thumb">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : fs.length ? `<span class="doc">${isPdf(fs[0]) ? '📕' : '📄'}</span>` : '<span class="doc none">첨부 없음</span>'}${fs.length ? `<span class="fn">${esc(fs[0].name)}${fs.length > 1 ? ` 외 ${fs.length - 1}개` : ''}</span>` : ''}</div>
@@ -270,7 +274,7 @@ function openCard(id, rev, file){
   CV = { id, rev: r.no, file: fi };
   const p = P().find(x => x.id === c.project_id) || {};
   const view = !f ? '<div class="vnone">첨부 파일이 없는 카드입니다.</div>'
-    : isPdf(f) ? `<iframe src="${esc(f.url)}#view=FitH" title="${esc(f.name)}"></iframe>`
+    : isPdf(f) ? (isTouch() ? `<div class="vpdf" id="pdfBox"><div class="vnone">PDF 를 불러오는 중…</div></div>` : `<iframe src="${esc(f.url)}#view=FitH" title="${esc(f.name)}"></iframe>`)
     : isImg(f) ? `<div class="vimg"><img src="${esc(f.url)}" alt="${esc(f.name)}"></div>`
     : `<div class="vnone">이 파일은 화면에서 바로 볼 수 없는 형식입니다.<br><a class="btn" href="${esc(f.url)}?download=${encodeURIComponent(f.name)}">${esc(f.name)} 내려받기</a></div>`;
   openModal(`${modalHead(`${stCard(c.status)} ${esc(c.title)}`)}
@@ -299,7 +303,8 @@ function openCard(id, rev, file){
   $('#cvRev').onclick = () => openRevAdd(id);
   $('#cvEdit').onclick = () => openCardEdit(p, id);
   document.querySelectorAll('#modal [data-close]').forEach(b => b.addEventListener('click', () => { CV = null; }));
-  CV.ds = ''; bindCardExtra(c);
+  CV.ds = ''; bindCardExtra(c); markCardSeen(c);
+  if (f && isPdf(f) && isTouch()) renderPdf($('#pdfBox'), f.url);
 }
 
 /* ================= 2단계: 댓글 · 결정 기록 · 결정 로그 ================= */
@@ -462,6 +467,78 @@ talkExtraEvents = function(p, ev){
   (DATA.decisions || []).filter(d => d.project_id === p.id && (isAdmin() || !(Array.isArray(d.targets) && d.targets.length) || d.targets.includes(me) || d.created_by === me)).forEach(d =>
     ev.push({ at: d.created_at, by: d.created_by, type: 'share', html: `<div class="mt"><span class="lk">📣 업무공유</span> <a href="decisions.html" title="업무공유 화면에서 보기"><b>${esc(d.title)}</b></a>${d.reason ? `<div class="rs">${esc(d.reason)}</div>` : ''}</div>` }));
 };
+
+/* ================= 4단계: 안 읽음 표시 · 휴대폰 ================= */
+/* 사람별 읽음 기록(project_reads: id = 이름|프로젝트id, seen = { _channel: 채널을 마지막으로 본 시각, 카드id: 그 카드를 마지막으로 연 시각 })
+   내 기록만 따로 읽어 와서 들고 있음(READS). 실시간 구독 대상이 아니라서, 누가 읽을 때마다 모두의 화면이 다시 그려지는 일은 없음 */
+let READS = null;            // { 프로젝트id: seen }  (null = 아직 안 읽어 옴)
+const newFrom = {};          // 채널에 들어온 순간까지 읽었던 시각 (대화의 '새 글' 선 위치)
+const isTouch = () => window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+async function loadReads(){
+  READS = {};
+  if (!store.client || !me) return;
+  try {
+    const { data } = await store.client.from('project_reads').select('*').eq('member', me);
+    (data || []).forEach(r => { READS[r.project_id] = r.seen || {}; });
+    if (!(data || []).length) { const now = nowIso(); for (const x of P()) { READS[x.id] = { _channel: now }; await saveReads(x.id); } }   // 처음 쓰는 사람: 지금까지의 글은 읽은 것으로
+  } catch {}
+  render();
+}
+async function saveReads(pid){ try { if (store.client && me) await store.client.from('project_reads').upsert({ id: me + '|' + pid, member: me, project_id: pid, seen: READS[pid] || {}, updated_at: nowIso() }); } catch {} }
+const seenOf = pid => (READS && READS[pid]) || {};
+/* 채널의 안 읽은 글 수: 내가 마지막으로 본 뒤에 다른 사람이 올린 메시지·카드·수정본·댓글·결정 */
+function unreadOf(pid){
+  if (!READS) return 0;
+  const p = P().find(x => x.id === pid); if (!p) return 0;
+  const from = seenOf(pid)._channel || '';
+  return talkEvents(p).filter(e => e.by !== me && String(e.at) > from).length;
+}
+/* 카드의 새 글: 내가 그 카드를 마지막으로 연 뒤(연 적 없으면 채널 기준 시각 뒤)에 다른 사람이 올린 수정본·댓글·결정이 있는가 */
+function cardUnread(c){
+  if (!READS) return false;
+  const s = seenOf(c.project_id), from = s[c.id] || s._base || s._channel || '';
+  const others = [...(c.created_by !== me ? [c.created_at] : []), ...revsOf(c).filter(r => r.by !== me).map(r => r.at), ...(c.comments || []).filter(m => m.by !== me).map(m => m.at), ...DECS().filter(d => d.card_id === c.id && d.created_by !== me).map(d => d.created_at)];
+  return others.some(at => String(at) > from);
+}
+/* 채널의 메시지 화면을 보고 있으면 읽은 것으로 기록 (창이 가려져 있을 때는 기록하지 않음) */
+function markChannelSeen(p){
+  if (!READS || document.visibilityState !== 'visible') return;
+  const s = seenOf(p.id);
+  if (!(p.id in newFrom)) newFrom[p.id] = s._channel || '';
+  if (!unreadOf(p.id) && s._channel) return;
+  READS[p.id] = { ...s, _base: s._base || s._channel || nowIso(), _channel: nowIso() };
+  saveReads(p.id);
+  setTimeout(() => { if (cur === p.id) render(); }, 0);   // 왼쪽 숫자를 지움 ('새 글' 선은 채널을 나갈 때까지 남음)
+}
+function markCardSeen(c){
+  if (!READS) return;
+  const was = cardUnread(c);
+  READS[c.project_id] = { ...seenOf(c.project_id), [c.id]: nowIso() };
+  if (was) { saveReads(c.project_id); setTimeout(render, 0); }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && typeof render === 'function' && me) render(); });   // 다른 창을 보다 돌아오면 읽음 처리
+/* 휴대폰에서는 브라우저가 PDF 를 화면 안에 못 띄우는 경우가 많아, PDF.js 로 쪽마다 그림으로 그려서 보여 줌 */
+let pdfjsReady = null;
+function loadPdfJs(){
+  if (!pdfjsReady) pdfjsReady = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'; sc.onload = () => { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; ok(window.pdfjsLib); } catch (e) { no(e); } }; sc.onerror = no; document.head.appendChild(sc); });
+  return pdfjsReady;
+}
+async function renderPdf(box, url){
+  if (!box) return;
+  try {
+    const lib = await loadPdfJs(), pdf = await lib.getDocument({ url }).promise;
+    if (!document.body.contains(box)) return;
+    box.innerHTML = '';
+    const w = Math.max(280, box.clientWidth - 8), dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n), v0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: (w / v0.width) * dpr });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.style.width = w + 'px';
+      if (!document.body.contains(box)) return;
+      box.appendChild(cv);
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (e) { box.innerHTML = `<div class="vnone">이 화면에서 PDF 를 바로 열지 못했습니다.<br><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">새 창에서 열기</a></div>`; }
+}
 
 /* ---------- 채널 화면에 쓰는 모양 ---------- */
 document.head.insertAdjacentHTML('beforeend', `<style>
@@ -661,6 +738,16 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .msg .lk{font-weight:900;color:#1264a3}
   .msg .mt a{color:inherit;text-decoration:none}
   .msg .mt a:hover{text-decoration:underline}
+  .slch.unread{color:#fff;font-weight:900}
+  .slch .pd{font-size:11px;color:#e8c9a0;white-space:nowrap}
+  .tnew{display:flex;align-items:center;margin:8px 0 2px;position:relative;justify-content:flex-end}
+  .tnew::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:#e01e5a}
+  .tnew span{position:relative;background:#fff;color:#e01e5a;font-size:12px;font-weight:900;padding:0 8px;margin-right:16px}
+  .cchip.unread{border-color:#e01e5a}
+  .nw{background:#e01e5a;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:0 5px;line-height:16px}
+  .cvview .vpdf{flex:1;overflow:auto;background:#525659;text-align:center;-webkit-overflow-scrolling:touch}
+  .cvview .vpdf canvas{display:block;margin:4px auto;background:#fff;max-width:100%}
+  @media (max-width:820px){ .cvbar .lchip{max-width:150px} .cvbar .btn.sm{padding:3px 6px} .slh{padding:8px 10px 4px} .slt{padding:0 6px;overflow-x:auto} .sltab{white-space:nowrap;padding:7px 8px 8px} .slt .ago{display:none} .slpad{padding:10px} .agc{padding:8px 10px;gap:8px} .agc img,.agc .ic{width:44px;height:44px} .drow{gap:8px} .decbox input,#cmIn,.sl .talkbox textarea{font-size:16px} }
   .psec{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 8px}
   .psec:first-of-type{margin-top:0}
   @media (max-width:900px){ .modal.xl{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0} .cv{grid-template-columns:1fr;grid-template-rows:minmax(50vh,1fr) auto;overflow:auto} .cvside{border-left:0;border-top:1px solid var(--line)} .ago{margin-left:0} }
