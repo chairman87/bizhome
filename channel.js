@@ -74,7 +74,7 @@ function talkHtml(p){
       : e.type === 'cmt' ? `<div class="mt"><span class="re" data-card="${e.card.id}">↳ ${esc(e.card.title)}</span> ${linkify(e.cmt.text || '')}</div>`
       : (e.html || '');
     const del = e.type === 'msg' && (e.by === me || isAdmin()) ? `<button class="mx" data-mdel="${e.log.id}" title="메시지 삭제">✕</button>` : '';
-    return head + `<div class="msg">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
+    return head + `<div class="msg t-${e.type}">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
   }).join('');
   return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
       ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div>이 채널의 시작입니다.<br>아래 칸에 한마디 적거나, 제안서·견적서 파일을 끌어다 놓아 보세요. 파일을 붙이면 <b>자료 카드</b>로 올라갑니다.</div>`}</div></div>
@@ -122,7 +122,7 @@ function bindTalk(p){
 /* ---------- 슬랙 모양 화면: 왼쪽 채널 목록 + 오른쪽 채널(머리 · 메시지/자료 카드 · 입력칸) ---------- */
 let sideOpen = false;
 function slRender(p){
-  if (tab !== 'cards') tab = 'talk';
+  if (tab !== 'cards' && tab !== 'decs') tab = 'talk';
   const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
   const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
@@ -141,10 +141,10 @@ function slRender(p){
       <div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2><span class="hash">#</span> ${esc(p.name)}</h2>${p.status !== '진행중' ? stP(p.status) : ''}
         <span class="sp"></span>${p.owner ? `<span class="ld" title="프로젝트 리더">${who(p.owner)}</span>` : ''}${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
         ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}<button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button></div>
-      <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📑 자료 카드${pend ? `<span class="bd">${pend}</span>` : ''}</button>
+      <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📑 자료 카드${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
-      ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${cardsHtml(p)}</div></div>`}`}
+      ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : cardsHtml(p)}</div></div>`}`}
     </section></div>`;
   bindHeader(() => {}, null, m => `리더인 채널 ${P().filter(x => x.owner === m.name && x.status !== '완료').length}개`);
   slFit();
@@ -156,7 +156,8 @@ function slRender(p){
   $('#editP').onclick = () => openProject(p.id);
   bindChHead(p);
   if (QCARD && !openedCard) { openedCard = true; setTimeout(() => openCard(QCARD), 0); }
-  if (tab === 'cards') bindCards(p); else bindTalk(p);
+  if (tab === 'cards') bindCards(p); else if (tab === 'decs') bindDecs(p); else bindTalk(p);
+  if (CV && $('#cvExtra')) refreshCardSide(CV.id);   // 카드 창이 열려 있으면 댓글·결정을 최신으로
   const sc = $('#tscroll');
   if (sc) { sc.dataset.tab = tab; sc.dataset.pid = p.id;
     const same = prev && prev.tab === tab && prev.id === p.id;
@@ -190,6 +191,7 @@ function cardListHtml(p){
       <h3>${esc(c.title)}</h3>
       ${c.memo ? `<div class="cm2">${esc(c.memo)}</div>` : ''}
       <div class="thumb">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : fs.length ? `<span class="doc">${isPdf(fs[0]) ? '📕' : '📄'}</span>` : '<span class="doc none">첨부 없음</span>'}${fs.length ? `<span class="fn">${esc(fs[0].name)}${fs.length > 1 ? ` 외 ${fs.length - 1}개` : ''}</span>` : ''}</div>
+      ${(d => d ? `<div class="cdec">✅ ${esc(d.body)}</div>` : '')(decsOf(c.project_id).find(d => d.card_id === c.id))}
       <div class="cf">${who(c.created_by)}<span>${fmtDateTime(c.created_at).slice(5)}</span><span class="sp"></span>${(c.comments || []).length ? `<span>💬 ${c.comments.length}</span>` : ''}</div>
     </div>`;
   }).join('')}</div>`;
@@ -278,10 +280,10 @@ function openCard(id, rev, file){
         <div class="cvmeta">${tag(c.kind || '기타', '#f1f5f9', '#334155')} <span class="hint">${esc(p.name || '')}</span></div>
         <div class="cvby">${who(c.created_by)}<span class="hint">${fmtDateTime(c.created_at)} 올림</span></div>
         ${c.memo ? `<div class="cvmemo">${linkify(c.memo)}</div>` : ''}
+        <div id="cvExtra">${cardExtraHtml(c)}</div>
         <div class="cvsec">수정본 ${rs.length > 1 ? `(${rs.length}차까지)` : ''}</div>
         ${rs.slice().reverse().map(x => `<div class="cvrev ${x.no === r.no ? 'on' : ''}" data-rev="${x.no}"><b>${x.no}차</b> <span class="hint">${esc(x.by || '')} · ${fmtDateTime(x.at).slice(5)} · 파일 ${(x.files || []).length}개</span>${x.memo ? `<div class="rm">${esc(x.memo)}</div>` : ''}</div>`).join('')}
         <button class="btn sm" id="cvRev">＋ ${rs.length + 1}차 수정본 올리기</button>
-        <div id="cvExtra">${typeof cardExtraHtml === 'function' ? cardExtraHtml(c) : ''}</div>
         <div class="cvfoot"><button class="btn sm" id="cvEdit">카드 수정</button></div>
       </aside>
     </div>`, { wide: true });
@@ -292,7 +294,113 @@ function openCard(id, rev, file){
   $('#cvRev').onclick = () => openRevAdd(id);
   $('#cvEdit').onclick = () => openCardEdit(p, id);
   document.querySelectorAll('#modal [data-close]').forEach(b => b.addEventListener('click', () => { CV = null; }));
-  if (typeof bindCardExtra === 'function') bindCardExtra(c);
+  CV.ds = ''; bindCardExtra(c);
+}
+
+/* ================= 2단계: 댓글 · 결정 기록 · 결정 로그 ================= */
+const decDay = d => d.decided_at || (d.created_at || '').slice(0, 10);
+const decsOf = pid => DECS().filter(d => d.project_id === pid).sort((a, b) => String(decDay(b)).localeCompare(String(decDay(a))) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const DEC_STATUSES = ['승인', '보류', '반려', '결정 대기', '참고 자료'];
+/* 저장 직전에 서버의 최신 카드를 다시 읽음: 두 사람이 동시에 댓글을 달아도 서로의 댓글이 지워지지 않게 */
+async function freshCard(id){
+  try { if (store.client) { const { data } = await store.client.from('project_cards').select('*').eq('id', id).single(); if (data) return normalize('project_cards', data); } } catch {}
+  return CARDS().find(x => x.id === id);
+}
+/* 카드 창 오른쪽: 결정 기록(상태 + 한 줄 + 이유)과 댓글 */
+function cardExtraHtml(c){
+  const ds = decsOf(c.project_id).filter(d => d.card_id === c.id), cm = c.comments || [];
+  return `<div class="cvsec" style="margin-top:0;border-top:0;padding-top:0">결정 기록</div>
+    <div class="decbox">
+      <div class="kpick">${DEC_STATUSES.map(st => `<button type="button" class="lchip ${c.status === st ? 'cur' : ''}" data-ds="${st}">${st}</button>`).join('')}</div>
+      <input id="dBody" maxlength="300" placeholder="결정 한 줄 (예: A안으로 확정. 상표 등록 가능 여부 확인하기)">
+      <input id="dReason" maxlength="300" placeholder="이유 (선택)">
+      <div class="drow2"><span class="hint">상태를 고르고 한 줄 적은 뒤 Enter</span><button class="btn sm primary" id="dSave">결정 기록</button></div>
+    </div>
+    ${ds.map(d => `<div class="cvdec"><div class="dh">${d.status ? stCard(d.status) : ''}<span class="hint">${fmtDate(decDay(d))} · ${esc(d.created_by || '')}</span>${d.created_by === me || isAdmin() ? `<button class="mx" data-ddel="${d.id}" title="이 결정 기록 삭제">✕</button>` : ''}</div><b>${esc(d.body)}</b>${d.reason ? `<div class="rs">이유: ${esc(d.reason)}</div>` : ''}</div>`).join('')}
+    <div class="cvsec">댓글 ${cm.length ? cm.length : ''}</div>
+    ${cm.map(m => `<div class="cvcm"><b>${esc(m.by || '')}</b><span class="tx">${linkify(m.text || '')}</span><span class="at">${fmtDateTime(m.at).slice(5)}</span>${m.by === me || isAdmin() ? `<button class="mx" data-cmdel="${m.id}" title="댓글 삭제">✕</button>` : ''}</div>`).join('') || '<div class="hint">회의 전에 미리 의견을 남기거나, 자리에 없던 사람이 나중에 남기는 곳입니다.</div>'}
+    <input id="cmIn" maxlength="1000" placeholder="댓글 입력 후 Enter">`;
+}
+function bindCardExtra(c){
+  const paint = () => document.querySelectorAll('[data-ds]').forEach(b => b.classList.toggle('on', b.dataset.ds === (CV && CV.ds)));
+  document.querySelectorAll('[data-ds]').forEach(b => b.onclick = () => { if (CV) CV.ds = CV.ds === b.dataset.ds ? '' : b.dataset.ds; paint(); const i = $('#dBody'); if (i) i.focus(); });
+  paint();
+  const save = () => saveDecision(c.id);
+  const sv = $('#dSave'); if (sv) sv.onclick = save;
+  ['#dBody', '#dReason'].forEach(q => { const i = $(q); if (i) i.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } }; });
+  const ci = $('#cmIn'); if (ci) ci.onkeydown = async e => {
+    if (e.key !== 'Enter' || e.isComposing) return;   // 한글 조합 중 Enter 는 무시
+    const t = ci.value.trim(); if (!t) return; ci.value = '';
+    const f = await freshCard(c.id); if (!f) return;
+    await saveRow('project_cards', { ...f, comments: [...(f.comments || []), { id: uid(), by: me, text: t, at: nowIso() }], updated_by: me });
+    const again = $('#cmIn'); if (again) again.focus();
+  };
+  document.querySelectorAll('[data-cmdel]').forEach(b => b.onclick = async () => { if (!confirm('이 댓글을 삭제할까요?')) return; const f = await freshCard(c.id); if (f) await saveRow('project_cards', { ...f, comments: (f.comments || []).filter(m => m.id !== b.dataset.cmdel), updated_by: me }); });
+  document.querySelectorAll('#cvExtra [data-ddel]').forEach(b => b.onclick = async () => { if (confirm('이 결정 기록을 삭제할까요?\n(카드의 상태는 그대로 둡니다)')) await removeRow('project_decisions', b.dataset.ddel); });
+}
+/* 결정 기록: 상태를 바꾸면서 결정 한 줄과 이유를 남김. 승인·보류·반려는 한 줄이 꼭 있어야 함 */
+async function saveDecision(id){
+  const c = CARDS().find(x => x.id === id); if (!c || !CV) return;
+  const st = CV.ds, body = ($('#dBody') || {}).value.trim(), reason = ($('#dReason') || {}).value.trim();
+  if (!st) { toast('먼저 상태(승인·보류·반려…)를 고르세요', true); return; }
+  if (['승인', '보류', '반려'].includes(st) && !body) { $('#dBody').focus(); toast('결정 한 줄을 적어 주세요', true); return; }
+  if (!body && st === c.status) return;
+  $('#dBody').value = ''; $('#dReason').value = ''; CV.ds = '';
+  if (body) await saveRow('project_decisions', { id: uid(), project_id: c.project_id, card_id: c.id, status: st, body, reason: reason || null, decided_at: todayStr(), created_by: me, created_at: nowIso(), updated_by: me });
+  if (st !== c.status) { const f = await freshCard(id); await saveRow('project_cards', { ...f, status: st, updated_by: me }); }
+  toast(body ? '결정을 기록했습니다' : `상태를 "${st}"(으)로 바꿨습니다`);
+}
+/* 카드 창이 열린 채로 내용이 바뀌면(내가 저장했거나 다른 사람이 올렸거나) 오른쪽만 새로 그림 — PDF 보는 화면은 건드리지 않음 */
+function refreshCardSide(id){
+  const c = CARDS().find(x => x.id === id), box = $('#cvExtra'); if (!box) return;
+  if (!c) { closeModal(); CV = null; return; }
+  const ae = document.activeElement, keepId = ae && ['dBody', 'dReason', 'cmIn'].includes(ae.id) ? ae.id : '', vals = {}; ['dBody', 'dReason', 'cmIn'].forEach(k => { const i = $('#' + k); if (i) vals[k] = i.value; });
+  box.innerHTML = cardExtraHtml(c);
+  Object.entries(vals).forEach(([k, v]) => { const i = $('#' + k); if (i) i.value = v; });
+  bindCardExtra(c);
+  const h = document.querySelector('#modal .mh h2'); if (h) h.innerHTML = `${stCard(c.status)} ${esc(c.title)}`;
+  if (keepId) { const i = $('#' + keepId); if (i) { i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch {} } }
+}
+/* 대화에 결정도 한 줄로 */
+function talkExtraEvents(p, ev){
+  decsOf(p.id).forEach(d => { const c = d.card_id ? CARDS().find(x => x.id === d.card_id) : null;
+    ev.push({ at: d.created_at, by: d.created_by, type: 'dec', html: `<div class="mt"><span class="dk">✅ 결정</span> ${d.status ? stCard(d.status) : ''} <b>${esc(d.body)}</b>${d.reason ? `<div class="rs">이유: ${esc(d.reason)}</div>` : ''}</div>${c ? cardChip(c) : ''}` }); });
+}
+/* 결정 로그 탭: 이 채널의 모든 결정이 날짜순으로. 근거가 된 카드로 바로 이동 */
+let decQ = '';
+function decsHtml(p){
+  const s = decQ.trim().toLowerCase(), all = decsOf(p.id), list = all.filter(d => !s || [d.body, d.reason, d.created_by, (CARDS().find(c => c.id === d.card_id) || {}).title].some(v => (v || '').toLowerCase().includes(s)));
+  let last = '';
+  return `<div class="actions"><button class="btn primary" id="newDec" style="padding:9px 16px;font-size:14px">＋ 결정 추가</button><span class="hint">자료 없이 회의에서 정한 것도 여기에 한 줄로 남깁니다</span>
+      <input type="search" id="decQ" placeholder="검색 (결정, 이유, 자료 제목)" value="${esc(decQ)}" style="margin-left:auto;border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:220px"></div>
+    <div class="declist" id="decList">${list.length ? list.map(d => { const c = d.card_id ? CARDS().find(x => x.id === d.card_id) : null, mon = decDay(d).slice(0, 7), head = mon === last ? '' : `<div class="dmon">${mon.slice(0, 4)}년 ${Number(mon.slice(5, 7))}월</div>`; last = mon;
+      return head + `<div class="drow"><span class="dd">${fmtDate(decDay(d)).slice(5)}</span><div class="db"><div class="dt">${d.status ? stCard(d.status) : tag('회의 결정', '#ede9fe', '#5b21b6', true)} <b>${esc(d.body)}</b></div>${d.reason ? `<div class="rs">이유: ${esc(d.reason)}</div>` : ''}
+        <div class="dm">${esc(d.created_by || '')} 기록${c ? ` · 근거 자료 <a class="dlink" data-card="${c.id}">📑 ${esc(c.title)}</a>` : d.card_id ? ' · (근거 자료가 삭제됨)' : ''}</div></div>
+        ${d.created_by === me || isAdmin() ? `<button class="btn sm" data-dedit="${d.id}">수정</button>` : ''}</div>`; }).join('')
+      : `<div class="empty">${s ? '해당하는 결정이 없습니다.' : '아직 기록된 결정이 없습니다.<br>자료 카드를 열어 <b>승인·보류·반려</b>와 결정 한 줄을 적거나, <b>＋ 결정 추가</b>로 회의에서 정한 것을 남겨 보세요.'}</div>`}</div>`;
+}
+function bindDecs(p){
+  const nb = $('#newDec'); if (nb) nb.onclick = () => openDecEdit(p, null);
+  const q = $('#decQ'); if (q) q.oninput = () => { decQ = q.value; const pos = q.selectionStart; render(); const q2 = $('#decQ'); if (q2) { q2.focus(); try { q2.setSelectionRange(pos, pos); } catch {} } };
+  document.querySelectorAll('#decList [data-card]').forEach(a => a.onclick = () => openCard(a.dataset.card));
+  document.querySelectorAll('#decList [data-dedit]').forEach(b => b.onclick = () => openDecEdit(p, b.dataset.dedit));
+}
+/* 자료 없이 정한 결정 추가 · 결정 고치기 */
+function openDecEdit(p, id){
+  const d = id ? DECS().find(x => x.id === id) : null, c = d && d.card_id ? CARDS().find(x => x.id === d.card_id) : null;
+  openModal(`${modalHead(d ? '결정 수정' : `결정 추가 — # ${esc(p.name)}`)}
+    <div class="mb">${c ? `<div class="hint">근거 자료: 📑 ${esc(c.title)}</div>` : ''}
+      <div class="f"><label>결정 한 줄 *</label><input id="eBody" maxlength="300" value="${esc(d ? d.body : '')}" placeholder="예: 1차 발주는 3천 개로 한다"></div>
+      <div class="f"><label>이유 (선택)</label><input id="eReason" maxlength="300" value="${esc(d ? d.reason || '' : '')}" placeholder="예: 최소 수량이 3천 개라서"></div>
+      <div class="f"><label>결정한 날</label><input type="date" id="eDate" value="${esc(d ? decDay(d) : todayStr())}" style="max-width:180px"></div></div>
+    <div class="mf">${d ? '<button class="btn danger left" id="eDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="eSave">${d ? '저장' : '기록'}</button></div>`, { wide: true });
+  $('#eBody').focus();
+  const save = async () => { const body = $('#eBody').value.trim(); if (!body) { $('#eBody').focus(); toast('결정 한 줄을 적어 주세요', true); return; }
+    const row = d ? { ...d, body, reason: $('#eReason').value.trim() || null, decided_at: $('#eDate').value || todayStr(), updated_by: me } : { id: uid(), project_id: p.id, card_id: null, status: null, body, reason: $('#eReason').value.trim() || null, decided_at: $('#eDate').value || todayStr(), created_by: me, created_at: nowIso(), updated_by: me };
+    closeModal(); await saveRow('project_decisions', row); toast(d ? '저장했습니다' : '결정을 기록했습니다'); };
+  $('#eSave').onclick = save;
+  ['#eBody', '#eReason'].forEach(q => { $(q).onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } }; });
+  const del = $('#eDel'); if (del) del.onclick = async () => { if (confirm('이 결정 기록을 삭제할까요?')) { closeModal(); await removeRow('project_decisions', d.id); toast('삭제했습니다'); } };
 }
 
 /* ---------- 채널 화면에 쓰는 모양 ---------- */
@@ -440,6 +548,39 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .sl .talkbox .send{width:34px;height:28px;border-radius:6px;border:0;background:#f0f0f0;color:#aaa;font-size:14px;cursor:pointer}
   .sl .talkbox .send.on{background:#007a5a;color:#fff}
   @media (max-width:820px){ .sl{grid-template-columns:minmax(0,1fr)} .sls{display:none;position:absolute;z-index:30;top:auto;bottom:0;left:0;width:270px;box-shadow:4px 0 16px rgba(0,0,0,.3)} .sl{position:relative} .sl.side-open .sls{display:flex;top:0} .slmenu{display:inline-block} .slh .ld{display:none} .sl .msg{padding:6px 12px} .slcomp{padding:0 10px 10px} .sl .talkbox .crow .hint{display:none} }
+  .sltab .cn{font-size:11px;color:#616061;font-weight:400}
+  .sl .msg.t-dec{background:#f3fbf5}
+  .sl .msg.t-dec:hover{background:#eaf7ee}
+  .msg .dk{color:#15803d;font-weight:900}
+  .msg .rs,.cvdec .rs,.drow .rs{font-size:13px;color:#616061;margin-top:2px}
+  .ccard .cdec{font-size:12px;color:#15803d;background:#f3fbf5;border-radius:6px;padding:3px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .decbox{border:1px solid #bbf7d0;background:#f6fef9;border-radius:8px;padding:8px;display:grid;gap:6px}
+  .decbox input{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;width:100%;background:#fff}
+  .decbox .lchip{padding:2px 9px;font-size:12px}
+  .decbox .lchip.cur{border-color:#16a34a;color:#15803d;font-weight:700}
+  .decbox .lchip.on{background:#15803d;border-color:#15803d;color:#fff}
+  .decbox .drow2{display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .cvdec{border-left:3px solid #86efac;padding:2px 0 2px 8px;font-size:13px;line-height:1.5}
+  .cvdec .dh{display:flex;align-items:center;gap:6px}
+  .cvdec .mx,.cvcm .mx{margin-left:auto;border:0;background:transparent;color:var(--fg3);font-size:11px;cursor:pointer}
+  .cvcm{display:flex;gap:6px;align-items:baseline;font-size:13px;line-height:1.5}
+  .cvcm b{white-space:nowrap}
+  .cvcm .tx{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
+  .cvcm .at{font-size:11px;color:var(--fg3);white-space:nowrap}
+  #cmIn{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;width:100%}
+  #cmIn:focus,.decbox input:focus{border-color:var(--blue);outline:2px solid #bfdbfe}
+  #cvExtra{display:flex;flex-direction:column;gap:8px}
+  .declist{max-width:980px}
+  .dmon{font-size:13px;font-weight:700;color:var(--fg2);margin:16px 2px 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .dmon:first-child{margin-top:0}
+  .drow{display:flex;gap:12px;align-items:flex-start;padding:10px 8px;border-bottom:1px solid var(--line)}
+  .drow:hover{background:#f8f8f8}
+  .drow .dd{flex:none;width:44px;font-size:13px;color:#616061;font-variant-numeric:tabular-nums;padding-top:2px}
+  .drow .db{flex:1;min-width:0}
+  .drow .dt{font-size:15px;line-height:1.5;word-break:break-word}
+  .drow .dm{font-size:12px;color:var(--fg3);margin-top:3px}
+  .drow .dlink{color:#1264a3;cursor:pointer}
+  .drow .dlink:hover{text-decoration:underline}
   .psec{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 8px}
   .psec:first-of-type{margin-top:0}
   @media (max-width:900px){ .modal.xl{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0} .cv{grid-template-columns:1fr;grid-template-rows:minmax(50vh,1fr) auto;overflow:auto} .cvside{border-left:0;border-top:1px solid var(--line)} .ago{margin-left:0} }
