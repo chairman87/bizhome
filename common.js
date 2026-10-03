@@ -358,7 +358,7 @@ async function shrinkImage(file){
   } catch { return file; }
 }
 async function uploadFile(file, folder = 'etc'){
-  if (file.size > 20 * 1024 * 1024) throw new Error('20MB 이하 파일만 올릴 수 있습니다');
+  if (file.size > 50 * 1024 * 1024) throw new Error('50MB 이하 파일만 올릴 수 있습니다 (영상 같은 큰 파일은 NAS 에 두고 경로만 적어 주세요)');
   const f = isImg(file) ? await shrinkImage(file) : file;
   const ext = ((f.name || '').match(/\.(\w+)$/) || [])[1] || (f.type.split('/')[1] || 'bin');
   const path = `${folder}/${todayStr().slice(0, 7)}/${uid()}.${ext.toLowerCase()}`;

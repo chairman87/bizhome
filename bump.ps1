@@ -3,7 +3,7 @@
 $v = Get-Date -Format 'yyyyMMddHHmm'
 Get-ChildItem "$PSScriptRoot\*.html" | ForEach-Object {
   $t = [IO.File]::ReadAllText($_.FullName)
-  $n = $t -replace 'common\.(js|css)(\?v=\d+)?"', ('common.$1?v=' + $v + '"')
+  $n = $t -replace '(common|channel)\.(js|css)(\?v=\d+)?"', ('$1.$2?v=' + $v + '"')
   if ($n -ne $t) { [IO.File]::WriteAllText($_.FullName, $n, (New-Object Text.UTF8Encoding $false)) }
 }
 Write-Host "버전 표시: $v"
