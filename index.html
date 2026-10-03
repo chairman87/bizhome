@@ -5,14 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032040">
-<script src="common.js?v=202610032040"></script>
+<link rel="stylesheet" href="common.css?v=202610032100">
+<script src="common.js?v=202610032100"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
   .dept{border-radius:10px;padding:10px;flex:0 1 260px;min-width:0}   /* 폴더 폭은 내용에 맞춰 좁게 고정 (위의 공지·결정사항 판 폭에 맞추지 않음) */
   .depts .adddept{flex:0 1 260px;width:auto}
-  @media(max-width:640px){.dept,.depts .adddept{flex:1 1 100%}}
+  /* 홈의 '칸' = 판(공지사항·업무공유·이달의 목표)과 폴더. 모두 같은 줄 흐름에 놓이고, 순서(sort_order)와 가로 길이(width)는 메뉴 편집에서 바꿈 */
+  .dept{position:relative;max-width:100%}
+  .bwrap{flex:0 1 1082px;min-width:0;max-width:100%;container-type:inline-size}
+  .bwrap.full{flex:0 0 100%}                       /* 가로 길이를 따로 정하지 않은 판은 한 줄을 통째로 씀 (가운데 1082px) */
+  .bwrap .bin{position:relative}
+  .bwrap.full .bin{max-width:1082px;margin:0 auto}
+  .bwrap .nboard{margin:0;max-width:none}
+  @container (max-width:620px){.nrow{grid-template-columns:minmax(0,1fr) auto auto}.nrow .by{display:none}.nboard .hd{flex-wrap:wrap;row-gap:2px}}
+  @media(max-width:640px){.dept,.depts .adddept,.bwrap{flex:1 1 100% !important}}
+  /* 메뉴 편집: 칸 끌어 옮기기 + 오른쪽 끝 손잡이로 가로 길이 조절 */
+  .editing [data-blk][draggable=true]{cursor:grab}
+  [data-blk].dragging{opacity:.35}
+  [data-blk].drop-l{box-shadow:-5px 0 0 var(--blue)}
+  [data-blk].drop-r{box-shadow:5px 0 0 var(--blue)}
+  [data-blk].drop-t{box-shadow:0 -5px 0 var(--blue)}
+  [data-blk].drop-b{box-shadow:0 5px 0 var(--blue)}
+  .editing .bwrap .nboard{outline:1px dashed var(--line2);outline-offset:2px}
+  .rz{position:absolute;top:0;right:-9px;width:16px;height:100%;cursor:ew-resize;z-index:3}
+  .rz::after{content:"";position:absolute;top:50%;left:6px;width:5px;height:44px;max-height:70%;transform:translateY(-50%);border-radius:3px;background:var(--line2)}
+  .rz:hover::after,.resizing .rz::after{background:var(--blue)}
+  .rz[data-w]::before{content:attr(data-w);position:absolute;top:-24px;right:0;background:#111;color:#fff;font-size:11px;padding:2px 7px;border-radius:4px;white-space:nowrap}
+  body.rzing{cursor:ew-resize;user-select:none}
   .dept h2{margin:4px 6px 10px;font-size:14px;display:flex;align-items:center;gap:6px}
   .dept h2 .nm{padding:2px 8px;border-radius:4px}
   .dept h2 .n{font-weight:400;color:var(--fg2);flex:1}
@@ -158,6 +179,9 @@ const DEFAULT_MENU = [
 const M = () => DATA.menu || [];
 const bySort = (a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_at || '').localeCompare(String(b.created_at || ''));
 const depts = () => M().filter(x => x.type === 'dept').sort(bySort);
+/* 홈의 칸: 폴더(dept) + 판(board: 공지사항·업무공유·이달의 목표). 한 줄 흐름에 sort_order 순으로 놓임 */
+const blocks = () => M().filter(x => x.type === 'dept' || x.type === 'board').sort(bySort);
+const blkW = r => Number(r.width) > 0 ? Number(r.width) : (r.type === 'board' ? 1082 : 260);   // 가로 길이(px). 안 정했으면 폴더 260, 판은 한 줄 전체
 const pagesOf = id => M().filter(x => x.type === 'page' && x.parent === id).sort(bySort);
 let editing = false;
 let seeding = false;
@@ -198,14 +222,20 @@ function render(){
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
-    ${editing ? `<div class="editbar">✎ 편집 중: 폴더와 페이지를 <b>끌어서</b> 순서를 바꾸거나 페이지를 다른 폴더로 옮길 수 있습니다(화살표 버튼도 됩니다). 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${editing ? `<div class="editbar">✎ 편집 중: 공지사항·업무공유·목표 판과 폴더를 <b>끌어서</b> 자리를 바꾸고, 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌어 가로 길이를 조절합니다(손잡이 더블클릭 = 기본 길이). 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
-    ${editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
-    <div class="depts">${depts().map((d, di, arr) => {
+    ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
+    <div class="depts">${blocks().map((d, di, arr) => {
+      const rz = editing ? `<span class="rz" data-rz="${d.id}" title="좌우로 끌면 가로 길이가 바뀝니다 (더블클릭 = 기본 길이로)"></span>` : '';
+      if (d.type === 'board') {   // 공지사항·업무공유·이달의 목표 판
+        const html = d.href === 'board:notices' ? noticeBoard(notices) : d.href === 'board:decisions' ? decisionBoard() : d.href === 'board:goals' ? goalBoard() : '';
+        if (!html) return '';
+        return `<div class="bwrap ${Number(d.width) > 0 ? '' : 'full'}" data-blk="${d.id}" ${Number(d.width) > 0 ? `style="flex-basis:${blkW(d)}px"` : ''} ${editing ? 'draggable="true"' : ''}><div class="bin">${html}${rz}</div></div>`;
+      }
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
       if (d.href === 'projects' && !editing) return projectDept(d, c);   // 프로젝트 폴더: 프로젝트가 자동으로 나열됨
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
-      return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}" ${editing ? 'draggable="true"' : ''}>
+      return `<section class="dept" style="background:${c.bg};flex-basis:${blkW(d)}px" data-dept="${d.id}" data-blk="${d.id}" ${editing ? 'draggable="true"' : ''}>${rz}
         <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
           <span class="ed"><button data-dedit="${d.id}" title="부서 이름·색 바꾸기">✎</button><button data-dmove="${d.id}" data-dir="-1" ${di === 0 ? 'disabled' : ''} title="왼쪽으로">←</button><button data-dmove="${d.id}" data-dir="1" ${di === arr.length - 1 ? 'disabled' : ''} title="오른쪽으로">→</button><button class="del" data-ddel="${d.id}" title="부서 삭제">✕</button></span></h2>
         ${pages.map((p, pi) => {
@@ -244,7 +274,7 @@ function render(){
 function projectDept(d, c){
   const list = (DATA.projects || []).filter(p => p.status !== '완료').sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   const done = (DATA.projects || []).length - list.length;
-  return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}">
+  return `<section class="dept" style="background:${c.bg};flex-basis:${blkW(d)}px" data-dept="${d.id}" data-blk="${d.id}">
     <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${list.length}</span></h2>
     ${list.map(p => `<a class="pg" href="projects.html?p=${p.id}"><span class="ic">🗂️</span><span class="t">${esc(p.name)}</span>${p.status === '보류' ? '<span class="soon">보류</span>' : ''}</a>`).join('')}
     ${done ? `<a class="pg na" href="projects.html"><span class="ic">📦</span><span class="t">완료한 프로젝트 ${done}개</span></a>` : ''}
@@ -262,19 +292,50 @@ function bindMenuDrag(){
     pg.ondragover = e => { if (kind !== 'page' || dragId === pg.dataset.pedit) return; e.preventDefault(); e.stopPropagation(); const r = pg.getBoundingClientRect(); clear(); pg.classList.add(e.clientY > r.top + r.height / 2 ? 'drop-after' : 'drop-before'); };
     pg.ondrop = e => { if (kind !== 'page' || dragId === pg.dataset.pedit) return; e.preventDefault(); e.stopPropagation(); const r = pg.getBoundingClientRect(); const id = dragId, after = e.clientY > r.top + r.height / 2; clear(); dropPage(id, pg.closest('[data-dept]').dataset.dept, pg.dataset.pedit, after); };
   });
-  document.querySelectorAll('section.dept[draggable]').forEach(sec => {
-    sec.ondragstart = e => { if (e.target !== sec) return; kind = 'dept'; dragId = sec.dataset.dept; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); sec.classList.add('dragging'); };
+  /* 칸(판·폴더) 끌기: 넓은 칸(한 줄을 거의 다 쓰는 칸) 위에서는 위/아래 절반, 좁은 칸 위에서는 왼쪽/오른쪽 절반으로 앞·뒤를 정함 */
+  const side = (el, e) => { const r = el.getBoundingClientRect(), wide = r.width > el.parentElement.clientWidth * 0.6; return wide ? { after: e.clientY > r.top + r.height / 2, cls: e.clientY > r.top + r.height / 2 ? 'drop-b' : 'drop-t' } : { after: e.clientX > r.left + r.width / 2, cls: e.clientX > r.left + r.width / 2 ? 'drop-r' : 'drop-l' }; };
+  document.querySelectorAll('[data-blk][draggable]').forEach(sec => {
+    const isDept = sec.matches('section.dept'), bid = sec.dataset.blk;
+    sec.ondragstart = e => { if (e.target !== sec) return; kind = 'dept'; dragId = bid; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); sec.classList.add('dragging'); };
     sec.ondragend = e => { if (e.target === sec) end(sec); };
     sec.ondragover = e => {
-      if (kind === 'page') { e.preventDefault(); clear(); sec.classList.add('drop-in'); return; }
-      if (kind !== 'dept' || dragId === sec.dataset.dept) return;
-      e.preventDefault(); const r = sec.getBoundingClientRect(); clear(); sec.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-r' : 'drop-l');
+      if (kind === 'page') { if (!isDept) return; e.preventDefault(); clear(); sec.classList.add('drop-in'); return; }
+      if (kind !== 'dept' || dragId === bid) return;
+      e.preventDefault(); clear(); sec.classList.add(side(sec, e).cls);
     };
     sec.ondrop = e => {
-      if (kind === 'page') { e.preventDefault(); const id = dragId; clear(); dropPage(id, sec.dataset.dept, null, true); return; }
-      if (kind !== 'dept' || dragId === sec.dataset.dept) return;
-      e.preventDefault(); const r = sec.getBoundingClientRect(); const id = dragId, after = e.clientX > r.left + r.width / 2; clear(); dropDept(id, sec.dataset.dept, after);
+      if (kind === 'page') { if (!isDept) return; e.preventDefault(); const id = dragId; clear(); dropPage(id, bid, null, true); return; }
+      if (kind !== 'dept' || dragId === bid) return;
+      e.preventDefault(); const id = dragId, after = side(sec, e).after; clear(); dropDept(id, bid, after);
     };
+  });
+  /* 가로 길이 조절: 오른쪽 끝 손잡이를 좌우로 끔. 놓는 순간 10px 단위로 맞춰 저장. 더블클릭하면 기본 길이(폴더 260, 판은 한 줄 전체) */
+  document.querySelectorAll('[data-rz]').forEach(h => {
+    const el = h.closest('[data-blk]'), row = () => M().find(x => x.id === h.dataset.rz);
+    h.setAttribute('draggable', 'false');
+    h.onclick = e => e.stopPropagation();
+    h.onmousedown = e => {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation();
+      const cont = el.parentElement, was = el.getAttribute('draggable'); el.removeAttribute('draggable');
+      const box = () => (el.querySelector('.bin') || el).getBoundingClientRect();
+      let w = Math.round(box().width), moved = false;
+      const clamp = v => Math.max(180, Math.min(cont.clientWidth, v));
+      el.classList.add('resizing'); document.body.classList.add('rzing');
+      const move = ev => {
+        if (!moved) { moved = true; el.classList.remove('full'); el.style.flexBasis = w + 'px'; }
+        for (let k = 0; k < 8; k++) { const r = box(), gap = ev.clientX - r.right; if (Math.abs(gap) < 1.5) break; w = clamp(Math.round(r.width + gap)); el.style.flexBasis = w + 'px'; if (w === 180 || w === cont.clientWidth) break; }   // 가운데 정렬이라 몇 번 되풀이해 손잡이가 마우스를 따라오게 함
+        h.dataset.w = Math.round(w / 10) * 10 + 'px';
+      };
+      const up = async () => {
+        document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+        el.classList.remove('resizing'); document.body.classList.remove('rzing'); delete h.dataset.w; if (was) el.setAttribute('draggable', was);
+        if (!moved) return;
+        const r0 = row(), nw = clamp(Math.round(w / 10) * 10); if (!r0 || !guard()) { render(); return; }
+        await saveRow('menu', { ...r0, width: nw });
+      };
+      document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+    };
+    h.ondblclick = async e => { e.stopPropagation(); const r0 = row(); if (!r0 || !guard() || r0.width == null) return; await saveRow('menu', { ...r0, width: null }); toast('기본 길이로 되돌렸습니다'); };
   });
 }
 
@@ -283,7 +344,7 @@ function guard(){ if (!isAdmin()) { toast('관리자만 할 수 있습니다', t
 async function moveItem(id, dir){
   if (!guard()) return;
   const it = M().find(x => x.id === id); if (!it) return;
-  const list = it.type === 'dept' ? depts() : pagesOf(it.parent);
+  const list = it.type === 'page' ? pagesOf(it.parent) : blocks();   // 폴더·판은 칸 전체 순서 안에서 움직임
   const i = list.findIndex(x => x.id === id), j = i + dir;
   if (j < 0 || j >= list.length) return;
   // 순서 번호를 0,1,2… 로 다시 매기면서 둘을 맞바꿈
@@ -293,7 +354,7 @@ async function moveItem(id, dir){
 /* 끌어다 놓은 결과를 저장: 순서 번호를 0,1,2… 로 다시 매기고 바뀐 줄만 저장 */
 async function dropDept(id, targetId, after){
   if (!guard() || id === targetId) return;
-  const order = depts().map(x => x.id).filter(x => x !== id);
+  const order = blocks().map(x => x.id).filter(x => x !== id);
   let to = order.indexOf(targetId); if (to < 0) return; if (after) to++;
   order.splice(to, 0, id);
   for (let k = 0; k < order.length; k++) { const row = M().find(x => x.id === order[k]); if (row && row.sort_order !== k) await saveRow('menu', { ...row, sort_order: k }); }
@@ -391,7 +452,7 @@ function openDept(id){
   document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { color = b.dataset.c; document.querySelectorAll('[data-c]').forEach(x => x.style.borderColor = x.dataset.c === color ? DEPT_COLORS[x.dataset.c].tagFg : 'transparent'); });
   const save = async () => {
     const name = $('#dName').value.trim(); if (!name) { $('#dName').focus(); toast('부서 이름을 입력하세요', true); return; }
-    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: d ? d.href || null : null, sort_order: d ? d.sort_order : depts().length, created_at: d ? d.created_at : nowIso() };
+    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: d ? d.href || null : null, width: d && d.width != null ? d.width : null, sort_order: d ? d.sort_order : blocks().length, created_at: d ? d.created_at : nowIso() };
     closeModal();
     await saveRow('menu', n);
     toast(d ? '저장했습니다' : '부서를 추가했습니다');
