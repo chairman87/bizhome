@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032117">
-<script src="common.js?v=202610032117"></script>
+<link rel="stylesheet" href="common.css?v=202610032124">
+<script src="common.js?v=202610032124"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -43,6 +43,9 @@
   .editing #cv > [data-blk].moving{cursor:grabbing;opacity:.85;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.18)}
   body.mving{user-select:none;cursor:grabbing}
   .editing #cv > [data-blk].sel{outline:2px solid var(--blue);outline-offset:3px;border-radius:10px}
+  .gd{position:absolute;background:#f43f5e;z-index:25;pointer-events:none}
+  .gdx{top:0;bottom:0;width:1px}
+  .gdy{left:0;right:0;height:1px}
   .selbox{position:absolute;border:1px solid var(--blue);background:rgba(37,99,235,.08);z-index:30;pointer-events:none}
   .selinfo{position:sticky;top:8px;z-index:40;display:inline-block;margin:0 0 8px;background:var(--blue);color:#fff;font-size:12px;font-weight:600;border-radius:999px;padding:3px 12px}
   .rz{position:absolute;top:0;right:-9px;width:16px;height:100%;cursor:ew-resize;z-index:3}
@@ -291,7 +294,7 @@ function render(){
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
-    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 아래쪽 칸이 밑으로 밀립니다). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 아래쪽 칸이 밑으로 밀립니다). 다른 칸 가까이 가져가면 <b>자석처럼 딱 붙습니다</b>(빨간 선이 보이면 줄이 맞은 것). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
     ${editing ? '<div id="selInfo" class="selinfo" hidden></div>' : ''}
@@ -372,6 +375,10 @@ function bindMenuDrag(){
   /* 칸(판·폴더) 옮기기: 마우스로 잡아서 원하는 자리에 놓음. 10px 단위로 맞춰지고, 놓은 자리가 그대로 저장됨.
      여러 칸: 빈 곳에서 끌어 네모로 묶거나 Ctrl(또는 Shift)+클릭으로 하나씩 더하고 빼면 파란 테두리가 생기고, 그중 하나를 잡아 끌면 같이 움직임 */
   const snap = v => Math.round(v / 10) * 10;
+  /* 자석: 다른 칸 가까이(18px 안) 가면 그 칸 옆·아래에 간격(14px)을 두고 딱 붙거나, 모서리 줄이 맞춰짐. 가까운 칸이 없으면 10px 눈금 */
+  const MAG = 18;
+  const magnet = (raw, cands) => { let best = null, bd = MAG + 1; for (const c of cands) { const d = Math.abs(c - raw); if (d < bd) { bd = d; best = c; } } return best != null ? best : snap(raw); };
+  const guide = (x, y) => { let gx = $('#gdX'), gy = $('#gdY'); if (!gx) { gx = document.createElement('div'); gx.id = 'gdX'; gx.className = 'gd gdx'; cv.appendChild(gx); gy = document.createElement('div'); gy.id = 'gdY'; gy.className = 'gd gdy'; cv.appendChild(gy); } gx.hidden = x == null; gy.hidden = y == null; if (x != null) gx.style.left = x + 'px'; if (y != null) gy.style.top = y + 'px'; };
   const cv = $('#cv');
   const paintSel = () => { cv.querySelectorAll(':scope > [data-blk]').forEach(el => el.classList.toggle('sel', SEL.has(el.dataset.blk))); const info = $('#selInfo'); if (info) { info.hidden = SEL.size < 2; info.textContent = `${SEL.size}개 선택됨 · 하나를 잡아 끌면 같이 움직입니다 (빈 곳 클릭 = 선택 해제)`; } };
   SEL = new Set([...SEL].filter(id => LAY.some(i => i.id === id)));
@@ -385,17 +392,29 @@ function bindMenuDrag(){
       const group = LAY.filter(i => SEL.has(i.id)); if (!group.length) return;
       e.preventDefault();
       const sx = e.clientX, sy = e.clientY; let moved = false, dx = 0, dy = 0;
-      const minL = Math.min(...group.map(g => g.left)), maxR = Math.max(...group.map(g => g.left + g.w)), minT = Math.min(...group.map(g => g.top));
+      const minL = Math.min(...group.map(g => g.left)), maxR = Math.max(...group.map(g => g.left + g.w)), minT = Math.min(...group.map(g => g.top)), maxB = Math.max(...group.map(g => g.top + g.h));
+      const gW = maxR - minL, gH = maxB - minT, others = LAY.filter(i => !SEL.has(i.id));
       const move = ev => {
         const rx = ev.clientX - sx, ry = ev.clientY - sy;
         if (!moved && Math.abs(rx) + Math.abs(ry) < 5) return;
         if (!moved) { moved = true; group.forEach(g => g.el.classList.add('moving')); document.body.classList.add('mving'); }
-        dx = Math.max(-minL, Math.min(CV_W - maxR, snap(rx))); dy = Math.max(-minT, snap(ry));   // 묶음 전체가 판 밖으로 나가지 않게
+        // 붙을 수 있는 자리는 지금 마우스 위치에서 가까운 칸(사방 60px 안)만 봄: 그 칸의 오른쪽 옆 / 왼쪽 옆 / 왼쪽 줄 / 오른쪽 줄, 아래 / 위 / 윗줄 / 아랫줄
+        const rl = minL + rx, rt = minT + ry, cx = [0], cy = [0];
+        const near = others.filter(o => o.left < rl + gW + 60 && o.left + o.w > rl - 60 && o.top < rt + gH + 60 && o.top + o.h > rt - 60);
+        near.forEach(o => { cx.push(o.left + o.w + CV_GAP, o.left - CV_GAP - gW, o.left, o.left + o.w - gW); cy.push(o.top + o.h + CV_GAP, o.top - CV_GAP - gH, o.top, o.top + o.h - gH); });
+        let L = magnet(rl, cx), T = magnet(rt, cy);
+        // 어떤 칸의 옆에 붙었으면 위아래 줄은 그 칸에 먼저 맞추고, 어떤 칸의 위·아래에 붙었으면 좌우 줄은 그 칸에 먼저 맞춤
+        const ax = near.find(o => L === o.left + o.w + CV_GAP || L === o.left - CV_GAP - gW), ay = near.find(o => T === o.top + o.h + CV_GAP || T === o.top - CV_GAP - gH);
+        if (ax) { if (Math.abs(ax.top - rt) <= MAG) T = ax.top; else if (Math.abs(ax.top + ax.h - gH - rt) <= MAG) T = ax.top + ax.h - gH; }
+        else if (ay) { if (Math.abs(ay.left - rl) <= MAG) L = ay.left; else if (Math.abs(ay.left + ay.w - gW - rl) <= MAG) L = ay.left + ay.w - gW; }
+        L = Math.max(0, Math.min(CV_W - gW, L)); T = Math.max(0, T);   // 묶음 전체가 판 밖으로 나가지 않게
+        dx = L - minL; dy = T - minT;
+        guide(cx.includes(L) && L !== 0 ? (others.some(o => o.left === L || o.left + o.w + CV_GAP === L) ? L : L + gW) : null, cy.includes(T) && T !== 0 ? (others.some(o => o.top === T || o.top + o.h + CV_GAP === T) ? T : T + gH) : null);
         group.forEach(g => { g.el.style.left = (g.left + dx) + 'px'; g.el.style.top = (g.top + dy) + 'px'; });
       };
       const up = () => {
         document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
-        group.forEach(g => g.el.classList.remove('moving')); document.body.classList.remove('mving');
+        group.forEach(g => g.el.classList.remove('moving')); document.body.classList.remove('mving'); guide(null, null);
         if (!moved) return;
         el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true });   // 놓는 순간의 클릭으로 창이 열리지 않게
         if (!dx && !dy) { render(); return; }
@@ -434,7 +453,8 @@ function bindMenuDrag(){
       const it = LAY.find(i => i.id === el.dataset.blk); if (!it) return;
       const left = el.getBoundingClientRect().left; let w = it.w, moved = false;
       el.classList.add('resizing'); document.body.classList.add('rzing');
-      const move = ev => { moved = true; w = Math.max(MIN_W, Math.min(CV_W - it.left, snap(ev.clientX - left))); el.style.width = w + 'px'; h.dataset.w = w + 'px'; };
+      const wc = []; LAY.forEach(o => { if (o.id !== it.id) wc.push(o.left - CV_GAP - it.left, o.left + o.w - it.left); });   // 오른쪽 끝이 옆 칸에 딱 닿거나, 다른 칸의 오른쪽 끝과 줄이 맞는 길이
+      const move = ev => { moved = true; w = Math.max(MIN_W, Math.min(CV_W - it.left, magnet(ev.clientX - left, wc.filter(v => v >= MIN_W)))); el.style.width = w + 'px'; h.dataset.w = w + 'px'; };
       const up = () => {
         document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
         el.classList.remove('resizing'); document.body.classList.remove('rzing'); delete h.dataset.w;
