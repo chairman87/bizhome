@@ -18,7 +18,11 @@ const cardsOf = pid => CARDS().filter(c => c.project_id === pid).sort((a, b) => 
 const projLastAt = pid => [...cardsOf(pid).map(cardLastAt), ...DECS().filter(d => d.project_id === pid).map(d => d.created_at)].filter(Boolean).sort().pop() || null;
 const daysAgo = iso => iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)) : null;
 const agoHtml = pid => { const d = daysAgo(projLastAt(pid)); return d == null ? '<span class="ago none">아직 기록 없음</span>' : `<span class="ago ${d >= 7 ? 'old' : ''}" title="자료 카드·수정본·댓글·결정 중 가장 최근 것 기준">마지막 기록 ${d === 0 ? '오늘' : d + '일 전'}</span>`; };
-const stCard = s => tag(s, ...(CARD_ST[s] || CARD_ST['참고 자료']), true);
+const stLabel = s => s === '참고 자료' ? '공유' : s;   // 저장 값은 예전 그대로 '참고 자료', 화면에는 '공유' (결정을 요청하지 않고 그냥 공유한 자료)
+const stCard = s => tag(stLabel(s), ...(CARD_ST[s] || CARD_ST['참고 자료']), true);
+const isShare = c => c.status === '참고 자료';
+/* 카드의 상태 단추: 공유 자료는 딱지 없이 깔끔하게(결정은 카드를 열어서 기록), 그 밖에는 '결정 대기 ▾' 처럼 눌러서 바로 결정 */
+const stBtn = c => isShare(c) ? '' : `<button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button>`;
 const isPdf = f => /pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || '');
 const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round((n || 0) / 1024)) + 'KB';
 let cardFilter = '', cardQ = '';          // 자료 카드 탭: 고른 상태, 검색어
@@ -61,7 +65,7 @@ function talkEvents(p){
   if (typeof talkExtraEvents === 'function') talkExtraEvents(p, ev);
   return ev.filter(e => e.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
-const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip ${cardUnread(c) ? 'unread' : ''}" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; };
+const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip ${cardUnread(c) ? 'unread' : ''}" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${r && r.no > 1 ? `${r.no}차 · ` : ''}파일 ${fs.length}개${(c.comments || []).length ? ` · 💬 ${c.comments.length}` : ''}</span></div>${stBtn(c)}</div>`; };
 function talkHtml(p){
   if (!DATA.project_cards) return cardsHtml(p);
   const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
@@ -81,9 +85,8 @@ function talkHtml(p){
   return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
       ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div>이 채널의 시작입니다.<br>아래 칸에 한마디 적거나, 제안서·견적서 파일을 끌어다 놓아 보세요. 파일을 붙이면 <b>자료 카드</b>로 올라갑니다.</div>`}</div></div>
     <div class="slcomp"><div class="talkbox composer" id="composer">
-      <div class="tkcard" id="tkCard" hidden><span class="tl">📑 자료 카드로 올라갑니다</span><input id="tkTitle" maxlength="120" placeholder="자료 제목 (비우면 파일 이름)" value="${esc(comp.title || '')}">
-        <select id="tkKind">${CARD_KINDS.map(k => `<option ${(comp.ckind || '제안서') === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
-        <span class="kpick"><button type="button" class="lchip" data-ts="결정 대기">결정 대기</button><button type="button" class="lchip" data-ts="참고 자료">참고 자료</button></span></div>
+      <div class="tkcard" id="tkCard" hidden><span class="tl">📑 자료로 공유됩니다</span><input id="tkTitle" maxlength="120" placeholder="자료 제목 (비우면 파일 이름)" value="${esc(comp.title || '')}">
+        <label class="need" title="체크하면 회의 안건 목록에 올라갑니다. 그냥 공유만 할 자료는 체크하지 않습니다"><input type="checkbox" id="tkNeed" ${comp.needDec ? 'checked' : ''}> 결정 필요</label></div>
       <textarea id="cBody" rows="1" maxlength="4000" placeholder="#${esc(p.name)} 에 메시지 보내기">${esc(comp.text)}</textarea>
       ${comp.box.html}
       <div class="crow"><button type="button" class="plus" id="tkPlus" title="파일 첨부 (PDF·이미지)">＋</button><span class="hint">Enter 보내기 · Shift+Enter 줄바꿈 · 파일은 끌어다 놓거나 Ctrl+V</span><span class="sp"></span><button type="button" class="send" id="cSend" title="보내기">➤</button></div>
@@ -97,7 +100,7 @@ async function sendTalk(p){
   delete comps[p.id]; talkStick = true;
   if (files.length) {   // 파일이 있으면 자료 카드
     const title = (c.title || '').trim() || files[0].name.replace(/\.\w+$/, '');
-    await saveRow('project_cards', { id: uid(), project_id: p.id, title, kind: c.ckind || '제안서', memo: text || null, status: c.cstatus || '결정 대기', revisions: [{ no: 1, memo: '', files, by: me, at: nowIso() }], comments: [], created_by: me, created_at: nowIso(), updated_by: me });
+    await saveRow('project_cards', { id: uid(), project_id: p.id, title, kind: null, memo: text || null, status: c.needDec ? '결정 대기' : '참고 자료', revisions: [{ no: 1, memo: '', files, by: me, at: nowIso() }], comments: [], created_by: me, created_at: nowIso(), updated_by: me });
   } else await saveRow('project_logs', { id: uid(), project_id: p.id, kind: '메모', body: text, log_date: todayStr(), files: [], comments: [], created_by: me, created_at: nowIso(), updated_by: me });
   const b = $('#cBody'); if (b) b.focus();
 }
@@ -106,11 +109,10 @@ function bindTalk(p){
   const c = getComp(p.id), body = $('#cBody');
   $('#tkPlus').onclick = () => { const b = document.querySelector('#cFiles [data-pick]'); if (b) b.click(); };
   bindBox(p);
-  const paint = () => { const on = c.box.files.length > 0; const k = $('#tkCard'); if (!k) return; k.hidden = !on; const sb = $('#cSend'); if (sb) sb.classList.toggle('on', on || !!c.text.trim()); document.querySelectorAll('[data-ts]').forEach(b => b.classList.toggle('on', b.dataset.ts === (c.cstatus || '결정 대기'))); };
+  const paint = () => { const on = c.box.files.length > 0; const k = $('#tkCard'); if (!k) return; k.hidden = !on; const sb = $('#cSend'); if (sb) sb.classList.toggle('on', on || !!c.text.trim()); };
   c.paint = paint; paint();
-  document.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { c.cstatus = b.dataset.ts; paint(); });
+  $('#tkNeed').onchange = () => { c.needDec = $('#tkNeed').checked; };
   $('#tkTitle').oninput = () => { c.title = $('#tkTitle').value; };
-  $('#tkKind').onchange = () => { c.ckind = $('#tkKind').value; };
   const grow = () => { body.style.height = 'auto'; body.style.height = Math.min(220, body.scrollHeight) + 'px'; };
   body.oninput = () => { c.text = body.value; grow(); paint(); }; grow();
   body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isTouch()) { e.preventDefault(); sendTalk(p); } };   // 한글 조합 중 Enter 는 무시. 휴대폰에서는 Enter = 줄바꿈, ➤ 로 보냄
@@ -185,18 +187,18 @@ function cardsHtml(p){
   if (!DATA.project_cards) return `<div class="empty">자료 카드 저장 표가 아직 없습니다.${isAdmin() ? ' <b>sql-project-channel.sql</b> 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
   const all = cardsOf(p.id);
   return `<div class="actions"><button class="btn primary" id="newCard" style="padding:9px 16px;font-size:14px">＋ 자료 카드 올리기</button>
-      <div class="lchips" style="margin:0"><button class="lchip ${cardFilter ? '' : 'on'}" data-cf="">전체<span class="n">${all.length}</span></button>${CARD_STATUSES.map(s => `<button class="lchip ${cardFilter === s ? 'on' : ''}" data-cf="${s}">${s}<span class="n">${all.filter(c => c.status === s).length}</span></button>`).join('')}
+      <div class="lchips" style="margin:0"><button class="lchip ${cardFilter ? '' : 'on'}" data-cf="">전체<span class="n">${all.length}</span></button>${CARD_STATUSES.map(s => `<button class="lchip ${cardFilter === s ? 'on' : ''}" data-cf="${s}">${stLabel(s)}<span class="n">${all.filter(c => c.status === s).length}</span></button>`).join('')}
       <input type="search" id="cardQ" placeholder="검색 (제목, 메모, 파일 이름)" value="${esc(cardQ)}"></div></div>
     <div id="cardList">${cardListHtml(p)}</div>`;
 }
 function cardListHtml(p){
   const s = cardQ.trim().toLowerCase();
   const list = cardsOf(p.id).filter(c => (!cardFilter || c.status === cardFilter) && (!s || [c.title, c.memo, c.kind, c.created_by, ...revsOf(c).flatMap(r => (r.files || []).map(f => f.name))].some(v => (v || '').toLowerCase().includes(s))));
-  if (!list.length) return `<div class="empty">${s || cardFilter ? '해당하는 자료 카드가 없습니다.' : '아직 올린 자료가 없습니다.<br>제안서·기획서·견적서 같은 자료 하나를 <b>＋ 자료 카드 올리기</b>로 올려 보세요. 결정이 필요한 자료는 <b>결정 대기</b>로 올라갑니다.'}</div>`;
+  if (!list.length) return `<div class="empty">${s || cardFilter ? '해당하는 자료 카드가 없습니다.' : '아직 올린 자료가 없습니다.<br>기획서·견적서 같은 자료를 <b>＋ 자료 카드 올리기</b>로 올려 두면, 회의 때 열어 놓고 같이 볼 수 있습니다. 결정이 필요한 자료만 <b>결정 필요</b>에 체크하세요.'}</div>`;
   return `<div class="cgrid">${list.map(c => {
     const fs = cardFiles(c), img = fs.find(isImg), n = revsOf(c).length;
     return `<div class="ccard st-${c.status.replace(/\s/g, '')}" data-card="${c.id}">
-      <div class="ct">${cardUnread(c) ? '<span class="nw">새 글</span>' : ''}<button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button><span class="kd">${esc(c.kind || '기타')}</span>${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
+      <div class="ct">${cardUnread(c) ? '<span class="nw">새 글</span>' : ''}${stBtn(c)}${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
       <h3>${esc(c.title)}</h3>
       ${c.memo ? `<div class="cm2">${esc(c.memo)}</div>` : ''}
       <div class="thumb">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : fs.length ? `<span class="doc">${isPdf(fs[0]) ? '📕' : '📄'}</span>` : '<span class="doc none">첨부 없음</span>'}${fs.length ? `<span class="fn">${esc(fs[0].name)}${fs.length > 1 ? ` 외 ${fs.length - 1}개` : ''}</span>` : ''}</div>
@@ -216,28 +218,24 @@ function bindCardList(p){ document.querySelectorAll('[data-card]').forEach(el =>
 /* ---------- 카드 올리기 · 수정 ---------- */
 function openCardEdit(p, id){
   const c = id ? CARDS().find(x => x.id === id) : null;
-  let kind = c ? c.kind : '제안서', status = c ? c.status : '결정 대기';
+  const kind = c ? c.kind : null;
   const at = attachBox('kFiles', c ? cardFiles(c) : [], 'projects', { rename: true });
   openModal(`${modalHead(c ? '자료 카드 수정' : `자료 카드 올리기 — ${esc(p.name)}`)}
     <div class="mb">
-      <div class="f"><label>제목 *</label><input id="kTitle" value="${esc(c ? c.title : '')}" maxlength="120" placeholder="예: 브랜드명 후보안, A제조사 견적서, 손익 시뮬레이션"></div>
-      <div class="f"><label>자료 종류</label><div class="kpick">${CARD_KINDS.map(k => `<button type="button" class="lchip" data-kk="${k}">${k}</button>`).join('')}</div></div>
+      <div class="f"><label>제목 *</label><input id="kTitle" value="${esc(c ? c.title : '')}" maxlength="120" placeholder="예: 브랜드명 후보안, A제조사 견적서, 10월 기획서"></div>
       <div class="f"><label>한마디 메모</label><textarea id="kMemo" maxlength="2000" style="min-height:70px" placeholder="이 자료를 볼 때 알아야 할 것. 예: 단가는 부가세 별도, 최소 수량 3천 개 기준">${esc(c ? c.memo || '' : '')}</textarea></div>
       <div class="f"><label>첨부 파일 ${c ? `(${lastRev(c).no}차)` : ''} — PDF·이미지는 화면에서 바로 보입니다. 파일 하나 50MB 까지</label>${at.html}</div>
-      ${c ? '' : `<div class="f"><label>결정이 필요한 자료인가요?</label><div class="kpick"><button type="button" class="lchip" data-ks="결정 대기">결정 대기 (회의 안건에 올라감)</button><button type="button" class="lchip" data-ks="참고 자료">참고 자료 (결정 필요 없음)</button></div></div>`}
+      ${c ? '' : `<label class="hint" style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="kNeed"> 결정이 필요한 자료입니다 (체크하면 회의 안건 목록에 올라갑니다)</label>`}
     </div>
     <div class="mf">${c && (c.created_by === me || isAdmin()) ? '<button class="btn danger left" id="kDel">카드 삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="kSave">${c ? '저장' : '올리기'}</button></div>`, { wide: true });
-  const paint = () => { document.querySelectorAll('[data-kk]').forEach(b => b.classList.toggle('on', b.dataset.kk === kind)); document.querySelectorAll('[data-ks]').forEach(b => b.classList.toggle('on', b.dataset.ks === status)); };
-  document.querySelectorAll('[data-kk]').forEach(b => b.onclick = () => { kind = b.dataset.kk; paint(); });
-  document.querySelectorAll('[data-ks]').forEach(b => b.onclick = () => { status = b.dataset.ks; paint(); });
-  paint(); at.bind(); $('#kTitle').focus();
+  at.bind(); $('#kTitle').focus();
   $('#kSave').onclick = async () => {
     if ($('#kFiles .up')) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
     const title = $('#kTitle').value.trim(); if (!title) { $('#kTitle').focus(); toast('제목을 입력하세요', true); return; }
     const memo = $('#kMemo').value.trim() || null;
     let row;
     if (c) { const rs = revsOf(c).map((r, i, arr) => i === arr.length - 1 ? { ...r, files: [...at.files] } : r); row = { ...c, title, kind, memo, revisions: rs.length ? rs : [{ no: 1, memo: '', files: [...at.files], by: me, at: nowIso() }], updated_by: me }; }
-    else row = { id: uid(), project_id: p.id, title, kind, memo, status, revisions: [{ no: 1, memo: '', files: [...at.files], by: me, at: nowIso() }], comments: [], created_by: me, created_at: nowIso(), updated_by: me };
+    else row = { id: uid(), project_id: p.id, title, kind, memo, status: $('#kNeed').checked ? '결정 대기' : '참고 자료', revisions: [{ no: 1, memo: '', files: [...at.files], by: me, at: nowIso() }], comments: [], created_by: me, created_at: nowIso(), updated_by: me };
     closeModal(); await saveRow('project_cards', row); toast(c ? '저장했습니다' : '자료 카드를 올렸습니다');
     if (c) openCard(c.id);
   };
@@ -256,7 +254,7 @@ function openRevAdd(id){
     <div class="mb"><div><b>${esc(c.title)}</b><div class="hint">이전 차수(1~${no - 1}차)는 지워지지 않고 그대로 볼 수 있습니다.</div></div>
       <div class="f"><label>무엇이 바뀌었나요?</label><textarea id="rvMemo" maxlength="1000" style="min-height:60px" placeholder="예: 단가 3,200 → 2,950원으로 조정, 최소 수량 3천 개로 변경"></textarea></div>
       <div class="f"><label>수정본 파일 *</label>${at.html}</div>
-      ${c.status !== '참고 자료' && c.status !== '결정 대기' ? `<div class="hint">지금 상태는 <b>${esc(c.status)}</b>입니다. 수정본을 올리면 다시 <b>결정 대기</b>로 바뀌어 회의 안건에 올라갑니다.</div>` : ''}</div>
+      ${c.status !== '참고 자료' && c.status !== '결정 대기' ? `<div class="hint">지금 상태는 <b>${esc(stLabel(c.status))}</b>입니다. 수정본을 올리면 다시 <b>결정 대기</b>로 바뀌어 회의 안건에 올라갑니다.</div>` : ''}</div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rvSave">${no}차로 올리기</button></div>`, { wide: true });
   at.bind(); $('#rvMemo').focus();
   $('#rvSave').onclick = async () => {
@@ -277,7 +275,7 @@ function openCard(id, rev, file){
     : isPdf(f) ? (isTouch() ? `<div class="vpdf" id="pdfBox"><div class="vnone">PDF 를 불러오는 중…</div></div>` : `<iframe src="${esc(f.url)}#view=FitH" title="${esc(f.name)}"></iframe>`)
     : isImg(f) ? `<div class="vimg"><img src="${esc(f.url)}" alt="${esc(f.name)}"></div>`
     : `<div class="vnone">이 파일은 화면에서 바로 볼 수 없는 형식입니다.<br><a class="btn" href="${esc(f.url)}?download=${encodeURIComponent(f.name)}">${esc(f.name)} 내려받기</a></div>`;
-  openModal(`${modalHead(`${stCard(c.status)} ${esc(c.title)}`)}
+  openModal(`${modalHead(`${isShare(c) ? '' : stCard(c.status)} ${esc(c.title)}`)}
     <div class="cv">
       <div class="cvmain" id="cvMain">
         <div class="cvbar">${rs.length > 1 ? `<span class="rvs">${rs.map(x => `<button class="lchip ${x.no === r.no ? 'on' : ''}" data-rev="${x.no}" title="${esc(x.by || '')} · ${fmtDateTime(x.at)}">${x.no}차</button>`).join('')}</span>` : ''}
@@ -286,7 +284,7 @@ function openCard(id, rev, file){
         <div class="cvview">${view}</div>
       </div>
       <aside class="cvside">
-        <div class="cvmeta">${tag(c.kind || '기타', '#f1f5f9', '#334155')} <span class="hint">${esc(p.name || '')}</span></div>
+        <div class="cvmeta"><span class="hint"># ${esc(p.name || '')}</span></div>
         <div class="cvby">${who(c.created_by)}<span class="hint">${fmtDateTime(c.created_at)} 올림</span></div>
         ${c.memo ? `<div class="cvmemo">${linkify(c.memo)}</div>` : ''}
         <div id="cvExtra">${cardExtraHtml(c)}</div>
@@ -319,9 +317,9 @@ async function freshCard(id){
 /* 카드 창 오른쪽: 결정 기록(상태 + 한 줄 + 이유)과 댓글 */
 function cardExtraHtml(c){
   const ds = decsOf(c.project_id).filter(d => d.card_id === c.id), cm = c.comments || [];
-  return `<div class="cvsec" style="margin-top:0;border-top:0;padding-top:0">결정 기록</div>
+  return `<div class="cvsec" style="margin-top:0;border-top:0;padding-top:0">결정 기록 <span class="hint" style="font-weight:400">(회의에서 정한 것이 있을 때만)</span></div>
     <div class="decbox">
-      <div class="kpick">${DEC_STATUSES.map(st => `<button type="button" class="lchip ${c.status === st ? 'cur' : ''}" data-ds="${st}">${st}</button>`).join('')}</div>
+      <div class="kpick">${DEC_STATUSES.map(st => `<button type="button" class="lchip ${c.status === st ? 'cur' : ''}" data-ds="${st}">${st === '참고 자료' ? '공유만 (결정 없음)' : st}</button>`).join('')}</div>
       <input id="dBody" maxlength="300" placeholder="결정 한 줄 (예: A안으로 확정. 상표 등록 가능 여부 확인하기)">
       <input id="dReason" maxlength="300" placeholder="이유 (선택)">
       <div class="drow2"><span class="hint">상태를 고르고 한 줄 적은 뒤 Enter</span><button class="btn sm primary" id="dSave">결정 기록</button></div>
@@ -356,7 +354,7 @@ async function recordDecision(id, st, body, reason){
   if (!body && st === c.status) return false;
   if (body) await saveRow('project_decisions', { id: uid(), project_id: c.project_id, card_id: c.id, status: st, body, reason: reason || null, decided_at: todayStr(), created_by: me, created_at: nowIso(), updated_by: me });
   if (st !== c.status) { const f = await freshCard(id); await saveRow('project_cards', { ...f, status: st, updated_by: me }); }
-  toast(body ? '결정을 기록했습니다' : `상태를 "${st}"(으)로 바꿨습니다`);
+  toast(body ? '결정을 기록했습니다' : `상태를 "${stLabel(st)}"(으)로 바꿨습니다`);
   return true;
 }
 async function saveDecision(id){   // 카드 창 오른쪽의 결정 기록 상자
@@ -372,8 +370,8 @@ function openQuickDec(id){
   const c = CARDS().find(x => x.id === id); if (!c) return;
   let st = c.status === '결정 대기' ? '승인' : '';
   openModal(`${modalHead('결정 기록')}
-    <div class="mb"><div><b>${esc(c.title)}</b> <span class="hint">지금 상태: ${esc(c.status)}</span></div>
-      <div class="f"><label>어떻게 정했나요?</label><div class="kpick qdpick">${DEC_STATUSES.map(x => `<button type="button" class="lchip" data-qs="${x}">${x}</button>`).join('')}</div></div>
+    <div class="mb"><div><b>${esc(c.title)}</b> <span class="hint">지금 상태: ${esc(stLabel(c.status))}</span></div>
+      <div class="f"><label>어떻게 정했나요?</label><div class="kpick qdpick">${DEC_STATUSES.map(x => `<button type="button" class="lchip" data-qs="${x}">${x === '참고 자료' ? '공유만 (결정 없음)' : x}</button>`).join('')}</div></div>
       <div class="f"><label>결정 한 줄</label><input id="qBody" maxlength="300" placeholder="예: A안으로 확정. 상표 등록 가능 여부 확인하기"></div>
       <div class="f"><label>이유 (선택)</label><input id="qReason" maxlength="300" placeholder="예: 단가가 가장 낮고 납기가 빠름"></div>
       <div class="hint">승인·보류·반려는 결정 한 줄이 필요합니다. 자료를 보면서 정하려면 <a href="#" id="qOpen">카드 열기</a></div></div>
@@ -394,7 +392,7 @@ function refreshCardSide(id){
   box.innerHTML = cardExtraHtml(c);
   Object.entries(vals).forEach(([k, v]) => { const i = $('#' + k); if (i) i.value = v; });
   bindCardExtra(c);
-  const h = document.querySelector('#modal .mh h2'); if (h) h.innerHTML = `${stCard(c.status)} ${esc(c.title)}`;
+  const h = document.querySelector('#modal .mh h2'); if (h) h.innerHTML = `${isShare(c) ? '' : stCard(c.status)} ${esc(c.title)}`;
   if (keepId) { const i = $('#' + keepId); if (i) { i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch {} } }
 }
 /* 대화에 결정도 한 줄로 */
@@ -449,9 +447,9 @@ function agendaHtml(){
     <div class="slt" style="padding:6px 16px"><span class="hint">모든 채널에서 결정을 기다리는 자료입니다. 카드를 누르면 자료가 열리고, <b>결정 대기 ▾</b>를 누르면 바로 결정을 적을 수 있습니다.</span></div>
     <div class="slscroll" id="tscroll"><div class="slpad">${groups.length ? groups.map(g => `<div class="agp"><div class="agh"><a class="agn" data-goto="${g.p.id}"># ${esc(g.p.name)}</a><span class="hint">${g.p.owner ? '리더 ' + esc(fullName(g.p.owner)) + ' · ' : ''}결정 대기 ${g.cards.length}건</span></div>
       ${g.cards.map(c => { const fs = cardFiles(c), img = fs.find(isImg), d = daysAgo(cardLastAt(c)), n = revsOf(c).length; return `<div class="agc" data-card="${c.id}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}
-        <div class="ai"><b>${esc(c.title)}</b>${n > 1 ? ` <span class="rv">${n}차</span>` : ''}<div class="am">${esc(c.kind || '기타')} · ${esc(c.created_by || '')} · ${d === 0 ? '오늘' : d + '일 전'} 올림${(c.comments || []).length ? ` · 💬 ${c.comments.length}` : ''}</div>${c.memo ? `<div class="at">${esc(c.memo)}</div>` : ''}</div>
+        <div class="ai"><b>${esc(c.title)}</b>${n > 1 ? ` <span class="rv">${n}차</span>` : ''}<div class="am">${esc(c.created_by || '')} · ${d === 0 ? '오늘' : d + '일 전'} 올림${(c.comments || []).length ? ` · 💬 ${c.comments.length}` : ''}</div>${c.memo ? `<div class="at">${esc(c.memo)}</div>` : ''}</div>
         <button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; }).join('')}</div>`).join('')
-      : `<div class="slempty"><div class="big">결정을 기다리는 자료가 없습니다 👍</div>팀원이 자료 카드를 <b>결정 대기</b>로 올리면 여기에 프로젝트별로 모입니다.</div>`}</div></div>`;
+      : `<div class="slempty"><div class="big">결정을 기다리는 자료가 없습니다 👍</div>자료를 올릴 때 <b>결정 필요</b>에 체크한 것만 여기에 프로젝트별로 모입니다.</div>`}</div></div>`;
 }
 function bindAgenda(){
   document.querySelectorAll('#tscroll .agc[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card));
@@ -580,7 +578,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .tkcard[hidden]{display:none}
   .tkcard .tl{font-weight:700;color:#92400e}
   .tkcard input{flex:1;min-width:160px;border:1px solid var(--line2);border-radius:6px;padding:4px 8px;font:inherit;font-size:13px}
-  .tkcard select{border:1px solid var(--line2);border-radius:6px;padding:4px 6px;font:inherit;font-size:13px;background:var(--bg)}
+  .tkcard .need{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;width:auto;font-weight:400;color:var(--fg)}
   .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;max-width:1500px}
   .ccard{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .ccard:hover{box-shadow:var(--shadow);border-color:var(--line2)}
