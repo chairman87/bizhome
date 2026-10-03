@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032029">
-<script src="common.js?v=202610032029"></script>
+<link rel="stylesheet" href="common.css?v=202610032040">
+<script src="common.js?v=202610032040"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -203,6 +203,7 @@ function render(){
     ${editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
+      if (d.href === 'projects' && !editing) return projectDept(d, c);   // 프로젝트 폴더: 프로젝트가 자동으로 나열됨
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
       return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}" ${editing ? 'draggable="true"' : ''}>
         <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
@@ -238,6 +239,17 @@ function render(){
   document.querySelectorAll('[data-dmove]').forEach(b => b.onclick = () => moveItem(b.dataset.dmove, Number(b.dataset.dir)));
   const da = $('#deptAdd'); if (da) da.onclick = () => openDept(null);
   if (editing) bindMenuDrag();
+}
+/* 프로젝트 폴더(menu 의 폴더 줄에 href='projects'): 페이지를 따로 등록하지 않아도 진행 중인 프로젝트가 나열되고, 누르면 그 프로젝트의 기록 화면으로 바로 감 */
+function projectDept(d, c){
+  const list = (DATA.projects || []).filter(p => p.status !== '완료').sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const done = (DATA.projects || []).length - list.length;
+  return `<section class="dept" style="background:${c.bg}" data-dept="${d.id}">
+    <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${list.length}</span></h2>
+    ${list.map(p => `<a class="pg" href="projects.html?p=${p.id}"><span class="ic">🗂️</span><span class="t">${esc(p.name)}</span>${p.status === '보류' ? '<span class="soon">보류</span>' : ''}</a>`).join('')}
+    ${done ? `<a class="pg na" href="projects.html"><span class="ic">📦</span><span class="t">완료한 프로젝트 ${done}개</span></a>` : ''}
+    <a class="addpg" href="projects.html#new" style="display:block;text-decoration:none">＋ 새 프로젝트</a>
+  </section>`;
 }
 /* 메뉴 편집 중 끌어서 옮기기: 폴더는 다른 폴더의 왼쪽/오른쪽 절반에, 페이지는 다른 페이지의 위/아래 절반이나 폴더의 빈 곳(맨 끝)에 놓음 */
 function bindMenuDrag(){
@@ -379,7 +391,7 @@ function openDept(id){
   document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { color = b.dataset.c; document.querySelectorAll('[data-c]').forEach(x => x.style.borderColor = x.dataset.c === color ? DEPT_COLORS[x.dataset.c].tagFg : 'transparent'); });
   const save = async () => {
     const name = $('#dName').value.trim(); if (!name) { $('#dName').focus(); toast('부서 이름을 입력하세요', true); return; }
-    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: null, sort_order: d ? d.sort_order : depts().length, created_at: d ? d.created_at : nowIso() };
+    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: d ? d.href || null : null, sort_order: d ? d.sort_order : depts().length, created_at: d ? d.created_at : nowIso() };
     closeModal();
     await saveRow('menu', n);
     toast(d ? '저장했습니다' : '부서를 추가했습니다');
@@ -532,7 +544,7 @@ function openGoalEdit(){
   };
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms'], render });
 </script>
 </body>
 </html>

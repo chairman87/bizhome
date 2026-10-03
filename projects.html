@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>프로젝트 관리</title>
+<title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032029">
-<script src="common.js?v=202610032029"></script>
+<link rel="stylesheet" href="common.css?v=202610032040">
+<script src="common.js?v=202610032040"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -79,9 +79,15 @@
   .cl-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--green)}
   /* 기록 (자료·견적·결정이 올린 순서대로 쌓이는 곳) */
   .logwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;max-width:1200px}
-  .dropbar{display:block;width:100%;border:2px dashed var(--line2);border-radius:10px;background:var(--bg2);padding:14px;text-align:center;font-size:15px;font-weight:600;color:var(--fg)}
-  .dropbar span{display:block;font-size:12px;font-weight:400;color:var(--fg3);margin-top:2px}
-  .dropbar:hover,.logwrap.drag .dropbar{border-color:var(--blue);background:#f5f9ff;color:var(--blue)}
+  .composer{border:1px solid var(--line2);border-radius:10px;background:var(--bg);padding:10px 12px;display:grid;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .composer:focus-within{border-color:var(--blue);outline:2px solid #bfdbfe}
+  .logwrap.drag .composer{border:2px dashed var(--blue);background:#f5f9ff}
+  .composer textarea{border:0;outline:0;resize:vertical;min-height:44px;width:100%;font-size:14px;line-height:1.6;background:transparent;padding:2px}
+  .composer .crow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .composer .crow .sp{flex:1}
+  .composer .crow input[type=date]{border:1px solid var(--line2);border-radius:var(--radius);padding:3px 6px;font-size:12px;color:var(--fg2);background:var(--bg)}
+  .composer .attach .hint{display:none}
+  .composer .attach .hint.up{display:inline}
   .lchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:12px 0}
   .lchip{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:3px 12px;font-size:13px;color:var(--fg2)}
   .lchip:hover{background:var(--bg2)}
@@ -150,8 +156,12 @@ const P = () => DATA.projects || [];
 const I = () => DATA.project_items || [];
 const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
 const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
-let cur = LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
-let tab = LS.get('proj_tab') || 'log';
+let QP = new URLSearchParams(location.search).get('p') || '';   // 홈의 프로젝트 폴더에서 누르면 projects.html?p=프로젝트id 로 들어옴 → 그 프로젝트의 기록을 바로 엶
+let cur = QP || LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
+let tab = QP ? 'log' : (LS.get('proj_tab') || 'log');
+let composing = false, renderWaiting = false, openedNew = false;   // 한글을 조합하는 중에 화면을 다시 그리면 글자가 깨지므로 조합이 끝날 때까지 미룸
+document.addEventListener('compositionstart', () => { composing = true; });
+document.addEventListener('compositionend', () => { composing = false; if (renderWaiting) { renderWaiting = false; setTimeout(render, 0); } });
 let collapsed = {};
 const isDone = it => it.status === '완료';
 const isOver = it => !isDone(it) && it.status !== '보류' && it.due_date && it.due_date < todayStr();
@@ -180,13 +190,15 @@ function normalize(table, r){ if (table === 'project_logs') return { ...r, kind:
 
 /* ---------- 화면 ---------- */
 function render(){
+  if (composing && cur && $('#composer') && $('#app').contains(document.activeElement)) { renderWaiting = true; return; }
+  if (location.hash === '#new' && !openedNew && DATA.projects) { openedNew = true; history.replaceState(null, '', location.pathname); cur = ''; QP = ''; renderList(); openProject(null); return; }
   const p = P().find(x => x.id === cur);
   if (!p) { cur = ''; renderList(); return; }
   renderProject(p);
 }
 function renderList(){
   const list = P().slice().sort((a, b) => (a.status === '완료') - (b.status === '완료') || String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리' }) + `<main class="wrap">
+  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트' }) + `<main class="wrap">
     ${!DATA.projects || !DATA.project_items ? `<div class="empty">프로젝트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="newP">＋ 새 프로젝트</button><span class="count">${list.length}개</span></div>
     ${list.length ? `<div class="pgrid">${list.map(p => { const its = itemsOf(p.id), over = its.filter(isOver).length, pct = pctOf(p.id), lg = logsOf(p.id); return `<div class="pcard" data-open="${p.id}">
@@ -205,8 +217,8 @@ function renderProject(p){
   const tabs = [{ key: 'log', label: '기록' }, null, { key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
   if (!tabs.some(t => t && t.key === tab)) tab = 'log';
   // 화면을 다시 그려도(다른 사람이 올리면 자동으로 다시 그림) 쓰던 칸에 커서가 남도록 기억
-  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.lc ? `[data-lc="${ae.dataset.lc}"]` : ae && ae.id === 'lq' ? '#lq' : '';
-  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리', tabs, active: tab }) + `<main class="wrap wrap-wide">
+  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.lc ? `[data-lc="${ae.dataset.lc}"]` : ae && (ae.id === 'lq' || ae.id === 'cBody') ? '#' + ae.id : '';
+  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트', tabs, active: tab }) + `<main class="wrap wrap-wide">
     <div class="phead"><button class="btn sm" id="backBtn">‹ 목록</button><h2>${esc(p.name)}</h2>${stP(p.status)}<span class="meta">${p.start_date ? fmtDate(p.start_date) : '?'} ~ ${p.target_date ? fmtDate(p.target_date) : '?'}${p.owner ? ' · 총괄 ' + esc(fullName(p.owner)) : ''}</span><span style="flex:1"></span><button class="btn sm" id="editP">프로젝트 설정</button></div>
     ${p.goal ? `<div class="hint" style="margin:-6px 0 12px;white-space:pre-wrap">${esc(p.goal)}</div>` : ''}
     ${tab === 'log' ? logHtml(p) : `<div class="stats">
@@ -218,7 +230,7 @@ function renderProject(p){
     <div id="view">${tab === 'gantt' ? ganttHtml(p) : tab === 'checks' ? checksHtml(p) : processHtml(p)}</div>`}
   </main>`;
   bindHeader(k => { tab = k; LS.set('proj_tab', k); render(); }, null, m => `담당 항목 ${its.filter(x => x.assignee === m.name && !isDone(x)).length}건`);
-  $('#backBtn').onclick = () => { cur = ''; LS.set('proj_cur', ''); render(); };
+  $('#backBtn').onclick = () => { cur = ''; LS.set('proj_cur', ''); if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); };
   $('#editP').onclick = () => openProject(p.id);
   if (tab !== 'log') { bindView(p); return; }
   bindLog(p);
@@ -231,7 +243,13 @@ function logHtml(p){
   const all = logsOf(p.id), decided = all.filter(l => l.kind === '결정');
   return `<div class="logwrap" id="logwrap">
     <div>
-      <button class="dropbar" id="logNew">＋ 자료 올리기<span>파일을 이 화면에 끌어다 놓거나, 캡처한 뒤 Ctrl+V 로 붙여넣어도 됩니다</span></button>
+      <div class="composer" id="composer">
+        <textarea id="cBody" maxlength="4000" placeholder="파일을 끌어다 놓고 한마디 적으세요. 예: 부자재 단가는 아직 포함 안 했습니다. 오면 다시 올릴 예정">${esc(getComp(p.id).text)}</textarea>
+        ${getComp(p.id).box.html}
+        <div class="crow"><div class="kpick">${Object.keys(KINDS).map(k => `<button type="button" class="lchip" data-ckind="${k}">${k}</button>`).join('')}</div>
+          <input type="date" id="cDate" value="${esc(getComp(p.id).date)}" title="예전에 받은 자료는 받은 날짜로 바꿔서 올리면 그 날짜 자리에 들어갑니다">
+          <span class="sp"></span><span class="hint">Enter 올리기 · Shift+Enter 줄바꿈 · 캡처는 Ctrl+V</span><button class="btn primary" id="cSend">올리기</button></div>
+      </div>
       <div class="lchips"><button class="lchip ${lkind ? '' : 'on'}" data-lk="">전체<span class="n">${all.length}</span></button>${Object.keys(KINDS).map(k => `<button class="lchip ${lkind === k ? 'on' : ''}" data-lk="${k}">${k}<span class="n">${all.filter(l => l.kind === k).length}</span></button>`).join('')}
         <input type="search" id="lq" placeholder="검색 (내용, 파일 이름, 댓글)" value="${esc(lq)}"></div>
       <div id="lfeed">${logFeedHtml(p)}</div>
@@ -244,7 +262,7 @@ function logHtml(p){
 function logFeedHtml(p){
   const s = lq.trim().toLowerCase();
   const list = logsOf(p.id).filter(l => (!lkind || l.kind === lkind) && (!s || [l.body, l.created_by, ...l.files.map(f => f.name), ...l.comments.map(c => c.text)].some(v => (v || '').toLowerCase().includes(s))));
-  if (!list.length) return `<div class="empty">${s || lkind ? '해당하는 기록이 없습니다.' : '아직 올린 자료가 없습니다.<br>제조사에서 받은 견적서·자료를 받은 대로 올려 두면, 나중에 카톡을 뒤지지 않아도 됩니다.'}</div>`;
+  if (!list.length) return `<div class="empty">${s || lkind ? '해당하는 기록이 없습니다.' : '아직 올린 자료가 없습니다.<br>받은 견적서·자료를 위 칸에 끌어다 놓고 한마디 적어 올려 보세요.'}</div>`;
   let last = null;
   return list.map(l => {
     const day = logDay(l), head = day === last ? '' : `<div class="lday">${dayLabel(day)}</div>`; last = day;
@@ -258,9 +276,36 @@ function logFeedHtml(p){
     </article>`;
   }).join('');
 }
+/* 입력칸에 쓰던 글·붙인 파일은 화면이 다시 그려져도 남도록 프로젝트별로 기억 */
+const comps = {};
+function getComp(pid){ return comps[pid] || (comps[pid] = { text: '', kind: '', date: todayStr(), busy: 0, box: attachBox('cFiles', [], 'projects', { rename: true }) }); }
+const compKind = c => c.kind || (c.box.files.length ? '자료' : '메모');   // 종류를 안 고르면: 파일이 있으면 자료, 글만 있으면 메모
+function bindBox(p){
+  const c = getComp(p.id); c.box.bind(); c.el = $('#cFiles');
+  const add0 = c.box.add;
+  c.box.add = async list => { c.busy++; try { await add0(list); } finally { c.busy--; } if ($('#cFiles') && $('#cFiles') !== c.el) bindBox(p); if (c.paint) c.paint(); };   // 올리는 사이 화면이 다시 그려졌으면 새 칸에 다시 연결
+}
+async function sendLog(p){
+  const c = getComp(p.id);
+  if (c.busy) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
+  const body = c.text.trim();
+  if (!body && !c.box.files.length) { $('#cBody').focus(); return; }
+  const row = { id: uid(), project_id: p.id, kind: compKind(c), body: body || null, log_date: c.date || todayStr(), files: [...c.box.files], comments: [], created_by: me, created_at: nowIso(), updated_by: me };
+  delete comps[p.id];
+  await saveRow('project_logs', row);
+  const b = $('#cBody'); if (b) b.focus();
+}
 function bindLog(p){
-  const nb = $('#logNew'); if (!nb) return;
-  nb.onclick = () => openLog(p, null);
+  if (!$('#composer')) return;
+  const c = getComp(p.id), body = $('#cBody');
+  bindBox(p);
+  const paintKind = () => { const k = compKind(c); document.querySelectorAll('[data-ckind]').forEach(b => b.classList.toggle('on', b.dataset.ckind === k)); };
+  c.paint = paintKind; paintKind();
+  document.querySelectorAll('[data-ckind]').forEach(b => b.onclick = () => { c.kind = b.dataset.ckind; paintKind(); body.focus(); });
+  body.oninput = () => { c.text = body.value; };
+  body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendLog(p); } };   // 한글 조합 중 Enter 는 무시
+  $('#cDate').onchange = () => { c.date = $('#cDate').value || todayStr(); };
+  $('#cSend').onclick = () => sendLog(p);
   document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { lkind = b.dataset.lk; render(); });
   const fq = $('#lq'); fq.oninput = () => { lq = fq.value; $('#lfeed').innerHTML = logFeedHtml(p); bindFeed(p); };
   document.querySelectorAll('[data-goto]').forEach(d => d.onclick = () => { if (lkind || lq) { lkind = ''; lq = ''; render(); } const el = document.getElementById('lg-' + d.dataset.goto); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } });
@@ -279,8 +324,8 @@ function bindFeed(p){
   });
   document.querySelectorAll('[data-cdel2]').forEach(b => b.onclick = async () => { const [lid, cid] = b.dataset.cdel2.split('|'); const l = L().find(x => x.id === lid); if (l && confirm('이 댓글을 삭제할까요?')) await saveRow('project_logs', { ...l, comments: l.comments.filter(c => c.id !== cid), updated_by: me }); });
 }
-/* 올리기·수정 창. dropped: 화면에 끌어다 놓거나 붙여넣은 파일(창을 열면서 바로 올림) */
-function openLog(p, id, dropped){
+/* 기록 수정 창 (새로 올리는 것은 화면 위 입력칸에서) */
+function openLog(p, id){
   const l = id ? L().find(x => x.id === id) : null;
   let kind = l ? l.kind : (lkind || '자료');
   const at = attachBox('lFiles', l ? l.files : [], 'projects', { rename: true });
@@ -294,7 +339,6 @@ function openLog(p, id, dropped){
   const paintKind = () => { document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('on', b.dataset.kind === kind)); $('#lBody').placeholder = KIND_HINT[kind]; };
   document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { kind = b.dataset.kind; paintKind(); $('#lBody').focus(); });
   paintKind(); at.bind(); $('#lBody').focus();
-  if (dropped && dropped.length) at.add(dropped);
   const save = async () => {
     if ($('#lFiles .up')) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
     const body = $('#lBody').value.trim();
@@ -307,7 +351,7 @@ function openLog(p, id, dropped){
   $('#lBody').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } };
   const del = $('#lDel'); if (del) del.onclick = async () => { if (confirm('이 기록을 삭제할까요?')) { closeModal(); await removeRow('project_logs', l.id); toast('삭제했습니다'); } };
 }
-/* 기록 탭에서는 화면 어디에든 파일을 끌어다 놓거나 붙여넣으면 올리기 창이 열림 */
+/* 기록 탭에서는 화면 어디에든 파일을 끌어다 놓거나 붙여넣으면 위쪽 입력칸에 붙음 */
 const logProject = () => tab === 'log' && DATA.project_logs && !$('#modal').innerHTML ? P().find(x => x.id === cur) : null;
 const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
 document.addEventListener('dragover', e => { if (!hasFiles(e) || !$('#logwrap')) return; e.preventDefault(); if (logProject()) $('#logwrap').classList.add('drag'); });
@@ -316,9 +360,10 @@ document.addEventListener('drop', e => {
   if (!hasFiles(e) || !$('#logwrap')) return;
   $('#logwrap').classList.remove('drag');
   const p = logProject(); if (!p) { if (!(e.target.closest && e.target.closest('.modal'))) e.preventDefault(); return; }   // 창이 열려 있으면 그 창의 첨부칸이 처리
-  e.preventDefault(); openLog(p, null, [...e.dataTransfer.files]);
+  if (e.defaultPrevented) return;   // 입력칸의 첨부칸이 이미 받았음
+  e.preventDefault(); getComp(p.id).box.add([...e.dataTransfer.files]); window.scrollTo({ top: 0, behavior: 'smooth' });
 });
-document.addEventListener('paste', e => { const p = logProject(), fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (!p || !fs.length) return; e.preventDefault(); openLog(p, null, fs); });
+document.addEventListener('paste', e => { const p = logProject(), fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (!p || !fs.length || e.defaultPrevented) return; e.preventDefault(); getComp(p.id).box.add(fs); });
 
 /* 프로세스 (단계별 목록) */
 function processHtml(p){
@@ -496,7 +541,7 @@ function openItem(id){
   $('#iDel').onclick = async () => { if (confirm(`"${it.title}" 을(를) 삭제할까요?`)) { closeModal(); await removeRow('project_items', it.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🗂️', title: '프로젝트 관리', tables: ['projects', 'project_items', 'project_logs'], render, normalize });
+boot({ icon: '🗂️', title: '프로젝트', tables: ['projects', 'project_items', 'project_logs'], render, normalize });
 </script>
 </body>
 </html>
