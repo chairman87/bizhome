@@ -29,10 +29,10 @@ function chHeadHtml(p){
   const mem = (Array.isArray(p.members) ? p.members : []).filter(n => n !== p.owner);
   return `<div class="chinfo">
     <div class="chrow"><span class="lb">리더</span>${p.owner ? who(p.owner) : '<span class="hint">미정</span>'}
-      ${mem.length ? `<span class="lb">참여</span>${mem.map(n => who(n)).join('')}` : ''}${agoHtml(p.id)}</div>
-    ${p.nas_path ? `<div class="chrow nas"><span class="lb">📁 NAS</span><code id="nasPath">${esc(p.nas_path)}</code><button class="btn sm" id="nasCopy">복사</button><span class="hint">탐색기 주소창에 붙여넣으면 열립니다</span></div>` : ''}
-    <div class="pin"><div class="ph">📌 현재 상태 · 다음 할 일<span class="by">${p.summary_at ? esc(p.summary_by || '') + ' · ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}</span><button class="btn sm" id="sumEdit">${p.summary ? '수정' : '적기'}</button></div>
-      <div class="pt ${p.summary ? '' : 'ph0'}">${p.summary ? linkify(p.summary) : '지금 어디까지 왔고 다음에 무엇을 할지 리더가 짧게 적어 두는 곳입니다. 몇 주 뒤에 열어도 여기만 보면 따라잡을 수 있게.'}</div></div>
+      ${mem.length ? `<span class="lb" title="${esc(mem.join(', '))}">참여 ${mem.length}명</span>` : ''}
+      ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}
+      ${p.summary ? '' : '<button class="btn sm" id="sumEdit">📌 현재 상태 적기</button>'}${agoHtml(p.id)}</div>
+    ${p.summary ? `<div class="pin"><span class="pi">📌</span><div class="pt">${linkify(p.summary)}</div><button class="btn sm" id="sumEdit" title="${esc(p.summary_by || '')} · ${p.summary_at ? fmtDateTime(p.summary_at).slice(5) : ''} 수정">수정</button></div>` : ''}
   </div>`;
 }
 function bindChHead(p){
@@ -46,6 +46,80 @@ function bindChHead(p){
     $('#sumSave').onclick = async () => { const v = $('#sumText').value.trim(); closeModal(); await saveRow('projects', { ...p, summary: v || null, summary_by: me, summary_at: nowIso() }); toast('저장했습니다'); };
   };
 }
+
+/* ---------- 대화 탭 (채널 첫 화면): 메시지·자료 카드·수정본·댓글·결정이 올린 순서대로 위에서 아래로 쌓임 ----------
+   맨 아래 입력칸에 글만 쓰면 메시지(project_logs), 파일을 붙이면 자료 카드(project_cards)로 올라감 */
+let talkLimit = 60, talkStick = true;
+function talkEvents(p){
+  const ev = [];
+  (DATA.project_logs || []).filter(l => l.project_id === p.id).forEach(l => ev.push({ at: l.created_at, by: l.created_by, type: 'msg', log: l }));
+  cardsOf(p.id).forEach(c => {
+    ev.push({ at: c.created_at, by: c.created_by, type: 'card', card: c, rev: revsOf(c)[0] });
+    revsOf(c).slice(1).forEach(r => ev.push({ at: r.at, by: r.by, type: 'rev', card: c, rev: r }));
+    (c.comments || []).forEach(m => ev.push({ at: m.at, by: m.by, type: 'cmt', card: c, cmt: m }));
+  });
+  if (typeof talkExtraEvents === 'function') talkExtraEvents(p, ev);
+  return ev.filter(e => e.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div>${stCard(c.status)}</div>`; };
+function talkHtml(p){
+  if (!DATA.project_cards) return cardsHtml(p);
+  const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
+  let last = '';
+  const rows = list.map(e => {
+    const day = fmtDateTime(e.at).slice(0, 10), head = day === last ? '' : `<div class="tday"><span>${dayLabel(day.replace(/\//g, '-'))}</span></div>`; last = day;
+    const body = e.type === 'msg' ? `${e.log.body ? `<div class="mt">${linkify(e.log.body)}</div>` : ''}${filesHtml(e.log.files)}`
+      : e.type === 'card' ? `${e.card.memo ? `<div class="mt">${linkify(e.card.memo)}</div>` : ''}${cardChip(e.card, e.rev)}`
+      : e.type === 'rev' ? `<div class="mt sys">${e.rev.no}차 수정본을 올렸습니다${e.rev.memo ? ' — ' + esc(e.rev.memo) : ''}</div>${cardChip(e.card, e.rev)}`
+      : e.type === 'cmt' ? `<div class="mt"><span class="re" data-card="${e.card.id}">↳ ${esc(e.card.title)}</span> ${linkify(e.cmt.text || '')}</div>`
+      : (e.html || '');
+    const del = e.type === 'msg' && (e.by === me || isAdmin()) ? `<button class="mx" data-mdel="${e.log.id}" title="메시지 삭제">✕</button>` : '';
+    return head + `<div class="msg">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
+  }).join('');
+  return `<div class="talk" id="logwrap">
+    <div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
+      ${rows || `<div class="empty">아직 기록이 없습니다.<br>아래 칸에 한마디 적거나, 제안서·견적서 파일을 끌어다 놓아 보세요. 파일을 붙이면 <b>자료 카드</b>로 올라갑니다.</div>`}</div>
+    <div class="talkbox composer" id="composer">
+      <div class="tkcard" id="tkCard" hidden><span class="tl">📑 자료 카드로 올라갑니다</span><input id="tkTitle" maxlength="120" placeholder="자료 제목 (비우면 파일 이름)" value="${esc(comp.title || '')}">
+        <select id="tkKind">${CARD_KINDS.map(k => `<option ${(comp.ckind || '제안서') === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
+        <span class="kpick"><button type="button" class="lchip" data-ts="결정 대기">결정 대기</button><button type="button" class="lchip" data-ts="참고 자료">참고 자료</button></span></div>
+      <textarea id="cBody" maxlength="4000" placeholder="메시지를 적으세요. 파일을 끌어다 놓거나 캡처를 Ctrl+V 로 붙이면 자료 카드로 올라갑니다">${esc(comp.text)}</textarea>
+      ${comp.box.html}
+      <div class="crow"><span class="hint">Enter 보내기 · Shift+Enter 줄바꿈</span><span class="sp"></span><button class="btn primary" id="cSend">보내기</button></div>
+    </div>
+  </div>`;
+}
+async function sendTalk(p){
+  const c = getComp(p.id);
+  if (c.busy) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
+  const text = c.text.trim(), files = [...c.box.files];
+  if (!text && !files.length) { $('#cBody').focus(); return; }
+  delete comps[p.id]; talkStick = true;
+  if (files.length) {   // 파일이 있으면 자료 카드
+    const title = (c.title || '').trim() || files[0].name.replace(/\.\w+$/, '');
+    await saveRow('project_cards', { id: uid(), project_id: p.id, title, kind: c.ckind || '제안서', memo: text || null, status: c.cstatus || '결정 대기', revisions: [{ no: 1, memo: '', files, by: me, at: nowIso() }], comments: [], created_by: me, created_at: nowIso(), updated_by: me });
+  } else await saveRow('project_logs', { id: uid(), project_id: p.id, kind: '메모', body: text, log_date: todayStr(), files: [], comments: [], created_by: me, created_at: nowIso(), updated_by: me });
+  const b = $('#cBody'); if (b) b.focus();
+}
+function bindTalk(p){
+  if (!$('#composer')) { bindCards(p); return; }
+  const c = getComp(p.id), body = $('#cBody');
+  bindBox(p);
+  const paint = () => { const on = c.box.files.length > 0; const k = $('#tkCard'); if (!k) return; k.hidden = !on; document.querySelectorAll('[data-ts]').forEach(b => b.classList.toggle('on', b.dataset.ts === (c.cstatus || '결정 대기'))); };
+  c.paint = paint; paint();
+  document.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { c.cstatus = b.dataset.ts; paint(); });
+  $('#tkTitle').oninput = () => { c.title = $('#tkTitle').value; };
+  $('#tkKind').onchange = () => { c.ckind = $('#tkKind').value; };
+  body.oninput = () => { c.text = body.value; body.style.height = 'auto'; body.style.height = Math.min(220, body.scrollHeight) + 'px'; };
+  body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendTalk(p); } };   // 한글 조합 중 Enter 는 무시
+  $('#cSend').onclick = () => sendTalk(p);
+  const more = $('#talkMore'); if (more) more.onclick = () => { talkLimit += 100; talkStick = false; render(); };
+  document.querySelectorAll('.talk [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
+  document.querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { if (confirm('이 메시지를 삭제할까요?')) { talkStick = false; await removeRow('project_logs', b.dataset.mdel); } });
+  if (typeof bindTalkExtra === 'function') bindTalkExtra(p);
+  if (talkStick) window.scrollTo(0, document.body.scrollHeight);   // 새로 열었거나 맨 아래를 보고 있었으면 최신 글이 보이게
+}
+window.addEventListener('scroll', () => { talkStick = window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }, { passive: true });
 
 /* ---------- 자료 카드 탭 ---------- */
 function cardsHtml(p){
@@ -174,19 +248,45 @@ function openCard(id, rev, file){
 
 /* ---------- 채널 화면에 쓰는 모양 ---------- */
 document.head.insertAdjacentHTML('beforeend', `<style>
-  .chinfo{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 14px;margin:-2px 0 14px;display:grid;gap:8px;max-width:1200px}
+  .chinfo{margin:-4px 0 10px;display:grid;gap:6px;max-width:980px}
   .chrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
   .chrow .lb{font-size:12px;color:var(--fg3);margin-right:2px}
   .chrow .lb:not(:first-child){margin-left:10px}
   .ago{margin-left:auto;font-size:12px;color:var(--fg2);background:var(--bg2);border-radius:999px;padding:2px 10px;white-space:nowrap}
   .ago.old{background:#fee2e2;color:#b91c1c;font-weight:600}
   .ago.none{color:var(--fg3)}
-  .chrow.nas code{font-family:Consolas,"Malgun Gothic",monospace;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:2px 8px;word-break:break-all}
-  .pin{border:1px solid #fde68a;background:#fffbea;border-radius:8px;padding:8px 12px}
-  .pin .ph{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#92400e;margin-bottom:4px}
-  .pin .ph .by{font-weight:400;color:var(--fg3);margin-left:auto}
-  .pin .pt{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:14px}
-  .pin .pt.ph0{color:var(--fg3);font-size:13px}
+  .pin{border:1px solid #fde68a;background:#fffbea;border-radius:8px;padding:6px 10px;display:flex;align-items:flex-start;gap:8px}
+  .pin .pt{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;line-height:1.55;font-size:13px}
+  .talk{max-width:980px}
+  .tfeed{padding-bottom:6px}
+  .tday{display:flex;align-items:center;gap:10px;margin:14px 0 6px;font-size:12px;font-weight:700;color:var(--fg2)}
+  .tday::before,.tday::after{content:"";flex:1;height:1px;background:var(--line)}
+  .msg{display:flex;gap:10px;padding:6px 8px;border-radius:8px}
+  .msg:hover{background:var(--bg2)}
+  .msg > .av{width:34px;height:34px;font-size:15px;flex:none;margin-top:2px}
+  .msg .mb2{flex:1;min-width:0}
+  .msg .mh2{display:flex;align-items:baseline;gap:8px;font-size:14px}
+  .msg .mh2 .tm{font-size:11px;color:var(--fg3)}
+  .msg .mx{margin-left:auto;border:0;background:transparent;color:var(--fg3);font-size:12px;visibility:hidden}
+  .msg:hover .mx{visibility:visible}
+  .msg .mt{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:14px}
+  .msg .mt.sys{color:var(--fg2);font-size:13px}
+  .msg .mt .re{color:var(--blue);cursor:pointer;font-size:13px}
+  .msg .files{margin-top:6px}
+  .cchip{display:flex;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);padding:8px 12px;margin-top:6px;max-width:460px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .cchip:hover{border-color:var(--blue);box-shadow:var(--shadow)}
+  .cchip img{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+  .cchip .ic{font-size:28px;line-height:1;flex:none}
+  .cchip .ci{flex:1;min-width:0;display:flex;flex-direction:column}
+  .cchip .ci b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cchip .ci span{font-size:12px;color:var(--fg3)}
+  .talkbox{position:sticky;bottom:8px;margin-top:10px;z-index:5}
+  .talkbox textarea{min-height:40px;max-height:220px}
+  .tkcard{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fffbea;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;font-size:12px}
+  .tkcard[hidden]{display:none}
+  .tkcard .tl{font-weight:700;color:#92400e}
+  .tkcard input{flex:1;min-width:160px;border:1px solid var(--line2);border-radius:6px;padding:4px 8px;font:inherit;font-size:13px}
+  .tkcard select{border:1px solid var(--line2);border-radius:6px;padding:4px 6px;font:inherit;font-size:13px;background:var(--bg)}
   .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;max-width:1500px}
   .ccard{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .ccard:hover{box-shadow:var(--shadow);border-color:var(--line2)}

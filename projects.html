@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032147">
-<script src="common.js?v=202610032147"></script>
-<script src="channel.js?v=202610032147"></script>
+<link rel="stylesheet" href="common.css?v=202610032152">
+<script src="common.js?v=202610032152"></script>
+<script src="channel.js?v=202610032152"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -162,7 +162,7 @@ const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
 const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
 let QP = new URLSearchParams(location.search).get('p') || '';   // 홈의 프로젝트 폴더에서 누르면 projects.html?p=프로젝트id 로 들어옴 → 그 프로젝트의 기록을 바로 엶
 let cur = QP || LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
-let tab = QP ? 'cards' : (LS.get('proj_tab') || 'cards');
+let tab = QP ? 'talk' : (LS.get('proj_tab') || 'talk');
 const QCARD = new URLSearchParams(location.search).get('card') || ''; let openedCard = false;   // projects.html?p=…&card=… 로 들어오면 그 카드를 바로 엶
 let composing = false, renderWaiting = false, openedNew = false;   // 한글을 조합하는 중에 화면을 다시 그리면 글자가 깨지므로 조합이 끝날 때까지 미룸
 document.addEventListener('compositionstart', () => { composing = true; });
@@ -224,20 +224,20 @@ function renderList(){
   </main>`;
   bindHeader(() => {}, null, m => `담당 항목 ${I().filter(x => x.assignee === m.name && !isDone(x)).length}건`);
   const nb = $('#newP'); if (nb) nb.onclick = () => openProject(null);
-  document.querySelectorAll('[data-open]').forEach(c => c.onclick = () => { cur = c.dataset.open; LS.set('proj_cur', cur); tab = 'cards'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; lkind = ''; lq = ''; render(); });
+  document.querySelectorAll('[data-open]').forEach(c => c.onclick = () => { cur = c.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; lkind = ''; lq = ''; render(); });
 }
 function renderProject(p){
   const its = itemsOf(p.id), over = its.filter(isOver), pct = pctOf(p.id), mine = its.filter(x => x.assignee === me && !isDone(x)).length;
   const pend = cardsOf(p.id).filter(c => c.status === '결정 대기').length;
-  const tabs = [{ key: 'cards', label: '자료 카드', badge: pend }, ...(logsOf(p.id).length ? [{ key: 'log', label: '기록(예전)' }] : []), null, { key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
-  if (!tabs.some(t => t && t.key === tab)) tab = 'cards';
+  const tabs = [{ key: 'talk', label: '대화' }, { key: 'cards', label: '자료 카드', badge: pend }, null, { key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
+  if (!tabs.some(t => t && t.key === tab)) tab = 'talk';
   // 화면을 다시 그려도(다른 사람이 올리면 자동으로 다시 그림) 쓰던 칸에 커서가 남도록 기억
-  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.lc ? `[data-lc="${ae.dataset.lc}"]` : ae && (ae.id === 'lq' || ae.id === 'cBody') ? '#' + ae.id : '';
+  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.lc ? `[data-lc="${ae.dataset.lc}"]` : ae && (ae.id === 'lq' || ae.id === 'cBody' || ae.id === 'tkTitle') ? '#' + ae.id : '';
   $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트', tabs, active: tab }) + `<main class="wrap wrap-wide">
     <div class="phead"><button class="btn sm" id="backBtn">‹ 목록</button><h2>${esc(p.name)}</h2>${stP(p.status)}<span class="meta">${p.start_date ? fmtDate(p.start_date) : '?'} ~ ${p.target_date ? fmtDate(p.target_date) : '?'}</span><span style="flex:1"></span><button class="btn sm" id="editP">프로젝트 설정</button></div>
     ${p.goal ? `<div class="hint" style="margin:-6px 0 12px;white-space:pre-wrap">${esc(p.goal)}</div>` : ''}
     ${chHeadHtml(p)}
-    ${tab === 'cards' ? cardsHtml(p) : tab === 'log' ? logHtml(p) : `<div class="stats">
+    ${tab === 'talk' ? talkHtml(p) : tab === 'cards' ? cardsHtml(p) : `<div class="stats">
       <div class="stat"><div class="l">진행률</div><div class="v">${pct}%</div><span class="bar ${pct === 100 ? 'done' : ''}"><i style="width:${pct}%"></i></span></div>
       <div class="stat"><div class="l">항목</div><div class="v">${its.length}</div><div class="hint">완료 ${its.filter(isDone).length} · 진행중 ${its.filter(x => x.status === '진행중').length} · 예정 ${its.filter(x => x.status === '예정').length}</div></div>
       <div class="stat"><div class="l">마감 지남</div><div class="v ${over.length ? 'red' : ''}">${over.length}</div><div class="hint">${over.length ? over.slice(0, 2).map(x => esc(x.title)).join(', ') : '없음'}</div></div>
@@ -249,9 +249,10 @@ function renderProject(p){
   $('#backBtn').onclick = () => { cur = ''; LS.set('proj_cur', ''); if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); };
   $('#editP').onclick = () => openProject(p.id);
   bindChHead(p);
-  if (tab === 'cards') { bindCards(p); if (QCARD && !openedCard) { openedCard = true; openCard(QCARD); } return; }
-  if (tab !== 'log') { bindView(p); return; }
-  bindLog(p);
+  if (QCARD && !openedCard && (tab === 'talk' || tab === 'cards')) { openedCard = true; setTimeout(() => openCard(QCARD), 0); }
+  if (tab === 'cards') { bindCards(p); return; }
+  if (tab !== 'talk') { bindView(p); return; }
+  bindTalk(p);
   const k = keep && $(keep); if (k) { k.focus(); try { k.setSelectionRange(k.value.length, k.value.length); } catch {} }
 }
 
@@ -370,7 +371,7 @@ function openLog(p, id){
   const del = $('#lDel'); if (del) del.onclick = async () => { if (confirm('이 기록을 삭제할까요?')) { closeModal(); await removeRow('project_logs', l.id); toast('삭제했습니다'); } };
 }
 /* 기록 탭에서는 화면 어디에든 파일을 끌어다 놓거나 붙여넣으면 위쪽 입력칸에 붙음 */
-const logProject = () => tab === 'log' && DATA.project_logs && !$('#modal').innerHTML ? P().find(x => x.id === cur) : null;
+const logProject = () => tab === 'talk' && DATA.project_logs && !$('#modal').innerHTML ? P().find(x => x.id === cur) : null;
 const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
 document.addEventListener('dragover', e => { if (!hasFiles(e) || !$('#logwrap')) return; e.preventDefault(); if (logProject()) $('#logwrap').classList.add('drag'); });
 document.addEventListener('dragleave', e => { if (!e.relatedTarget && $('#logwrap')) $('#logwrap').classList.remove('drag'); });
@@ -379,7 +380,7 @@ document.addEventListener('drop', e => {
   $('#logwrap').classList.remove('drag');
   const p = logProject(); if (!p) { if (!(e.target.closest && e.target.closest('.modal'))) e.preventDefault(); return; }   // 창이 열려 있으면 그 창의 첨부칸이 처리
   if (e.defaultPrevented) return;   // 입력칸의 첨부칸이 이미 받았음
-  e.preventDefault(); getComp(p.id).box.add([...e.dataTransfer.files]); window.scrollTo({ top: 0, behavior: 'smooth' });
+  e.preventDefault(); getComp(p.id).box.add([...e.dataTransfer.files]);
 });
 document.addEventListener('paste', e => { const p = logProject(), fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (!p || !fs.length || e.defaultPrevented) return; e.preventDefault(); getComp(p.id).box.add(fs); });
 
@@ -520,7 +521,7 @@ function openProject(id){
       for (const [ph, items] of TEMPLATES[tplName]) for (const t of items) { await store.upsert('project_items', { id: uid(), project_id: row.id, phase: ph, title: t, status: '예정', checklist: [], sort_order: k++, created_by: me, created_at: nowIso(), updated_at: nowIso() }); }
       await reload();
     }
-    cur = row.id; LS.set('proj_cur', cur); if (!p) tab = 'cards'; render();
+    cur = row.id; LS.set('proj_cur', cur); if (!p) tab = 'talk'; render();
     toast(p ? '저장했습니다' : '프로젝트를 만들었습니다');
   };
   const del = $('#pDel'); if (del) del.onclick = async () => { const n = itemsOf(p.id).length, ln = logsOf(p.id).length; if (!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n할 일 ${n}개, 자료 카드 ${cardsOf(p.id).length}건, 기록 ${ln}건도 함께 삭제됩니다.`)) return; closeModal(); for (const it of itemsOf(p.id)) await removeRow('project_items', it.id); for (const l of logsOf(p.id)) await removeRow('project_logs', l.id); for (const c of cardsOf(p.id)) await removeRow('project_cards', c.id); for (const d of DECS().filter(x => x.project_id === p.id)) await removeRow('project_decisions', d.id); await removeRow('projects', p.id); cur = ''; render(); toast('삭제했습니다'); };
