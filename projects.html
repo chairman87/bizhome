@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032001">
-<script src="common.js?v=202610032001"></script>
+<link rel="stylesheet" href="common.css?v=202610032029">
+<script src="common.js?v=202610032029"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -77,6 +77,46 @@
   .cl-row{display:flex;gap:6px;align-items:center;margin-bottom:4px}
   .cl-row input[type=text]{flex:1;border:1px solid var(--line2);border-radius:4px;padding:4px 8px;font:inherit;font-size:13px}
   .cl-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--green)}
+  /* 기록 (자료·견적·결정이 올린 순서대로 쌓이는 곳) */
+  .logwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;max-width:1200px}
+  .dropbar{display:block;width:100%;border:2px dashed var(--line2);border-radius:10px;background:var(--bg2);padding:14px;text-align:center;font-size:15px;font-weight:600;color:var(--fg)}
+  .dropbar span{display:block;font-size:12px;font-weight:400;color:var(--fg3);margin-top:2px}
+  .dropbar:hover,.logwrap.drag .dropbar{border-color:var(--blue);background:#f5f9ff;color:var(--blue)}
+  .lchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  .lchip{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:3px 12px;font-size:13px;color:var(--fg2)}
+  .lchip:hover{background:var(--bg2)}
+  .lchip.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+  .lchip .n{opacity:.7;font-size:11px;margin-left:3px}
+  .lchips input[type=search]{border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px;min-width:160px;margin-left:6px}
+  .lday{font-size:12px;font-weight:700;color:var(--fg2);margin:16px 2px 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .lday:first-child{margin-top:0}
+  .lg{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 14px;margin-bottom:8px}
+  .lg.k-결정{border-color:#86efac;background:#f6fef9}
+  .lg.flash{outline:2px solid var(--blue)}
+  .lg .lh{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg2);margin-bottom:4px}
+  .lg .lh .sp{flex:1}
+  .lg .lh button{border:0;background:transparent;color:var(--fg3);font-size:12px;padding:0 4px;border-radius:4px}
+  .lg .lh button:hover{background:var(--bg3);color:var(--fg)}
+  .lg .lb{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:14px}
+  .lg .lb a{word-break:break-all}
+  .lg .files{margin-top:8px}
+  .lg .lcs{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line)}
+  .lg .lc{font-size:13px;padding:2px 0;display:flex;gap:6px;align-items:baseline}
+  .lg .lc .tx{flex:1;white-space:pre-wrap;word-break:break-word}
+  .lg .lc b{font-weight:600;white-space:nowrap}
+  .lg .lc .at{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .lg .lc button{border:0;background:transparent;color:var(--fg3);font-size:11px;padding:0 3px}
+  .lg .lcin{width:100%;border:1px solid transparent;border-radius:4px;padding:4px 6px;font:inherit;font-size:13px;background:var(--bg2);margin-top:2px}
+  .lg .lcin:focus{border-color:var(--blue);outline:2px solid #bfdbfe;background:#fff}
+  .lside{position:sticky;top:64px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;max-height:calc(100vh - 90px);overflow:auto}
+  .lside h4{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .lside h4 .n{font-weight:400;color:var(--fg3)}
+  .lside .ld{font-size:13px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer;line-height:1.45;word-break:break-word}
+  .lside .ld:hover{color:var(--blue)}
+  .lside .ld .d{display:block;font-size:11px;color:var(--fg3)}
+  .kpick{display:flex;gap:6px;flex-wrap:wrap}
+  #lBody{min-height:90px}
+  @media (max-width:900px){ .logwrap{grid-template-columns:1fr} .lside{display:none} }
   @media (max-width:720px){ .it{grid-template-columns:24px 1fr 90px;} .it .as,.it .mv{display:none} }
 </style>
 </head>
@@ -90,7 +130,19 @@
    프로젝트 관리 — 프로젝트(예: 화장품 브랜드 런칭) 안에 단계별 할 일 · 일정 · 체크 사항
    projects: { name, goal, status, start_date, target_date, owner, memo, checks:[{id,text,done,by,at}] }
    project_items: { project_id, phase, title, assignee, start_date, due_date, status, note, checklist:[{text,done}], sort_order }
+   project_logs: { project_id, kind(견적/자료/결정/메모), body, log_date, files:[…], comments:[{id,by,text,at}] }
+     — "기록" 탭. 제조사 견적서·자료를 받은 대로 올리고 짧게 적어 두는 곳. 대화는 카톡에서 하고 자료와 결론만 여기에 남김
 ================================================================ */
+const KINDS = { '견적': ['#fef3c7','#92400e'], '자료': ['#dbeafe','#1d4ed8'], '결정': ['#dcfce7','#15803d'], '메모': ['#e9e9e7','#5a5a55'] };
+const KIND_HINT = { '견적': '예: A제조사 2차 견적. 단가 3,200 → 2,950원, 최소 3천 개', '자료': '예: 성분표·시험성적서 (제조사 10/1 전달)', '결정': '예: 용량 30ml 로 확정. 50ml 는 단가 +400원이라 제외', '메모': '예: 용기 샘플 다음 주 화요일 도착 예정' };
+const L = () => DATA.project_logs || [];
+const logDay = l => l.log_date || (l.created_at || '').slice(0, 10);
+const logsOf = pid => L().filter(x => x.project_id === pid).sort((a, b) => logDay(b).localeCompare(logDay(a)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const firstLine = l => (l.body || ((l.files || [])[0] || {}).name || '').split('\n')[0];
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+const dayLabel = s => { const d = parseYmd(s); return d ? `${fmtDate(s)} (${WEEKDAYS[d.getDay()]})${s === todayStr() ? ' · 오늘' : ''}` : '날짜 없음'; };
+let lkind = '', lq = '';      // 기록 탭: 고른 종류, 검색어
+const cDraft = {};            // 쓰다 만 댓글 (화면이 다시 그려져도 남김)
 const PST = { '진행중': ['#dbeafe','#1d4ed8'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
 const IST = { '예정': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
 const ISTATUSES = Object.keys(IST);
@@ -99,7 +151,7 @@ const I = () => DATA.project_items || [];
 const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
 const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
 let cur = LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
-let tab = LS.get('proj_tab') || 'process';
+let tab = LS.get('proj_tab') || 'log';
 let collapsed = {};
 const isDone = it => it.status === '완료';
 const isOver = it => !isDone(it) && it.status !== '보류' && it.due_date && it.due_date < todayStr();
@@ -110,6 +162,7 @@ const cmtN = it => (it.checklist || []).length ? `<span class="chk">☑ ${(it.ch
 
 /* 새 프로젝트에 넣을 수 있는 기본 프로세스 */
 const TEMPLATES = {
+  '넣지 않음 (기록만 사용)': [],
   '화장품 브랜드 런칭': [
     ['기획', ['브랜드 컨셉·타깃 정리', '제품 라인업·가격 정하기', '경쟁 제품 조사', '예산·일정 확정']],
     ['제품 개발', ['제조사(OEM/ODM) 선정', '샘플 요청·테스트', '성분·처방 확정', '용기·부자재 선정']],
@@ -122,7 +175,8 @@ const TEMPLATES = {
   ],
   '빈 프로젝트': [['1단계', []]],
 };
-function normalize(table, r){ return table === 'projects' ? { ...r, status: PST[r.status] ? r.status : '진행중', checks: Array.isArray(r.checks) ? r.checks : [], phases: Array.isArray(r.phases) ? r.phases : [] } : { ...r, status: ISTATUSES.includes(r.status) ? r.status : '예정', checklist: Array.isArray(r.checklist) ? r.checklist : [] }; }
+function normalize(table, r){ if (table === 'project_logs') return { ...r, kind: KINDS[r.kind] ? r.kind : '자료', files: Array.isArray(r.files) ? r.files : [], comments: Array.isArray(r.comments) ? r.comments : [] };
+  return table === 'projects' ? { ...r, status: PST[r.status] ? r.status : '진행중', checks: Array.isArray(r.checks) ? r.checks : [], phases: Array.isArray(r.phases) ? r.phases : [] } : { ...r, status: ISTATUSES.includes(r.status) ? r.status : '예정', checklist: Array.isArray(r.checklist) ? r.checklist : [] }; }
 
 /* ---------- 화면 ---------- */
 function render(){
@@ -135,36 +189,136 @@ function renderList(){
   $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리' }) + `<main class="wrap">
     ${!DATA.projects || !DATA.project_items ? `<div class="empty">프로젝트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="newP">＋ 새 프로젝트</button><span class="count">${list.length}개</span></div>
-    ${list.length ? `<div class="pgrid">${list.map(p => { const its = itemsOf(p.id), over = its.filter(isOver).length, pct = pctOf(p.id); return `<div class="pcard" data-open="${p.id}">
+    ${list.length ? `<div class="pgrid">${list.map(p => { const its = itemsOf(p.id), over = its.filter(isOver).length, pct = pctOf(p.id), lg = logsOf(p.id); return `<div class="pcard" data-open="${p.id}">
       <h3>${esc(p.name)} ${stP(p.status)}</h3>
       ${p.goal ? `<div class="goal">${esc(p.goal)}</div>` : ''}
-      <div class="meta"><span class="bar ${pct === 100 ? 'done' : ''}" style="width:140px"><i style="width:${pct}%"></i></span><span class="pct">${pct}% (${its.filter(isDone).length}/${its.length})</span>
+      <div class="meta"><span>📎 기록 ${lg.length}건${lg.length ? ` · 최근 ${fmtDate(logDay(lg[0])).slice(5)}` : ''}</span>${its.length ? `<span class="bar ${pct === 100 ? 'done' : ''}" style="width:90px"><i style="width:${pct}%"></i></span><span class="pct">${pct}% (${its.filter(isDone).length}/${its.length})</span>` : ''}
         ${over ? `<span style="color:var(--red);font-weight:600">지연 ${over}</span>` : ''}${p.target_date ? `<span>목표 ${fmtDate(p.target_date)}${dayDiff(p.target_date) >= 0 && p.status !== '완료' ? ` (D-${dayDiff(p.target_date)})` : ''}</span>` : ''}${p.owner ? who(p.owner) : ''}</div>
     </div>`; }).join('')}</div>` : '<div class="empty">아직 프로젝트가 없습니다. <b>＋ 새 프로젝트</b>로 시작하세요.</div>'}`}
   </main>`;
   bindHeader(() => {}, null, m => `담당 항목 ${I().filter(x => x.assignee === m.name && !isDone(x)).length}건`);
   const nb = $('#newP'); if (nb) nb.onclick = () => openProject(null);
-  document.querySelectorAll('[data-open]').forEach(c => c.onclick = () => { cur = c.dataset.open; LS.set('proj_cur', cur); render(); });
+  document.querySelectorAll('[data-open]').forEach(c => c.onclick = () => { cur = c.dataset.open; LS.set('proj_cur', cur); tab = 'log'; LS.set('proj_tab', tab); lkind = ''; lq = ''; render(); });
 }
 function renderProject(p){
   const its = itemsOf(p.id), over = its.filter(isOver), pct = pctOf(p.id), mine = its.filter(x => x.assignee === me && !isDone(x)).length;
-  const tabs = [{ key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
+  const tabs = [{ key: 'log', label: '기록' }, null, { key: 'process', label: '프로세스' }, { key: 'gantt', label: '일정' }, { key: 'checks', label: '체크 사항', badge: (p.checks || []).filter(c => !c.done).length }];
+  if (!tabs.some(t => t && t.key === tab)) tab = 'log';
+  // 화면을 다시 그려도(다른 사람이 올리면 자동으로 다시 그림) 쓰던 칸에 커서가 남도록 기억
+  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.lc ? `[data-lc="${ae.dataset.lc}"]` : ae && ae.id === 'lq' ? '#lq' : '';
   $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트 관리', tabs, active: tab }) + `<main class="wrap wrap-wide">
     <div class="phead"><button class="btn sm" id="backBtn">‹ 목록</button><h2>${esc(p.name)}</h2>${stP(p.status)}<span class="meta">${p.start_date ? fmtDate(p.start_date) : '?'} ~ ${p.target_date ? fmtDate(p.target_date) : '?'}${p.owner ? ' · 총괄 ' + esc(fullName(p.owner)) : ''}</span><span style="flex:1"></span><button class="btn sm" id="editP">프로젝트 설정</button></div>
     ${p.goal ? `<div class="hint" style="margin:-6px 0 12px;white-space:pre-wrap">${esc(p.goal)}</div>` : ''}
-    <div class="stats">
+    ${tab === 'log' ? logHtml(p) : `<div class="stats">
       <div class="stat"><div class="l">진행률</div><div class="v">${pct}%</div><span class="bar ${pct === 100 ? 'done' : ''}"><i style="width:${pct}%"></i></span></div>
       <div class="stat"><div class="l">항목</div><div class="v">${its.length}</div><div class="hint">완료 ${its.filter(isDone).length} · 진행중 ${its.filter(x => x.status === '진행중').length} · 예정 ${its.filter(x => x.status === '예정').length}</div></div>
       <div class="stat"><div class="l">마감 지남</div><div class="v ${over.length ? 'red' : ''}">${over.length}</div><div class="hint">${over.length ? over.slice(0, 2).map(x => esc(x.title)).join(', ') : '없음'}</div></div>
       <div class="stat"><div class="l">이번 주 마감</div><div class="v ${its.filter(x => !isDone(x) && x.due_date && dayDiff(x.due_date) >= 0 && dayDiff(x.due_date) <= 7).length ? 'orange' : ''}">${its.filter(x => !isDone(x) && x.due_date && dayDiff(x.due_date) >= 0 && dayDiff(x.due_date) <= 7).length}</div><div class="hint">내 담당 미완료 ${mine}건</div></div>
     </div>
-    <div id="view">${tab === 'gantt' ? ganttHtml(p) : tab === 'checks' ? checksHtml(p) : processHtml(p)}</div>
+    <div id="view">${tab === 'gantt' ? ganttHtml(p) : tab === 'checks' ? checksHtml(p) : processHtml(p)}</div>`}
   </main>`;
   bindHeader(k => { tab = k; LS.set('proj_tab', k); render(); }, null, m => `담당 항목 ${its.filter(x => x.assignee === m.name && !isDone(x)).length}건`);
   $('#backBtn').onclick = () => { cur = ''; LS.set('proj_cur', ''); render(); };
   $('#editP').onclick = () => openProject(p.id);
-  bindView(p);
+  if (tab !== 'log') { bindView(p); return; }
+  bindLog(p);
+  const k = keep && $(keep); if (k) { k.focus(); try { k.setSelectionRange(k.value.length, k.value.length); } catch {} }
 }
+
+/* ---------- 기록 (자료·견적·결정) ---------- */
+function logHtml(p){
+  if (!DATA.project_logs) return `<div class="empty">기록 저장 표가 아직 없습니다.${isAdmin() ? ' <b>sql-project-logs.sql</b> 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
+  const all = logsOf(p.id), decided = all.filter(l => l.kind === '결정');
+  return `<div class="logwrap" id="logwrap">
+    <div>
+      <button class="dropbar" id="logNew">＋ 자료 올리기<span>파일을 이 화면에 끌어다 놓거나, 캡처한 뒤 Ctrl+V 로 붙여넣어도 됩니다</span></button>
+      <div class="lchips"><button class="lchip ${lkind ? '' : 'on'}" data-lk="">전체<span class="n">${all.length}</span></button>${Object.keys(KINDS).map(k => `<button class="lchip ${lkind === k ? 'on' : ''}" data-lk="${k}">${k}<span class="n">${all.filter(l => l.kind === k).length}</span></button>`).join('')}
+        <input type="search" id="lq" placeholder="검색 (내용, 파일 이름, 댓글)" value="${esc(lq)}"></div>
+      <div id="lfeed">${logFeedHtml(p)}</div>
+    </div>
+    <aside class="lside"><h4>✅ 결정된 것 <span class="n">${decided.length}</span></h4>
+      ${decided.map(l => `<div class="ld" data-goto="${l.id}"><span class="d">${fmtDate(logDay(l))}</span>${esc(firstLine(l))}</div>`).join('') || '<div class="hint">정한 것이 생기면 종류를 <b>결정</b>으로 올리세요. 여기에 모여서, 나중에 "왜 그렇게 했지?"를 바로 찾을 수 있습니다.</div>'}
+    </aside>
+  </div>`;
+}
+function logFeedHtml(p){
+  const s = lq.trim().toLowerCase();
+  const list = logsOf(p.id).filter(l => (!lkind || l.kind === lkind) && (!s || [l.body, l.created_by, ...l.files.map(f => f.name), ...l.comments.map(c => c.text)].some(v => (v || '').toLowerCase().includes(s))));
+  if (!list.length) return `<div class="empty">${s || lkind ? '해당하는 기록이 없습니다.' : '아직 올린 자료가 없습니다.<br>제조사에서 받은 견적서·자료를 받은 대로 올려 두면, 나중에 카톡을 뒤지지 않아도 됩니다.'}</div>`;
+  let last = null;
+  return list.map(l => {
+    const day = logDay(l), head = day === last ? '' : `<div class="lday">${dayLabel(day)}</div>`; last = day;
+    const mine = l.created_by === me || isAdmin(), sameDay = (l.created_at || '').slice(0, 10) === day || fmtDateTime(l.created_at).slice(0, 10).replace(/\//g, '-') === day;
+    return head + `<article class="lg k-${l.kind}" id="lg-${l.id}">
+      <div class="lh">${tag(l.kind, ...KINDS[l.kind])}${who(l.created_by)}<span>${sameDay ? fmtDateTime(l.created_at).slice(11) : '올린 날 ' + fmtDateTime(l.created_at).slice(5, 10)}</span><span class="sp"></span>${mine ? `<button data-ledit="${l.id}">수정</button>` : ''}</div>
+      ${l.body ? `<div class="lb">${linkify(l.body)}</div>` : ''}
+      ${filesHtml(l.files)}
+      <div class="lcs">${l.comments.map(c => `<div class="lc"><b>${esc(c.by || '')}</b><span class="tx">${linkify(c.text || '')}</span><span class="at">${fmtDateTime(c.at).slice(5)}</span>${c.by === me || isAdmin() ? `<button data-cdel2="${l.id}|${c.id}" title="댓글 삭제">✕</button>` : ''}</div>`).join('')}
+        <input class="lcin" data-lc="${l.id}" placeholder="댓글 입력 후 Enter" maxlength="500" value="${esc(cDraft[l.id] || '')}"></div>
+    </article>`;
+  }).join('');
+}
+function bindLog(p){
+  const nb = $('#logNew'); if (!nb) return;
+  nb.onclick = () => openLog(p, null);
+  document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { lkind = b.dataset.lk; render(); });
+  const fq = $('#lq'); fq.oninput = () => { lq = fq.value; $('#lfeed').innerHTML = logFeedHtml(p); bindFeed(p); };
+  document.querySelectorAll('[data-goto]').forEach(d => d.onclick = () => { if (lkind || lq) { lkind = ''; lq = ''; render(); } const el = document.getElementById('lg-' + d.dataset.goto); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } });
+  bindFeed(p);
+}
+function bindFeed(p){
+  document.querySelectorAll('[data-ledit]').forEach(b => b.onclick = () => openLog(p, b.dataset.ledit));
+  document.querySelectorAll('[data-lc]').forEach(inp => {
+    inp.oninput = () => { cDraft[inp.dataset.lc] = inp.value; };
+    inp.onkeydown = async e => {
+      if (e.key !== 'Enter' || e.isComposing) return;   // 한글 조합 중 Enter 는 무시 (마지막 글자가 두 번 들어가는 것 방지)
+      const t = inp.value.trim(), l = L().find(x => x.id === inp.dataset.lc); if (!t || !l) return;
+      delete cDraft[l.id]; inp.value = '';
+      await saveRow('project_logs', { ...l, comments: [...l.comments, { id: uid(), by: me, text: t, at: nowIso() }], updated_by: me });
+    };
+  });
+  document.querySelectorAll('[data-cdel2]').forEach(b => b.onclick = async () => { const [lid, cid] = b.dataset.cdel2.split('|'); const l = L().find(x => x.id === lid); if (l && confirm('이 댓글을 삭제할까요?')) await saveRow('project_logs', { ...l, comments: l.comments.filter(c => c.id !== cid), updated_by: me }); });
+}
+/* 올리기·수정 창. dropped: 화면에 끌어다 놓거나 붙여넣은 파일(창을 열면서 바로 올림) */
+function openLog(p, id, dropped){
+  const l = id ? L().find(x => x.id === id) : null;
+  let kind = l ? l.kind : (lkind || '자료');
+  const at = attachBox('lFiles', l ? l.files : [], 'projects', { rename: true });
+  openModal(`${modalHead(l ? '기록 수정' : `자료 올리기 — ${esc(p.name)}`)}
+    <div class="mb">
+      <div class="f"><label>종류</label><div class="kpick">${Object.keys(KINDS).map(k => `<button type="button" class="lchip" data-kind="${k}">${k}</button>`).join('')}</div></div>
+      <div class="f"><label>한 줄 설명 (무엇인지, 핵심 숫자)</label><textarea id="lBody" maxlength="4000">${esc(l ? l.body || '' : '')}</textarea>${at.html}</div>
+      <div class="f"><label>날짜</label><input type="date" id="lDate" value="${esc(l ? logDay(l) : todayStr())}" style="max-width:180px"><div class="hint">예전에 받은 자료는 받은 날짜로 바꿔서 올리면 그 날짜 자리에 들어갑니다.</div></div>
+    </div>
+    <div class="mf">${l ? '<button class="btn danger left" id="lDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="lSave">${l ? '저장' : '올리기'}</button></div>`, { wide: true });
+  const paintKind = () => { document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('on', b.dataset.kind === kind)); $('#lBody').placeholder = KIND_HINT[kind]; };
+  document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { kind = b.dataset.kind; paintKind(); $('#lBody').focus(); });
+  paintKind(); at.bind(); $('#lBody').focus();
+  if (dropped && dropped.length) at.add(dropped);
+  const save = async () => {
+    if ($('#lFiles .up')) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
+    const body = $('#lBody').value.trim();
+    if (!body && !at.files.length) { $('#lBody').focus(); toast('설명을 적거나 파일을 첨부하세요', true); return; }
+    const row = { id: l ? l.id : uid(), project_id: p.id, kind, body: body || null, log_date: $('#lDate').value || todayStr(), files: at.files, comments: l ? l.comments : [],
+      created_by: l ? l.created_by : me, created_at: l ? l.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('project_logs', row); toast(l ? '저장했습니다' : '올렸습니다');
+  };
+  $('#lSave').onclick = save;
+  $('#lBody').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } };
+  const del = $('#lDel'); if (del) del.onclick = async () => { if (confirm('이 기록을 삭제할까요?')) { closeModal(); await removeRow('project_logs', l.id); toast('삭제했습니다'); } };
+}
+/* 기록 탭에서는 화면 어디에든 파일을 끌어다 놓거나 붙여넣으면 올리기 창이 열림 */
+const logProject = () => tab === 'log' && DATA.project_logs && !$('#modal').innerHTML ? P().find(x => x.id === cur) : null;
+const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+document.addEventListener('dragover', e => { if (!hasFiles(e) || !$('#logwrap')) return; e.preventDefault(); if (logProject()) $('#logwrap').classList.add('drag'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget && $('#logwrap')) $('#logwrap').classList.remove('drag'); });
+document.addEventListener('drop', e => {
+  if (!hasFiles(e) || !$('#logwrap')) return;
+  $('#logwrap').classList.remove('drag');
+  const p = logProject(); if (!p) { if (!(e.target.closest && e.target.closest('.modal'))) e.preventDefault(); return; }   // 창이 열려 있으면 그 창의 첨부칸이 처리
+  e.preventDefault(); openLog(p, null, [...e.dataTransfer.files]);
+});
+document.addEventListener('paste', e => { const p = logProject(), fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (!p || !fs.length) return; e.preventDefault(); openLog(p, null, fs); });
 
 /* 프로세스 (단계별 목록) */
 function processHtml(p){
@@ -271,7 +425,7 @@ function openProject(id){
   const d = p || { name: '', goal: '', status: '진행중', start_date: todayStr(), target_date: '', owner: me, memo: '' };
   openModal(`${modalHead(p ? '프로젝트 설정' : '새 프로젝트')}
     <div class="mb">
-      <div class="f"><label>프로젝트 이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 화장품 브랜드 런칭 (OO)" maxlength="80"></div>
+      <div class="f"><label>프로젝트 이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 바이세라 레몬타치온" maxlength="80"></div>
       <div class="f"><label>목표 · 설명</label><textarea id="pGoal" placeholder="무엇을 언제까지 어떻게">${esc(d.goal || '')}</textarea></div>
       <div class="f3">
         <div class="f"><label>시작일</label><input type="date" id="pStart" value="${esc(d.start_date || '')}"></div>
@@ -279,7 +433,7 @@ function openProject(id){
         <div class="f"><label>상태</label><select id="pStatus">${Object.keys(PST).map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="f"><label>총괄 담당</label><select id="pOwner"><option value="">미정</option>${memberOptions(d.owner)}</select></div>
-      ${p ? '' : `<div class="f"><label>기본 프로세스 넣기</label><select id="pTpl">${Object.keys(TEMPLATES).map(t => `<option>${t}</option>`).join('')}</select><div class="hint">"화장품 브랜드 런칭"을 고르면 8단계 32개 항목이 미리 들어갑니다. 필요 없는 것은 지우고, 이름은 더블클릭으로 바꾸면 됩니다.</div></div>`}
+      ${p ? '' : `<div class="f"><label>단계별 할 일(프로세스) 넣기</label><select id="pTpl">${Object.keys(TEMPLATES).map(t => `<option>${t}</option>`).join('')}</select><div class="hint">자료·견적·결정만 쌓아 둘 거면 넣지 않아도 됩니다. "화장품 브랜드 런칭"을 고르면 8단계 32개 항목이 미리 들어갑니다.</div></div>`}
     </div>
     <div class="mf">
       ${p && isAdmin() ? `<button class="btn danger left" id="pDel">프로젝트 삭제</button>` : ''}
@@ -300,10 +454,10 @@ function openProject(id){
       for (const [ph, items] of TEMPLATES[tplName]) for (const t of items) { await store.upsert('project_items', { id: uid(), project_id: row.id, phase: ph, title: t, status: '예정', checklist: [], sort_order: k++, created_by: me, created_at: nowIso(), updated_at: nowIso() }); }
       await reload();
     }
-    cur = row.id; LS.set('proj_cur', cur); tab = 'process'; render();
+    cur = row.id; LS.set('proj_cur', cur); if (!p) tab = 'log'; render();
     toast(p ? '저장했습니다' : '프로젝트를 만들었습니다');
   };
-  const del = $('#pDel'); if (del) del.onclick = async () => { const n = itemsOf(p.id).length; if (!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n항목 ${n}개도 함께 삭제됩니다.`)) return; closeModal(); for (const it of itemsOf(p.id)) await removeRow('project_items', it.id); await removeRow('projects', p.id); cur = ''; render(); toast('삭제했습니다'); };
+  const del = $('#pDel'); if (del) del.onclick = async () => { const n = itemsOf(p.id).length, ln = logsOf(p.id).length; if (!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n항목 ${n}개, 기록 ${ln}건도 함께 삭제됩니다.`)) return; closeModal(); for (const it of itemsOf(p.id)) await removeRow('project_items', it.id); for (const l of logsOf(p.id)) await removeRow('project_logs', l.id); await removeRow('projects', p.id); cur = ''; render(); toast('삭제했습니다'); };
 }
 
 /* ---------- 항목 상세 ---------- */
@@ -342,7 +496,7 @@ function openItem(id){
   $('#iDel').onclick = async () => { if (confirm(`"${it.title}" 을(를) 삭제할까요?`)) { closeModal(); await removeRow('project_items', it.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🗂️', title: '프로젝트 관리', tables: ['projects', 'project_items'], render, normalize });
+boot({ icon: '🗂️', title: '프로젝트 관리', tables: ['projects', 'project_items', 'project_logs'], render, normalize });
 </script>
 </body>
 </html>
