@@ -61,7 +61,7 @@ function talkEvents(p){
   if (typeof talkExtraEvents === 'function') talkExtraEvents(p, ev);
   return ev.filter(e => e.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
-const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div>${stCard(c.status)}</div>`; };
+const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg); return `<div class="cchip" data-card="${c.id}" data-rv="${r ? r.no : ''}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}<div class="ci"><b>${esc(c.title)}</b><span>${esc(c.kind || '기타')}${r && r.no > 1 ? ` · ${r.no}차` : ''} · 파일 ${fs.length}개</span></div><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; };
 function talkHtml(p){
   if (!DATA.project_cards) return cardsHtml(p);
   const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
@@ -115,6 +115,7 @@ function bindTalk(p){
   $('#cSend').onclick = () => sendTalk(p);
   const more = $('#talkMore'); if (more) more.onclick = () => { talkLimit += 100; talkStick = false; render(); };
   document.querySelectorAll('#tscroll [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
+  bindQuickDec();
   document.querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { if (confirm('이 메시지를 삭제할까요?')) { talkStick = false; await removeRow('project_logs', b.dataset.mdel); } });
   if (typeof bindTalkExtra === 'function') bindTalkExtra(p);
 }
@@ -187,7 +188,7 @@ function cardListHtml(p){
   return `<div class="cgrid">${list.map(c => {
     const fs = cardFiles(c), img = fs.find(isImg), n = revsOf(c).length;
     return `<div class="ccard st-${c.status.replace(/\s/g, '')}" data-card="${c.id}">
-      <div class="ct">${stCard(c.status)}<span class="kd">${esc(c.kind || '기타')}</span>${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
+      <div class="ct"><button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button><span class="kd">${esc(c.kind || '기타')}</span>${n > 1 ? `<span class="rv">${n}차</span>` : ''}</div>
       <h3>${esc(c.title)}</h3>
       ${c.memo ? `<div class="cm2">${esc(c.memo)}</div>` : ''}
       <div class="thumb">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : fs.length ? `<span class="doc">${isPdf(fs[0]) ? '📕' : '📄'}</span>` : '<span class="doc none">첨부 없음</span>'}${fs.length ? `<span class="fn">${esc(fs[0].name)}${fs.length > 1 ? ` 외 ${fs.length - 1}개` : ''}</span>` : ''}</div>
@@ -202,7 +203,7 @@ function bindCards(p){
   const q = $('#cardQ'); if (q) q.oninput = () => { cardQ = q.value; $('#cardList').innerHTML = cardListHtml(p); bindCardList(p); };
   bindCardList(p);
 }
-function bindCardList(p){ document.querySelectorAll('[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card)); }
+function bindCardList(p){ document.querySelectorAll('[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card)); bindQuickDec(); }
 
 /* ---------- 카드 올리기 · 수정 ---------- */
 function openCardEdit(p, id){
@@ -339,16 +340,42 @@ function bindCardExtra(c){
   document.querySelectorAll('#cvExtra [data-ddel]').forEach(b => b.onclick = async () => { if (confirm('이 결정 기록을 삭제할까요?\n(카드의 상태는 그대로 둡니다)')) await removeRow('project_decisions', b.dataset.ddel); });
 }
 /* 결정 기록: 상태를 바꾸면서 결정 한 줄과 이유를 남김. 승인·보류·반려는 한 줄이 꼭 있어야 함 */
-async function saveDecision(id){
-  const c = CARDS().find(x => x.id === id); if (!c || !CV) return;
-  const st = CV.ds, body = ($('#dBody') || {}).value.trim(), reason = ($('#dReason') || {}).value.trim();
-  if (!st) { toast('먼저 상태(승인·보류·반려…)를 고르세요', true); return; }
-  if (['승인', '보류', '반려'].includes(st) && !body) { $('#dBody').focus(); toast('결정 한 줄을 적어 주세요', true); return; }
-  if (!body && st === c.status) return;
-  $('#dBody').value = ''; $('#dReason').value = ''; CV.ds = '';
+async function recordDecision(id, st, body, reason){
+  const c = CARDS().find(x => x.id === id); if (!c) return false;
+  if (!st) { toast('먼저 상태(승인·보류·반려…)를 고르세요', true); return false; }
+  if (['승인', '보류', '반려'].includes(st) && !body) { toast('결정 한 줄을 적어 주세요', true); return false; }
+  if (!body && st === c.status) return false;
   if (body) await saveRow('project_decisions', { id: uid(), project_id: c.project_id, card_id: c.id, status: st, body, reason: reason || null, decided_at: todayStr(), created_by: me, created_at: nowIso(), updated_by: me });
   if (st !== c.status) { const f = await freshCard(id); await saveRow('project_cards', { ...f, status: st, updated_by: me }); }
   toast(body ? '결정을 기록했습니다' : `상태를 "${st}"(으)로 바꿨습니다`);
+  return true;
+}
+async function saveDecision(id){   // 카드 창 오른쪽의 결정 기록 상자
+  if (!CV) return;
+  const st = CV.ds, body = ($('#dBody') || {}).value.trim(), reason = ($('#dReason') || {}).value.trim();
+  if (['승인', '보류', '반려'].includes(st) && !body) $('#dBody').focus();
+  const bi = $('#dBody'), ri = $('#dReason'), keep = [bi.value, ri.value]; bi.value = ''; ri.value = ''; CV.ds = '';
+  if (!(await recordDecision(id, st, body, reason))) { const b2 = $('#dBody'), r2 = $('#dReason'); if (b2) b2.value = keep[0]; if (r2) r2.value = keep[1]; if (CV) { CV.ds = st; document.querySelectorAll('[data-ds]').forEach(b => b.classList.toggle('on', b.dataset.ds === st)); } }
+}
+/* 빠른 결정: 대화나 목록에서 카드의 상태 표시(결정 대기 ▾)를 누르면 카드를 열지 않고 바로 결정을 적는 작은 창 */
+function bindQuickDec(){ document.querySelectorAll('[data-qd]').forEach(b => b.onclick = e => { e.stopPropagation(); openQuickDec(b.dataset.qd); }); }
+function openQuickDec(id){
+  const c = CARDS().find(x => x.id === id); if (!c) return;
+  let st = c.status === '결정 대기' ? '승인' : '';
+  openModal(`${modalHead('결정 기록')}
+    <div class="mb"><div><b>${esc(c.title)}</b> <span class="hint">지금 상태: ${esc(c.status)}</span></div>
+      <div class="f"><label>어떻게 정했나요?</label><div class="kpick qdpick">${DEC_STATUSES.map(x => `<button type="button" class="lchip" data-qs="${x}">${x}</button>`).join('')}</div></div>
+      <div class="f"><label>결정 한 줄</label><input id="qBody" maxlength="300" placeholder="예: A안으로 확정. 상표 등록 가능 여부 확인하기"></div>
+      <div class="f"><label>이유 (선택)</label><input id="qReason" maxlength="300" placeholder="예: 단가가 가장 낮고 납기가 빠름"></div>
+      <div class="hint">승인·보류·반려는 결정 한 줄이 필요합니다. 자료를 보면서 정하려면 <a href="#" id="qOpen">카드 열기</a></div></div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="qSave">기록</button></div>`);
+  const paint = () => document.querySelectorAll('[data-qs]').forEach(b => b.classList.toggle('on', b.dataset.qs === st));
+  document.querySelectorAll('[data-qs]').forEach(b => b.onclick = () => { st = b.dataset.qs; paint(); $('#qBody').focus(); });
+  paint(); $('#qBody').focus();
+  const save = async () => { const body = $('#qBody').value.trim(), reason = $('#qReason').value.trim(); if (['승인', '보류', '반려'].includes(st) && !body) { $('#qBody').focus(); toast('결정 한 줄을 적어 주세요', true); return; } if (!st) { toast('상태를 고르세요', true); return; } closeModal(); await recordDecision(id, st, body, reason); };
+  $('#qSave').onclick = save;
+  ['#qBody', '#qReason'].forEach(q => { $(q).onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } }; });
+  $('#qOpen').onclick = e => { e.preventDefault(); closeModal(); openCard(id); };
 }
 /* 카드 창이 열린 채로 내용이 바뀌면(내가 저장했거나 다른 사람이 올렸거나) 오른쪽만 새로 그림 — PDF 보는 화면은 건드리지 않음 */
 function refreshCardSide(id){
@@ -581,6 +608,10 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .drow .dm{font-size:12px;color:var(--fg3);margin-top:3px}
   .drow .dlink{color:#1264a3;cursor:pointer}
   .drow .dlink:hover{text-decoration:underline}
+  .qd{border:1px solid transparent;background:transparent;border-radius:999px;padding:1px 4px 1px 1px;display:inline-flex;align-items:center;gap:2px;cursor:pointer;font:inherit;flex:none}
+  .qd:hover{border-color:var(--line2);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .qd .ar{font-size:10px;color:#616061}
+  .qdpick .lchip.on{background:#15803d;border-color:#15803d;color:#fff}
   .psec{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 8px}
   .psec:first-of-type{margin-top:0}
   @media (max-width:900px){ .modal.xl{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0} .cv{grid-template-columns:1fr;grid-template-rows:minmax(50vh,1fr) auto;overflow:auto} .cvside{border-left:0;border-top:1px solid var(--line)} .ago{margin-left:0} }
