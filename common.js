@@ -462,9 +462,13 @@ function openMembers(counter){
 
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
+  const page = location.pathname.split('/').pop() || 'index.html';   // 왼쪽 위 두 탭: 인트라넷(홈과 그 안의 화면들) / 프로젝트(채널 화면)
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
-    ${home ? `<a class="home" href="index.html" title="홈으로">${BRAND_LOGO}${esc(BRAND.name)}</a>` : ''}
-    <a class="brand ${home ? 'page' : ''}" href="${esc(location.pathname.split('/').pop() || 'index.html')}" title="누르면 새로고침">${title === BRAND.name ? BRAND_LOGO : esc(icon || '') + ' '}${esc(title)}</a>
+    <nav class="sw" title="인트라넷과 프로젝트 사이를 오갑니다">
+      <a class="swt ${page === 'projects.html' ? '' : 'on'}" href="index.html">${BRAND_LOGO}${esc(BRAND.name)}</a>
+      <a class="swt ${page === 'projects.html' ? 'on' : ''}" href="projects.html">🗂️ 프로젝트</a>
+    </nav>
+    ${title === BRAND.name || page === 'projects.html' ? '<span class="swsp"></span>' : `<a class="brand page" href="${esc(page)}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>`}
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}

@@ -21,6 +21,13 @@ a{color:var(--blue)}
 .brand{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;white-space:nowrap;margin-right:8px}
 .brand.page{padding-left:10px;border-left:1px solid var(--line2)}   /* 홈이 아닌 화면의 제목: 인트라넷 글자와 같은 크기·굵기 */
 .logo-sm{width:24px;height:24px;border-radius:7px;display:block;flex:none}
+/* 왼쪽 위 두 탭: 인트라넷 / 프로젝트 (어느 화면에서나 보임) */
+.sw{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px;flex:none}
+.swt{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;color:var(--fg2);text-decoration:none;white-space:nowrap}
+.swt:hover{color:var(--fg)}
+.swt.on{background:var(--bg);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.swt .logo-sm{width:20px;height:20px;border-radius:6px}
+.swsp{margin-right:8px}
 .tabs{display:flex;gap:2px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;align-items:center}
 .tabs::-webkit-scrollbar{display:none}
 .tab{border:0;background:transparent;padding:6px 10px;border-radius:var(--radius);color:var(--fg2);white-space:nowrap;display:flex;align-items:center;gap:4px}
@@ -206,6 +213,7 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 @media (max-width:720px){
   .top{padding:6px 10px;gap:6px;height:auto;flex-wrap:wrap}
   .brand{font-size:15px;margin-right:auto}
+  .swt{padding:4px 9px;font-size:14px}
   .tabs{order:10;flex-basis:100%;border-top:1px solid var(--line);padding-top:4px}
   .conn{display:none}
   .newtxt{display:none}
