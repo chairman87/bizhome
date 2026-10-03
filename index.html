@@ -676,7 +676,30 @@ function openNotice(id){
       <div class="content">${linkify(n.content || '')}</div>
       ${isAdmin() ? `<div class="hint">읽음 ${NREADS(n).length}/${members.length}${members.filter(m => !NREADS(n).includes(m.name)).length ? ` · 안 읽음: ${members.filter(m => !NREADS(n).includes(m.name)).map(m => esc(m.name)).join(', ')}` : ''}</div>` : ''}
     </div>
-    <div class="mf">${isAdmin() ? '<a class="btn left" href="notices.html">수정·삭제는 공지사항 화면에서</a>' : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+    <div class="mf">${isAdmin() ? '<button class="btn danger left" id="nDel">삭제</button><button class="btn" id="nEdit">수정</button>' : ''}<button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  if (isAdmin()) {
+    $('#nEdit').onclick = () => { closeModal(); editNotice(id); };
+    $('#nDel').onclick = async () => { if (confirm(`"${n.title}" 공지를 삭제할까요?`)) { closeModal(); await removeRow('notices', id); toast('삭제했습니다'); } };
+  }
+}
+/* 홈에서 바로 공지 수정 (관리자). 읽음 기록은 그대로 둠 */
+function editNotice(id){
+  const n = (DATA.notices || []).find(x => x.id === id); if (!n || !isAdmin()) return;
+  openModal(`${modalHead('공지 수정')}
+    <div class="mb">
+      <div class="f"><label>제목 *</label><input id="nTitle" value="${esc(n.title || '')}" maxlength="120"></div>
+      <div class="f"><label>내용</label><textarea id="nContent" style="min-height:220px" placeholder="내용을 적어 주세요. 인터넷 주소는 자동으로 링크가 됩니다.">${esc(n.content || '')}</textarea></div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="nPinned" ${n.pinned ? 'checked' : ''}> 목록 맨 위에 고정</label>
+      <div class="hint">수정해도 "읽음" 기록은 그대로 남습니다. 다시 읽게 하려면 새 공지로 올리세요.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="nSave">저장</button></div>`, { wide: true });
+  $('#nTitle').focus();
+  $('#nSave').onclick = async () => {
+    const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('제목을 입력하세요', true); return; }
+    const cur = (DATA.notices || []).find(x => x.id === id) || n;   // 그사이 바뀐 읽음 기록을 덮어쓰지 않도록 최신 것에 얹음
+    const row = { ...cur, title, content: $('#nContent').value.trim(), pinned: $('#nPinned').checked };
+    closeModal(); await saveRow('notices', row); toast('저장했습니다');
+  };
 }
 
 /* ---------- 홈의 업무공유 판 (공지 판 바로 아래. 아직 확인 안 한 것을 먼저, 최근 5개) ---------- */
