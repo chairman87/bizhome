@@ -88,7 +88,7 @@ function talkHtml(p){
     return head + `<div class="msg t-${e.type}">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
   }).join('');
   return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
-      ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div>이 채널의 시작입니다.<br>아래 칸에 한마디 적거나, 기획서·견적서 파일을 끌어다 놓고 보내 보세요. 올린 파일은 눌러서 큰 화면으로 같이 볼 수 있습니다.</div>`}</div></div>
+      ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}</div></div>
     <div class="slcomp"><div class="talkbox composer" id="composer">
       <textarea id="cBody" rows="1" maxlength="4000" placeholder="#${esc(p.name)} 에 메시지 보내기">${esc(comp.text)}</textarea>
       ${comp.box.html}
