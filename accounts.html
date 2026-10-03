@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610031826">
-<script src="common.js?v=202610031826"></script>
+<link rel="stylesheet" href="common.css?v=202610031831">
+<script src="common.js?v=202610031831"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -42,6 +42,21 @@
   .grp.c8{background:#e0e7ff;color:#3730a3;border-color:#c7d2fe}
   .grp.c9{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
   .sec{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;font-size:12px;color:var(--fg2);font-weight:600}
+  /* 표 글자가 두 줄로 꺾이지 않게: 모든 칸은 한 줄, 길어질 수 있는 칸(주소·공유 사용자·비고)만 말줄임. 그래도 넘치면 표가 가로로 밀림 */
+  table.acc th,table.acc td{white-space:nowrap}
+  table.acc th,table.acc td{padding-left:6px;padding-right:6px}
+  table.acc .ib{white-space:nowrap;padding:1px 4px;font-size:11px}
+  table.acc .pw .v{min-width:62px}
+  table.acc .grp{padding:2px 8px;font-size:12px}
+  table.acc td.svc{max-width:230px;overflow:hidden;text-overflow:ellipsis}
+  table.acc td.pur{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  table.acc td.idc .mono{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+  table.acc .site{display:inline-block;max-width:130px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+  table.acc td.share{max-width:110px;overflow:hidden;text-overflow:ellipsis}
+  table.acc td.memo2{max-width:150px}
+  table.acc td.act{text-align:right}
+  table.acc td.act .btn{padding:2px 6px;font-size:12px}
+  table.acc td.act .btn + .btn{margin-left:4px}
 </style>
 </head>
 <body>
@@ -125,17 +140,17 @@ function tableHtml(){
   const showGroup = !view.startsWith('g:');
   const cols = [...(showGroup ? [['group_name', '구분']] : []), ['service', '서비스'], ['url', '주소'], ['purpose', PURPOSE_LABEL], ...(DEPT === '마케팅' ? [['company', '사업자']] : []), ['login_id', '아이디'], ['password', '비밀번호'], ['owner', '담당자'], ['shared_with', '공유 사용자'], ['memo', '비고']];
   if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'off' ? '사용안함으로 빼 둔 계정이 없습니다.<br>안 쓰는 계정은 그 줄의 <b>사용안함</b> 버튼을 누르면 여기로 옮겨집니다.' : view === 'g:' + ETC ? '기타로 옮긴 계정이 없습니다.<br>안 쓰는 계정을 열어 <b>구분</b>을 <b>기타</b>로 바꾸면 여기로 모입니다.' : '등록된 계정이 없습니다. <b>＋ 계정 추가</b>로 넣어 주세요.'}</div>`;
-  return `<div class="tablewrap"><table style="min-width:1100px"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
+  return `<div class="tablewrap"><table class="acc"><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(sort, k)}</th>`).join('')}<th></th></tr></thead><tbody>
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       ${showGroup ? `<td><span class="grp ${grpCls(a.group_name)}">${esc(a.group_name || '-')}</span></td>` : ''}
-      <td><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
+      <td class="svc" title="${esc(a.service)}"><span class="title">${esc(a.service)}</span>${a.admin_only ? '<span class="lock">관리자만</span>' : ''}</td>
       <td>${siteHtml(a.url)}</td>
-      <td class="small">${esc(a.purpose || '')}</td>
+      <td class="small pur" title="${esc(a.purpose || '')}">${esc(a.purpose || '')}</td>
       ${DEPT === '마케팅' ? `<td>${a.company ? `<span class="grp ${COMP_CLS[a.company] || 'c9'}" style="font-size:12px;padding:2px 8px">${esc(a.company)}</span>` : '<span class="hint">-</span>'}</td>` : ''}
-      <td><span class="mono">${esc(a.login_id || '')}</span>${a.login_id ? ` <button class="ib" data-copy="${esc(a.login_id)}">복사</button>` : ''}</td>
+      <td class="idc"><span class="mono" title="${esc(a.login_id || '')}">${esc(a.login_id || '')}</span>${a.login_id ? ` <button class="ib" data-copy="${esc(a.login_id)}">복사</button>` : ''}</td>
       <td>${pwHtml(a)}</td>
       <td>${who(a.owner)}</td>
-      <td class="small">${esc(a.shared_with || '')}</td>
+      <td class="small share" title="${esc(a.shared_with || '')}">${esc(a.shared_with || '')}</td>
       <td class="memo2" title="${esc(a.memo || '')}">${esc(a.memo || '')}</td>
       <td class="act"><button class="btn sm" data-edit="${a.id}">수정</button>${a.unused ? `<button class="btn sm primary" data-on="${a.id}" title="다시 쓰는 계정으로 되돌립니다">다시 사용</button>` : `<button class="btn sm" data-off="${a.id}" title="안 쓰는 계정을 사용안함 탭으로 빼 둡니다 (지우지는 않음)" style="color:var(--fg2)">사용안함</button>`}</td>
     </tr>`).join('')}</tbody></table></div>`;
