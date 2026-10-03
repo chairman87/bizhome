@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032108">
-<script src="common.js?v=202610032108"></script>
+<link rel="stylesheet" href="common.css?v=202610032117">
+<script src="common.js?v=202610032117"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -42,6 +42,9 @@
   .editing #cv > [data-blk]{cursor:grab}
   .editing #cv > [data-blk].moving{cursor:grabbing;opacity:.85;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.18)}
   body.mving{user-select:none;cursor:grabbing}
+  .editing #cv > [data-blk].sel{outline:2px solid var(--blue);outline-offset:3px;border-radius:10px}
+  .selbox{position:absolute;border:1px solid var(--blue);background:rgba(37,99,235,.08);z-index:30;pointer-events:none}
+  .selinfo{position:sticky;top:8px;z-index:40;display:inline-block;margin:0 0 8px;background:var(--blue);color:#fff;font-size:12px;font-weight:600;border-radius:999px;padding:3px 12px}
   .rz{position:absolute;top:0;right:-9px;width:16px;height:100%;cursor:ew-resize;z-index:3}
   .rz::after{content:"";position:absolute;top:50%;left:6px;width:5px;height:44px;max-height:70%;transform:translateY(-50%);border-radius:3px;background:var(--line2)}
   .rz:hover::after,.resizing .rz::after{background:var(--blue)}
@@ -194,7 +197,7 @@ const bySort = (a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.c
 const depts = () => M().filter(x => x.type === 'dept').sort(bySort);
 /* 홈의 칸: 폴더(dept) + 판(board: 공지사항·업무공유·이달의 목표). 한 줄 흐름에 sort_order 순으로 놓임 */
 const blocks = () => M().filter(x => x.type === 'dept' || x.type === 'board').sort(bySort);
-const CV_W = 1460, CV_GAP = 14, MIN_W = 200;   // 배치 판의 기준 가로 폭, 칸 사이 간격, 칸의 최소 가로 길이
+const CV_W = 2600, FLOW_W = 1460, CV_GAP = 14, MIN_W = 200;   // 배치 판의 최대 가로 폭(놓을 수 있는 한계), 위치를 아직 안 정한 칸을 늘어놓는 폭, 칸 사이 간격, 칸의 최소 가로 길이
 const blkW = r => Math.min(CV_W, Number(r.width) > 0 ? Math.max(MIN_W, Number(r.width)) : (r.type === 'board' ? 1082 : 260));   // 가로 길이(px). 안 정했으면 폴더 260, 판은 한 줄 전체
 let LAY = [];   // 마지막으로 계산한 배치 [{id, el, left, top, w, h}]
 /* 칸들을 저장된 위치에 놓음. 규칙:
@@ -216,26 +219,26 @@ function layoutBlocks(){
   const put = (i, left) => { let top = Math.max(0, i.y || 0); for (const p of placed) if (left < p.left + p.w && left + i.w > p.left) top = Math.max(top, p.top + p.h + CV_GAP); i.left = left; i.top = top; placed.push(i); };
   posd.forEach(i => put(i, Math.max(0, Math.min(CV_W - i.w, i.x))));
   let cy = placed.reduce((m, p) => Math.max(m, p.top + p.h + CV_GAP), 0), line = [], lw = 0;
-  const flush = () => { if (!line.length) return; let x = Math.max(0, Math.round((CV_W - lw) / 2)), bottom = cy; line.forEach(i => { i.left = x; i.top = cy; x += i.w + CV_GAP; bottom = Math.max(bottom, cy + i.h); placed.push(i); }); cy = bottom + CV_GAP; line = []; lw = 0; };
-  auto.forEach(i => { if (line.length && lw + CV_GAP + i.w > CV_W) flush(); lw += (line.length ? CV_GAP : 0) + i.w; line.push(i); });
+  const flush = () => { if (!line.length) return; let x = Math.max(0, Math.round((FLOW_W - lw) / 2)), bottom = cy; line.forEach(i => { i.left = x; i.top = cy; x += i.w + CV_GAP; bottom = Math.max(bottom, cy + i.h); placed.push(i); }); cy = bottom + CV_GAP; line = []; lw = 0; };
+  auto.forEach(i => { if (line.length && lw + CV_GAP + i.w > FLOW_W) flush(); lw += (line.length ? CV_GAP : 0) + i.w; line.push(i); });
   flush();
   placed.forEach(i => { i.el.style.left = i.left + 'px'; i.el.style.top = i.top + 'px'; });
   const H = placed.reduce((m, p) => Math.max(m, p.top + p.h), 0), minL = placed.reduce((m, p) => Math.min(m, p.left), CV_W), maxR = placed.reduce((m, p) => Math.max(m, p.left + p.w), 0);
-  if (editing) { cv.style.width = CV_W + 'px'; cv.style.height = (H + 260) + 'px'; cv.style.margin = A > CV_W ? '0 auto' : '0'; }
+  if (editing) { cv.style.width = Math.max(A - 2, Math.min(CV_W, maxR + 300)) + 'px'; cv.style.height = (H + 300) + 'px'; cv.style.margin = '0'; }   // 눈금 판은 화면 전체 폭, 오른쪽 끝까지 쓰면 옆으로 더 늘어남
   else { const used = Math.max(1, maxR - minL), sc = Math.min(1, A / used); cv.style.width = '100%'; cv.style.margin = '0'; cv.style.height = Math.ceil(H * sc) + 'px'; cv.style.transform = `translateX(${Math.round((A - used * sc) / 2 - minL * sc)}px) scale(${sc})`; }
   LAY = placed;
 }
 let layTimer; window.addEventListener('resize', () => { clearTimeout(layTimer); layTimer = setTimeout(layoutBlocks, 80); });
 window.addEventListener('load', () => setTimeout(layoutBlocks, 50));
 /* 편집에서 칸을 옮기거나 길이를 바꾼 뒤: 그 칸의 값을 바꾸고 → 다시 배치해 보고 → 화면에 놓인 그대로(위치·길이)를 모든 칸에 저장 */
-async function saveLayout(id, patch){
+async function saveLayout(patches){   // patches = { 칸id: {x, y, width 중 바뀔 것}, … }
   if (!guard()) return;
-  const row = M().find(x => x.id === id); if (!row) return;
-  Object.assign(row, patch);
-  if (row.x == null || row.y == null) { const cur = LAY.find(i => i.id === id); if (cur) { row.x = cur.left; row.y = cur.top; } }
-  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (r && r.id !== id && (r.x == null || r.y == null)) { r.x = i.left; r.y = i.top; r._dirty = true; } });   // 아직 위치가 없던 칸은 지금 보이는 자리로 고정
-  row._dirty = true;
-  const el = document.querySelector(`#cv > [data-blk="${id}"]`); if (el) el.style.width = blkW(row) + 'px';
+  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (r && (r.x == null || r.y == null)) { r.x = i.left; r.y = i.top; r._dirty = true; } });   // 아직 위치가 없던 칸은 지금 보이는 자리로 고정
+  for (const [id, patch] of Object.entries(patches)) {
+    const row = M().find(x => x.id === id); if (!row) continue;
+    Object.assign(row, patch); row._dirty = true;
+    const el = document.querySelector(`#cv > [data-blk="${id}"]`); if (el) el.style.width = blkW(row) + 'px';
+  }
   layoutBlocks();
   const changed = [];
   LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (!r) return; if (r.x !== i.left || r.y !== i.top || r._dirty) { r.x = i.left; r.y = i.top; delete r._dirty; changed.push(r); } });
@@ -247,6 +250,7 @@ async function saveLayout(id, patch){
   } catch (e) { toast('배치 저장 실패: ' + (e.message || e), true); reload(); return; }
   render();
 }
+let SEL = new Set();   // 메뉴 편집에서 선택한 칸들 (같이 옮김)
 const pagesOf = id => M().filter(x => x.type === 'page' && x.parent === id).sort(bySort);
 let editing = false;
 let seeding = false;
@@ -286,10 +290,11 @@ function render(){
     'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
-  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
-    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 아래쪽 칸이 밑으로 밀립니다). 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
+    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 아래쪽 칸이 밑으로 밀립니다). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
+    ${editing ? '<div id="selInfo" class="selinfo" hidden></div>' : ''}
     <div class="cvwrap"><div id="cv">${blocks().map((d, di, arr) => {
       const rz = editing ? `<span class="rz" data-rz="${d.id}" title="좌우로 끌면 가로 길이가 바뀝니다 (더블클릭 = 기본 길이로)"></span>` : '';
       if (d.type === 'board') {   // 공지사항·업무공유·이달의 목표 판
@@ -320,7 +325,7 @@ function render(){
     ${admin && !editing ? `<div class="foot">"준비 중" 페이지는 아직 화면이 없습니다. 연결할 화면이 생기면 메뉴 편집에서 지정합니다.</div>` : ''}
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
-  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; render(); };
+  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SEL = new Set(); render(); };
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-notice]').forEach(el => el.onclick = () => openNotice(el.dataset.notice));
   bindGoals();
@@ -364,31 +369,62 @@ function bindMenuDrag(){
     sec.ondragover = e => { if (kind !== 'page') return; e.preventDefault(); clear(); sec.classList.add('drop-in'); };
     sec.ondrop = e => { if (kind !== 'page') return; e.preventDefault(); const id = dragId; clear(); dropPage(id, sec.dataset.blk, null, true); };
   });
-  /* 칸(판·폴더) 옮기기: 마우스로 잡아서 원하는 자리에 놓음. 10px 단위로 맞춰지고, 놓은 자리가 그대로 저장됨 */
+  /* 칸(판·폴더) 옮기기: 마우스로 잡아서 원하는 자리에 놓음. 10px 단위로 맞춰지고, 놓은 자리가 그대로 저장됨.
+     여러 칸: 빈 곳에서 끌어 네모로 묶거나 Ctrl(또는 Shift)+클릭으로 하나씩 더하고 빼면 파란 테두리가 생기고, 그중 하나를 잡아 끌면 같이 움직임 */
   const snap = v => Math.round(v / 10) * 10;
-  document.querySelectorAll('#cv > [data-blk]').forEach(el => {
+  const cv = $('#cv');
+  const paintSel = () => { cv.querySelectorAll(':scope > [data-blk]').forEach(el => el.classList.toggle('sel', SEL.has(el.dataset.blk))); const info = $('#selInfo'); if (info) { info.hidden = SEL.size < 2; info.textContent = `${SEL.size}개 선택됨 · 하나를 잡아 끌면 같이 움직입니다 (빈 곳 클릭 = 선택 해제)`; } };
+  SEL = new Set([...SEL].filter(id => LAY.some(i => i.id === id)));
+  paintSel();
+  cv.querySelectorAll(':scope > [data-blk]').forEach(el => {
     el.onmousedown = e => {
-      if (e.button !== 0 || e.target.closest('.pg, button, a, input, select, textarea, .rz, .ed, [data-gnav]')) return;
-      const it = LAY.find(i => i.id === el.dataset.blk); if (!it) return;
+      if (e.button !== 0 || e.target.closest('.pg, button, a, input, select, textarea, .rz, .ed')) return;
+      const id = el.dataset.blk;
+      if (e.ctrlKey || e.shiftKey || e.metaKey) { e.preventDefault(); if (SEL.has(id)) SEL.delete(id); else SEL.add(id); paintSel(); el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true }); return; }
+      if (!SEL.has(id)) { SEL = new Set([id]); paintSel(); }
+      const group = LAY.filter(i => SEL.has(i.id)); if (!group.length) return;
       e.preventDefault();
-      const sx = e.clientX, sy = e.clientY, ox = it.left, oy = it.top; let moved = false, nx = ox, ny = oy;
+      const sx = e.clientX, sy = e.clientY; let moved = false, dx = 0, dy = 0;
+      const minL = Math.min(...group.map(g => g.left)), maxR = Math.max(...group.map(g => g.left + g.w)), minT = Math.min(...group.map(g => g.top));
       const move = ev => {
-        const dx = ev.clientX - sx, dy = ev.clientY - sy;
-        if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
-        if (!moved) { moved = true; el.classList.add('moving'); document.body.classList.add('mving'); }
-        nx = Math.max(0, Math.min(CV_W - it.w, snap(ox + dx))); ny = Math.max(0, snap(oy + dy));
-        el.style.left = nx + 'px'; el.style.top = ny + 'px';
+        const rx = ev.clientX - sx, ry = ev.clientY - sy;
+        if (!moved && Math.abs(rx) + Math.abs(ry) < 5) return;
+        if (!moved) { moved = true; group.forEach(g => g.el.classList.add('moving')); document.body.classList.add('mving'); }
+        dx = Math.max(-minL, Math.min(CV_W - maxR, snap(rx))); dy = Math.max(-minT, snap(ry));   // 묶음 전체가 판 밖으로 나가지 않게
+        group.forEach(g => { g.el.style.left = (g.left + dx) + 'px'; g.el.style.top = (g.top + dy) + 'px'; });
       };
       const up = () => {
         document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
-        el.classList.remove('moving'); document.body.classList.remove('mving');
+        group.forEach(g => g.el.classList.remove('moving')); document.body.classList.remove('mving');
         if (!moved) return;
         el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true });   // 놓는 순간의 클릭으로 창이 열리지 않게
-        saveLayout(el.dataset.blk, { x: nx, y: ny - (ny < oy ? 1 : 0) });   // 위로 옮길 때는 같은 높이의 칸보다 먼저 오도록 살짝 위로
+        if (!dx && !dy) { render(); return; }
+        const patches = {}; group.forEach(g => { patches[g.id] = { x: g.left + dx, y: g.top + dy }; });
+        saveLayout(patches);
       };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
     };
   });
+  /* 빈 곳에서 끌면 네모가 그려지고, 네모에 걸친 칸이 모두 선택됨. 빈 곳을 그냥 클릭하면 선택 해제 */
+  cv.onmousedown = e => {
+    if (e.target !== cv || e.button !== 0) return;
+    e.preventDefault();
+    const add = e.ctrlKey || e.shiftKey || e.metaKey, baseSel = add ? new Set(SEL) : new Set();
+    const p0 = (() => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; })();
+    const box = document.createElement('div'); box.className = 'selbox'; box.hidden = true; cv.appendChild(box);
+    let moved = false;
+    const move = ev => {
+      const r = cv.getBoundingClientRect(), x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+      if (!moved && Math.abs(x1 - p0.x) + Math.abs(y1 - p0.y) < 5) return;
+      moved = true; box.hidden = false; document.body.classList.add('mving');
+      const L = Math.min(p0.x, x1), T = Math.min(p0.y, y1), R = Math.max(p0.x, x1), B = Math.max(p0.y, y1);
+      box.style.left = L + 'px'; box.style.top = T + 'px'; box.style.width = (R - L) + 'px'; box.style.height = (B - T) + 'px';
+      SEL = new Set(baseSel); LAY.forEach(i => { if (i.left < R && i.left + i.w > L && i.top < B && i.top + i.h > T) SEL.add(i.id); });
+      paintSel();
+    };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); box.remove(); document.body.classList.remove('mving'); if (!moved && !add) { SEL = new Set(); paintSel(); } };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  };
   /* 가로 길이 조절: 오른쪽 끝 손잡이를 좌우로 끔. 10px 단위로 저장. 더블클릭하면 기본 길이(폴더 260, 판 1082) */
   document.querySelectorAll('[data-rz]').forEach(h => {
     const el = h.closest('[data-blk]');
@@ -402,11 +438,11 @@ function bindMenuDrag(){
       const up = () => {
         document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
         el.classList.remove('resizing'); document.body.classList.remove('rzing'); delete h.dataset.w;
-        if (moved && w !== it.w) saveLayout(el.dataset.blk, { width: w });
+        if (moved && w !== it.w) saveLayout({ [el.dataset.blk]: { width: w } });
       };
       document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
     };
-    h.ondblclick = e => { e.stopPropagation(); const r0 = M().find(x => x.id === h.dataset.rz); if (!r0 || r0.width == null) return; saveLayout(h.dataset.rz, { width: null }); toast('기본 길이로 되돌렸습니다'); };
+    h.ondblclick = e => { e.stopPropagation(); const r0 = M().find(x => x.id === h.dataset.rz); if (!r0 || r0.width == null) return; saveLayout({ [h.dataset.rz]: { width: null } }); toast('기본 길이로 되돌렸습니다'); };
   });
 }
 
