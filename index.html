@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032257">
-<script src="common.js?v=202610032257"></script>
+<link rel="stylesheet" href="common.css?v=202610032311">
+<script src="common.js?v=202610032311"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -744,8 +744,42 @@ function openDecision(id){
       ${filesHtml(Array.isArray(d.files) ? d.files : [])}
       ${isAdmin() ? `<div class="hint">확인 ${aud.length - pend.length}/${aud.length}${pend.length ? ` · 안 함: ${esc(pend.join(', '))}` : ' · 모두 확인'}</div>` : ''}
     </div>
-    <div class="mf">${isAdmin() ? '<a class="btn left" href="decisions.html">수정·삭제는 업무공유 화면에서</a>' : ''}<button class="btn" data-close>닫기</button>${un ? '<button class="btn primary" id="dOk">확인했습니다</button>' : ''}</div>`, { wide: true });
+    <div class="mf">${isAdmin() ? '<button class="btn danger left" id="dDel">삭제</button><button class="btn" id="dEdit">수정</button>' : ''}<button class="btn" data-close>닫기</button>${un ? '<button class="btn primary" id="dOk">확인했습니다</button>' : ''}</div>`, { wide: true });
   const ok = $('#dOk'); if (ok) ok.onclick = () => { closeModal(); confirmDecision(id); };
+  if (isAdmin()) {
+    $('#dEdit').onclick = () => { closeModal(); editDecision(id); };
+    $('#dDel').onclick = async () => { if (confirm(`"${d.title}" 글을 삭제할까요?`)) { closeModal(); await removeRow('decisions', id); toast('삭제했습니다'); } };
+  }
+}
+/* 홈에서 바로 업무공유 수정 (관리자). 칸 구성은 업무공유 화면(decisions.html)의 수정 창과 같음 */
+const D_TOPICS = ['회사 공통', '레모너리', '서리맥스', '흑생마', '식이해법연구소', '피에이치뷰티'];
+function editDecision(id){
+  const d = (DATA.decisions || []).find(x => x.id === id); if (!d || !isAdmin()) return;
+  const tg = DTARGETS(d);
+  const at = attachBox('dFiles', Array.isArray(d.files) ? d.files : [], 'decisions');
+  openModal(`${modalHead('업무공유 수정')}
+    <div class="mb">
+      <div class="f"><label>제목 (한 줄) *</label><input id="dTitle" value="${esc(d.title || '')}" maxlength="160"></div>
+      <div class="f"><label>내용 (선택)</label><textarea id="dReason" style="min-height:200px">${esc(d.reason || '')}</textarea>${at.html}</div>
+      <div class="f"><label>링크 (선택)</label><input id="dLink" value="${esc(d.link || '')}" placeholder="예: https://…"></div>
+      <div class="f2">
+        <div class="f"><label>관련</label><select id="dTopic"><option value="">(없음)</option>${[...new Set([...D_TOPICS, ...(d.topic ? [d.topic] : [])])].map(t => `<option ${d.topic === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+        <div class="f"><label>날짜</label><input type="date" id="dDate" value="${esc(d.decided_at || '')}"></div>
+      </div>
+      <div class="f"><label>대상 (아무도 고르지 않으면 <b>전체</b>에게 보입니다)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 8px;padding:6px 0">${members.filter(m => m.name !== me).map(m => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)"><input type="checkbox" data-tg value="${esc(m.name)}" ${tg.includes(m.name) ? 'checked' : ''} style="width:auto"> ${esc(m.name)}</label>`).join('')}</div></div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="dReset"> 내용이 바뀌었으니 <b>다시 확인</b>받기 (확인 기록을 지움)</label>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="dSave">저장</button></div>`, { wide: true });
+  at.bind(); $('#dTitle').focus();
+  $('#dSave').onclick = async () => {
+    if ($('#dFiles .up')) { toast('파일을 올리는 중입니다. 잠시만 기다려 주세요', true); return; }
+    const title = $('#dTitle').value.trim(); if (!title) { $('#dTitle').focus(); toast('제목을 입력하세요', true); return; }
+    const cur = (DATA.decisions || []).find(x => x.id === id) || d;   // 그사이 바뀐 확인 기록을 덮어쓰지 않도록 최신 것에 얹음
+    const row = { ...cur, title, reason: $('#dReason').value.trim() || null, topic: $('#dTopic').value || null, decided_at: $('#dDate').value || todayStr(), link: $('#dLink').value.trim() || null, files: at.files,
+      targets: [...document.querySelectorAll('[data-tg]:checked')].map(x => x.value), reads: $('#dReset').checked ? [me] : DREADS(cur), updated_by: me };
+    closeModal(); await saveRow('decisions', row); toast('저장했습니다');
+  };
 }
 
 /* ---------- 홈의 '이달의 목표' 판 (업무공유 판 아래) ----------
