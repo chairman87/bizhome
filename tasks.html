@@ -94,7 +94,7 @@ const prHtml = p => p === '높음' ? '<span class="pr high">높음</span>' : p =
 const visibleTask = t => isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me;
 const T = () => (DATA.tasks || []).filter(visibleTask);
 
-let view = 'received';   // 화면을 열면 항상 '내 업무'부터 (탭을 바꿔도 다음에 열 때는 다시 내 업무)
+let view = 'received';   // 화면을 열면 항상 '업무'(내가 맡은 업무 + 내가 요청한 업무)부터
 let filter = { q: '', person: '', status: '', hideDone: true };
 let sort = { key: 'due_date', dir: 'asc' };
 let sortMine = { key: 'manual', dir: 'asc' };   // 내 업무 탭은 끌어서 정한 '내 순서'가 기본 (열 제목을 누르면 그 열로 정렬)
@@ -116,7 +116,7 @@ const newForMe = () => T().filter(t => t.assignee === me && t.status === '요청
 const waitingMe = () => T().filter(t => t.created_by === me && t.status === '보고완료').length;
 
 const VIEWS = () => [
-  { key: 'received', label: '내 업무', badge: newForMe() }, { key: 'sent', label: '요청한 업무', badge: waitingMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
+  { key: 'received', label: '업무', badge: newForMe() + waitingMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
   null, { key: 'assignee', label: '담당자별' }, { key: 'kanban', label: '상황판' }, { key: 'calendar', label: '달력' },
 ];
 
@@ -234,8 +234,7 @@ function statsHtml(){
 }
 function baseList(){
   switch (view) {
-    case 'received': return T().filter(t => t.assignee === me);
-    case 'sent':     return T().filter(t => t.created_by === me);
+    case 'received': return T().filter(t => t.assignee === me || t.created_by === me);   // 내가 맡은 업무 + 내가 요청한 업무
     case 'archive':  return T().filter(isDone);
     default:         return T();
   }
@@ -267,8 +266,8 @@ function renderView(){
   const c = document.querySelector('.toolbar .count'); if (c) c.innerHTML = countText();
   bindView();
 }
-/* 내 순서: sort_order 가 작은 것부터. 아직 순서가 없는 새 업무는 맨 위, 완료된 업무는 맨 아래 */
-const ord = t => isDone(t) ? Infinity : t.sort_order == null ? -Infinity : Number(t.sort_order);
+/* 내 순서: sort_order 가 작은 것부터. 아직 순서가 없는 새 업무는 맨 위, 내가 남에게 요청한 업무는 그 아래, 완료된 업무는 맨 아래 */
+const ord = t => isDone(t) ? Infinity : t.assignee !== me ? 1e12 : t.sort_order == null ? -Infinity : Number(t.sort_order);
 const manualSort = list => list.slice().sort((a, b) => (ord(a) - ord(b)) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
 /* 끌어다 놓은 업무를 target 앞(또는 뒤)으로 옮기고, 바뀐 줄만 순서를 다시 저장 */
 async function moveTask(id, targetId, after){
@@ -292,16 +291,14 @@ const sortTasks = list => isManual() ? manualSort(list) : sortBy(list, curSort()
 
 /* 표 */
 const EMPTY = {
-  received: '내 업무가 없습니다.<br>오른쪽 위 <b>+ 내 업무 등록</b>으로 직접 할 일을 적어 두거나, 다른 사람이 요청하면 여기에 나타납니다.',
-  sent: '내가 요청한 업무가 없습니다.<br>오른쪽 위 <b>+ 업무 요청</b>으로 팀원에게 업무를 요청하세요.',
+  received: '업무가 없습니다.<br>위쪽 <b>+ 내 업무 등록</b>으로 직접 할 일을 적거나 <b>+ 업무 요청</b>으로 팀원에게 요청하세요. 내가 맡은 업무와 내가 요청한 업무가 여기에 함께 나옵니다.',
   all: '등록된 업무가 없습니다.<br>오른쪽 위 <b>+ 업무 요청</b>으로 추가하세요.',
   archive: '완료된 업무가 아직 없습니다.',
 };
 function tableHtml(list){
   if (!list.length) return `<div class="empty">${filter.q || filter.person || filter.status ? '조건에 맞는 업무가 없습니다.' : EMPTY[view]}</div>`;
   const cols = [['title', '업무'], ['priority', '우선순위']];   // 우선순위는 업무 바로 오른쪽
-  if (view !== 'received') cols.push(['assignee', '담당자']);
-  if (view !== 'sent') cols.push(['created_by', '요청자']);
+  cols.push(['assignee', '담당자'], ['created_by', '요청자']);
   cols.push(['created_at', '등록일'], ['due_date', '마감일'], ['status', '상태'], ['progress', '진행률']);
   const drag = isManual();
   const th = (view === 'received' ? '<th class="grip"></th>' : '') + cols.map(([k, l]) => `<th data-sort="${k}">${l}${sortArrow(curSort(), k)}</th>`).join('') + '<th>최근 보고</th>' + (view !== 'archive' ? '<th>처리</th>' : '');
@@ -316,7 +313,7 @@ function tableHtml(list){
       progress: `<td>${progHtml(t)}</td>`,
       priority: `<td>${canPr(t) ? `<select class="prsel ${t.priority === '높음' ? 'high' : t.priority === '낮음' ? 'low' : ''}" data-pr="${t.id}" title="눌러서 우선순위 바꾸기">${PRIORITIES.map(x => `<option value="${x}" ${t.priority === x ? 'selected' : ''}>${prLabel(x)}</option>`).join('')}</select>` : (prHtml(t.priority) || '<span class="pr">중간</span>')}</td>`,
     };
-    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" data-grp="${grp}" ${drag && !isDone(t) ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" title="끌어서 순서 바꾸기">${drag && !isDone(t) ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
+    return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" data-grp="${grp}" ${drag && !isDone(t) && t.assignee === me ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" ${t.assignee === me ? 'title="끌어서 순서 바꾸기"' : ''}>${drag && !isDone(t) && t.assignee === me ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
   };
   // 우선순위 '높음'(완료 제외)은 위쪽 표로 따로 뺌. 보관함은 나누지 않음
   const sorted = sortTasks(list);
