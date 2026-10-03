@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032215">
-<script src="common.js?v=202610032215"></script>
-<script src="channel.js?v=202610032215"></script>
+<link rel="stylesheet" href="common.css?v=202610032220">
+<script src="common.js?v=202610032220"></script>
+<script src="channel.js?v=202610032220"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -192,7 +192,7 @@ const TEMPLATES = {
 };
 function normalize(table, r){
   if (table === 'project_cards') return { ...r, status: CARD_ST[r.status] ? r.status : '참고 자료', kind: r.kind || '기타', revisions: Array.isArray(r.revisions) ? r.revisions : [], comments: Array.isArray(r.comments) ? r.comments : [] };
-  if (table === 'project_decisions') return r;
+  if (table === 'project_decisions' || table === 'tasks' || table === 'decisions') return r;
   if (table === 'project_logs') return { ...r, kind: KINDS[r.kind] ? r.kind : '자료', files: Array.isArray(r.files) ? r.files : [], comments: Array.isArray(r.comments) ? r.comments : [] };
   return table === 'projects' ? { ...r, status: PST[r.status] ? r.status : '진행중', checks: Array.isArray(r.checks) ? r.checks : [], phases: Array.isArray(r.phases) ? r.phases : [], members: Array.isArray(r.members) ? r.members : [] } : { ...r, status: ISTATUSES.includes(r.status) ? r.status : '예정', checklist: Array.isArray(r.checklist) ? r.checklist : [] }; }
 
@@ -200,7 +200,8 @@ function normalize(table, r){
 function render(){
   if (composing && cur && $('#composer') && $('#app').contains(document.activeElement)) { renderWaiting = true; return; }
   // 슬랙 모양 화면(channel.js 의 slRender): 왼쪽 채널 목록 + 오른쪽 채널. 고른 채널이 없으면 가장 최근에 기록이 있던 진행 중 채널을 엶
-  let p = P().find(x => x.id === cur);
+  let p = cur === AGENDA ? null : P().find(x => x.id === cur);
+  if (cur === AGENDA) { slRender(null); return; }
   if (!p) { p = P().filter(x => x.status !== '완료').sort((a, b) => String(projLastAt(b.id) || b.created_at || '').localeCompare(String(projLastAt(a.id) || a.created_at || '')))[0] || P()[0] || null; cur = p ? p.id : ''; }
   slRender(p);
   if (location.hash === '#new' && !openedNew && DATA.projects) { openedNew = true; history.replaceState(null, '', location.pathname); openProject(null); }
@@ -563,7 +564,7 @@ function openItem(id){
   $('#iDel').onclick = async () => { if (confirm(`"${it.title}" 을(를) 삭제할까요?`)) { closeModal(); await removeRow('project_items', it.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🗂️', title: '프로젝트', tables: ['projects', 'project_items', 'project_logs', 'project_cards', 'project_decisions'], render, normalize });
+boot({ icon: '🗂️', title: '프로젝트', tables: ['projects', 'project_items', 'project_logs', 'project_cards', 'project_decisions', 'tasks', 'decisions'], render, normalize });
 </script>
 </body>
 </html>

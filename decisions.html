@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무공유</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032215">
-<script src="common.js?v=202610032215"></script>
+<link rel="stylesheet" href="common.css?v=202610032220">
+<script src="common.js?v=202610032220"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -15,6 +15,8 @@
   .dc.unread{border-color:#93c5fd;background:#f5f9ff;box-shadow:inset 4px 0 0 var(--blue)}
   .dc .dhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--fg2);margin-bottom:6px}
   .dc .dhead .sp{flex:1}
+  .ptag{font-size:11px;color:#1264a3;background:#e8f1fb;border-radius:999px;padding:1px 8px;text-decoration:none;white-space:nowrap}
+  .ptag:hover{text-decoration:underline}
   .dc h3{margin:0;font-size:16px;line-height:1.45;word-break:break-word}
   .dc .reason{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14px;color:var(--fg);margin-top:8px;padding:8px 10px;background:var(--bg2);border-radius:6px}
   .dc .reason a{word-break:break-all}
@@ -67,7 +69,7 @@ const monthLabel = s => s ? `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월` : 
 let lastMon = null;
 const monHead = d => { const g = monthLabel(d.decided_at || (d.created_at || '').slice(0, 10)); if (g === lastMon) return ''; lastMon = g; return `<div class="mon">${g}</div>`; };   // 월이 바뀌는 자리에 구분선
 
-function normalize(table, d){ return { ...d, reads: Array.isArray(d.reads) ? d.reads : [], targets: Array.isArray(d.targets) ? d.targets : [], files: Array.isArray(d.files) ? d.files : [] }; }
+function normalize(table, d){ if (table !== 'decisions') return d; return { ...d, reads: Array.isArray(d.reads) ? d.reads : [], targets: Array.isArray(d.targets) ? d.targets : [], files: Array.isArray(d.files) ? d.files : [] }; }
 const linkHref = u => /^https?:\/\//i.test(u) ? u : 'https://' + u;
 const linkText = u => u.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 
@@ -98,7 +100,7 @@ function feedHtml(){
   return `<div class="feed">${shown.map(d => {
     const mine = audience(d).includes(me), read = isRead(d), pend = pending(d), aud = audience(d);
     return monHead(d) + `<article class="dc ${mine && !read ? 'unread' : ''}" data-id="${d.id}">
-      <div class="dhead">${topicHtml(d.topic)}${mine && !read ? '<span class="new">NEW</span>' : ''}<span class="sp"></span><span>${fmtDate(d.decided_at || (d.created_at || '').slice(0, 10))} · ${esc(d.created_by || '')}</span></div>
+      <div class="dhead">${topicHtml(d.topic)}${(pp => pp ? `<a class="ptag" href="projects.html?p=${pp.id}" title="프로젝트 채널로"># ${esc(pp.name)}</a>` : '')(d.project_id && (DATA.projects || []).find(x => x.id === d.project_id))}${mine && !read ? '<span class="new">NEW</span>' : ''}<span class="sp"></span><span>${fmtDate(d.decided_at || (d.created_at || '').slice(0, 10))} · ${esc(d.created_by || '')}</span></div>
       <h3>${esc(d.title)}</h3>
       ${d.reason ? `<div class="reason">${linkify(d.reason)}</div>` : ''}
       ${d.link ? `<a class="lnk" href="${esc(linkHref(d.link))}" target="_blank" rel="noopener">🔗 ${esc(linkText(d.link))}</a>` : ''}
@@ -139,6 +141,7 @@ function openEdit(id){
       <div class="f"><label>내용 (선택)</label><textarea id="dReason" placeholder="이유·배경, 언제부터 적용되는지, 누가 무엇을 하면 되는지 2~3줄로 적어 주세요.">${esc(d ? d.reason || '' : '')}</textarea>${at.html}</div>
       <div class="f"><label>링크 (선택)</label><input id="dLink" value="${esc(d ? d.link || '' : '')}" placeholder="예: https://… (참고할 문서, 영상, 게시물 주소)"></div>
       <div class="f2">
+        <div class="f"><label>프로젝트 (선택)</label><select id="dProject"><option value="">(없음)</option>${(DATA.projects || []).filter(x => x.status !== '완료' || (d && x.id === d.project_id)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko')).map(x => `<option value="${x.id}" ${d && d.project_id === x.id ? 'selected' : ''}># ${esc(x.name)}</option>`).join('')}</select></div>
         <div class="f"><label>관련</label><select id="dTopic"><option value="">(없음)</option>${TOPICS.map(t => `<option ${d && d.topic === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="f"><label>날짜</label><input type="date" id="dDate" value="${esc(d ? d.decided_at || '' : todayStr())}"></div>
       </div>
@@ -153,7 +156,7 @@ function openEdit(id){
     const title = $('#dTitle').value.trim(); if (!title) { $('#dTitle').focus(); toast('제목을 입력하세요', true); return; }
     const targets = [...document.querySelectorAll('[data-tg]:checked')].map(x => x.value);
     const reset = $('#dReset') && $('#dReset').checked;
-    const row = { id: d ? d.id : uid(), title, reason: $('#dReason').value.trim() || null, topic: $('#dTopic').value || null, decided_at: $('#dDate').value || todayStr(), targets, link: $('#dLink').value.trim() || null, files: at.files,
+    const row = { id: d ? d.id : uid(), title, reason: $('#dReason').value.trim() || null, topic: $('#dTopic').value || null, project_id: ($('#dProject') && $('#dProject').value) || null, decided_at: $('#dDate').value || todayStr(), targets, link: $('#dLink').value.trim() || null, files: at.files,
       reads: d && !reset ? READS(d) : [me], created_by: d ? d.created_by : me, created_at: d ? d.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('decisions', row); toast(d ? '저장했습니다' : '업무공유 글을 올렸습니다');
   };
@@ -163,7 +166,7 @@ function openEdit(id){
 let openedNew = false;   // 홈의 "＋ 업무공유 쓰기" 링크(#new)로 들어오면 쓰기 창을 바로 엶
 const render0 = render;
 render = function(){ render0(); if (location.hash === '#new' && !openedNew && me && isAdmin()) { openedNew = true; history.replaceState(null, '', location.pathname); openEdit(null); } };
-boot({ icon: '✅', title: '업무공유', tables: ['decisions'], render, normalize });
+boot({ icon: '✅', title: '업무공유', tables: ['decisions', 'projects'], render, normalize });
 </script>
 </body>
 </html>

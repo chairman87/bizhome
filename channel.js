@@ -122,6 +122,7 @@ function bindTalk(p){
 
 /* ---------- 슬랙 모양 화면: 왼쪽 채널 목록 + 오른쪽 채널(머리 · 메시지/자료 카드 · 입력칸) ---------- */
 let sideOpen = false;
+const AGENDA = '__agenda';   // 왼쪽 목록의 '회의 안건'을 고른 상태 (cur 에 이 값이 들어감)
 function slRender(p){
   if (tab !== 'cards' && tab !== 'decs') tab = 'talk';
   const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
@@ -129,16 +130,18 @@ function slRender(p){
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
   const act = P().filter(x => x.status !== '완료').sort(byName), done = P().filter(x => x.status === '완료').sort(byName);
   const item = x => { const pend = cardsOf(x.id).filter(c => c.status === '결정 대기').length, d = daysAgo(projLastAt(x.id)); return `<button class="slch ${p && x.id === p.id ? 'on' : ''}" data-open="${x.id}" title="${d == null ? '아직 기록 없음' : '마지막 기록 ' + (d === 0 ? '오늘' : d + '일 전')}"><span class="hash">#</span><span class="nm">${esc(x.name)}</span>${d != null && d >= 7 && x.status !== '완료' ? '<span class="stale" title="7일 넘게 기록이 없습니다">●</span>' : ''}${pend ? `<span class="bd" title="결정 대기 ${pend}건">${pend}</span>` : ''}</button>`; };
+  const agenda = cur === AGENDA, pendAll = CARDS().filter(c => c.status === '결정 대기' && P().some(x => x.id === c.project_id && x.status !== '완료')).length;
   const mem = p ? (Array.isArray(p.members) ? p.members : []).filter(n => n !== p.owner) : [];
   const pend = p ? cardsOf(p.id).filter(c => c.status === '결정 대기').length : 0;
   $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트' }) + `<div class="sl ${sideOpen ? 'side-open' : ''}">
     <aside class="sls">
       <div class="slst">프로젝트 채널</div>
+      <button class="slch slag ${agenda ? 'on' : ''}" data-open="${AGENDA}" title="모든 채널에서 결정을 기다리는 자료"><span class="hash">📋</span><span class="nm">회의 안건</span>${pendAll ? `<span class="bd">${pendAll}</span>` : ''}</button>
       <div class="slsec">진행 중</div>${act.map(item).join('') || '<div class="slnone">아직 채널이 없습니다</div>'}
       <button class="sladd" id="newP"><span class="hash">＋</span>채널 추가</button>
       ${done.length ? `<div class="slsec">종료</div>${done.map(item).join('')}` : ''}
     </aside>
-    <section class="slm" id="logwrap">${!DATA.projects ? `<div class="slempty">프로젝트 저장 표가 아직 없습니다.</div>` : !p ? `<div class="slempty"><div class="big">프로젝트 채널</div>프로젝트 하나의 자료와 의견, 결정이 날짜순으로 쌓이는 곳입니다.<br>왼쪽의 <b>＋ 채널 추가</b>로 첫 채널을 만들어 보세요.</div>` : `
+    <section class="slm" id="logwrap">${!DATA.projects ? `<div class="slempty">프로젝트 저장 표가 아직 없습니다.</div>` : agenda ? agendaHtml() : !p ? `<div class="slempty"><div class="big">프로젝트 채널</div>프로젝트 하나의 자료와 의견, 결정이 날짜순으로 쌓이는 곳입니다.<br>왼쪽의 <b>＋ 채널 추가</b>로 첫 채널을 만들어 보세요.</div>` : `
       <div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2><span class="hash">#</span> ${esc(p.name)}</h2>${p.status !== '진행중' ? stP(p.status) : ''}
         <span class="sp"></span>${p.owner ? `<span class="ld" title="프로젝트 리더">${who(p.owner)}</span>` : ''}${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
         ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}<button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button></div>
@@ -151,6 +154,7 @@ function slRender(p){
   slFit();
   document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
   const np = $('#newP'); if (np) np.onclick = () => openProject(null);
+  if (agenda) { bindAgenda(); const sm = $('#slMenu'); if (sm) sm.onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); }; if (CV && $('#cvExtra')) refreshCardSide(CV.id); return; }
   if (!p) return;
   $('#slMenu').onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); };
   document.querySelectorAll('.sltab').forEach(b => b.onclick = () => { tab = b.dataset.tab; LS.set('proj_tab', tab); talkStick = true; render(); });
@@ -389,10 +393,10 @@ function refreshCardSide(id){
   if (keepId) { const i = $('#' + keepId); if (i) { i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch {} } }
 }
 /* 대화에 결정도 한 줄로 */
-function talkExtraEvents(p, ev){
+let talkExtraEvents = function(p, ev){
   decsOf(p.id).forEach(d => { const c = d.card_id ? CARDS().find(x => x.id === d.card_id) : null;
     ev.push({ at: d.created_at, by: d.created_by, type: 'dec', html: `<div class="mt"><span class="dk">✅ 결정</span> ${d.status ? stCard(d.status) : ''} <b>${esc(d.body)}</b>${d.reason ? `<div class="rs">이유: ${esc(d.reason)}</div>` : ''}</div>${c ? cardChip(c) : ''}` }); });
-}
+};
 /* 결정 로그 탭: 이 채널의 모든 결정이 날짜순으로. 근거가 된 카드로 바로 이동 */
 let decQ = '';
 function decsHtml(p){
@@ -429,6 +433,35 @@ function openDecEdit(p, id){
   ['#eBody', '#eReason'].forEach(q => { $(q).onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } }; });
   const del = $('#eDel'); if (del) del.onclick = async () => { if (confirm('이 결정 기록을 삭제할까요?')) { closeModal(); await removeRow('project_decisions', d.id); toast('삭제했습니다'); } };
 }
+
+/* ================= 3단계: 회의 안건 목록 · 업무/업무공유 연결 ================= */
+/* 회의 안건: 모든 (진행 중) 채널에서 '결정 대기'인 카드만 프로젝트별로 묶어 보여 줌. 대표가 이 화면만 보면 결정할 것을 알 수 있게 */
+function agendaHtml(){
+  const groups = P().filter(x => x.status !== '완료').map(x => ({ p: x, cards: cardsOf(x.id).filter(c => c.status === '결정 대기').sort((a, b) => String(cardLastAt(a)).localeCompare(String(cardLastAt(b)))) })).filter(g => g.cards.length)
+    .sort((a, b) => String(cardLastAt(a.cards[0])).localeCompare(String(cardLastAt(b.cards[0]))));   // 오래 기다린 것부터
+  const total = groups.reduce((n, g) => n + g.cards.length, 0);
+  return `<div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2>📋 회의 안건</h2><span class="sp"></span><span class="hint">결정 대기 ${total}건 · 채널 ${groups.length}개</span></div>
+    <div class="slt" style="padding:6px 16px"><span class="hint">모든 채널에서 결정을 기다리는 자료입니다. 카드를 누르면 자료가 열리고, <b>결정 대기 ▾</b>를 누르면 바로 결정을 적을 수 있습니다.</span></div>
+    <div class="slscroll" id="tscroll"><div class="slpad">${groups.length ? groups.map(g => `<div class="agp"><div class="agh"><a class="agn" data-goto="${g.p.id}"># ${esc(g.p.name)}</a><span class="hint">${g.p.owner ? '리더 ' + esc(fullName(g.p.owner)) + ' · ' : ''}결정 대기 ${g.cards.length}건</span></div>
+      ${g.cards.map(c => { const fs = cardFiles(c), img = fs.find(isImg), d = daysAgo(cardLastAt(c)), n = revsOf(c).length; return `<div class="agc" data-card="${c.id}">${img ? `<img src="${esc(img.url)}" alt="" loading="lazy">` : `<span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span>`}
+        <div class="ai"><b>${esc(c.title)}</b>${n > 1 ? ` <span class="rv">${n}차</span>` : ''}<div class="am">${esc(c.kind || '기타')} · ${esc(c.created_by || '')} · ${d === 0 ? '오늘' : d + '일 전'} 올림${(c.comments || []).length ? ` · 💬 ${c.comments.length}` : ''}</div>${c.memo ? `<div class="at">${esc(c.memo)}</div>` : ''}</div>
+        <button type="button" class="qd" data-qd="${c.id}" title="눌러서 결정 기록 (승인·보류·반려)">${stCard(c.status)}<span class="ar">▾</span></button></div>`; }).join('')}</div>`).join('')
+      : `<div class="slempty"><div class="big">결정을 기다리는 자료가 없습니다 👍</div>팀원이 자료 카드를 <b>결정 대기</b>로 올리면 여기에 프로젝트별로 모입니다.</div>`}</div></div>`;
+}
+function bindAgenda(){
+  document.querySelectorAll('#tscroll .agc[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card));
+  document.querySelectorAll('#tscroll [data-goto]').forEach(a => a.onclick = () => { cur = a.dataset.goto; LS.set('proj_cur', cur); tab = 'talk'; talkStick = true; render(); });
+  bindQuickDec();
+}
+/* 프로젝트를 고른 업무(tasks.project_id)와 업무공유(decisions.project_id)는 그 채널의 대화에도 한 줄로 나타남 */
+const _talkExtra2 = talkExtraEvents;
+talkExtraEvents = function(p, ev){
+  _talkExtra2(p, ev);
+  (DATA.tasks || []).filter(t => t.project_id === p.id && (isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me)).forEach(t =>
+    ev.push({ at: t.created_at, by: t.created_by, type: 'task', html: `<div class="mt"><span class="lk">📝 업무</span> <a href="tasks.html" title="업무 화면에서 보기"><b>${esc(t.title)}</b></a> <span class="hint">${t.assignee && t.assignee !== t.created_by ? '→ ' + esc(fullName(t.assignee)) + ' · ' : ''}${esc(t.status || '')}${t.due_date ? ' · 마감 ' + fmtDate(t.due_date).slice(5) : ''}</span></div>` }));
+  (DATA.decisions || []).filter(d => d.project_id === p.id && (isAdmin() || !(Array.isArray(d.targets) && d.targets.length) || d.targets.includes(me) || d.created_by === me)).forEach(d =>
+    ev.push({ at: d.created_at, by: d.created_by, type: 'share', html: `<div class="mt"><span class="lk">📣 업무공유</span> <a href="decisions.html" title="업무공유 화면에서 보기"><b>${esc(d.title)}</b></a>${d.reason ? `<div class="rs">${esc(d.reason)}</div>` : ''}</div>` }));
+};
 
 /* ---------- 채널 화면에 쓰는 모양 ---------- */
 document.head.insertAdjacentHTML('beforeend', `<style>
@@ -612,6 +645,22 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .qd:hover{border-color:var(--line2);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
   .qd .ar{font-size:10px;color:#616061}
   .qdpick .lchip.on{background:#15803d;border-color:#15803d;color:#fff}
+  .slch.slag{margin-bottom:4px;font-weight:700;color:#fff}
+  .agp{max-width:900px;margin-bottom:18px}
+  .agh{display:flex;align-items:baseline;gap:10px;margin:0 2px 6px;padding-bottom:4px;border-bottom:1px solid #e3e3e3}
+  .agn{font-size:16px;font-weight:900;color:#1d1c1d;cursor:pointer}
+  .agn:hover{color:#1264a3;text-decoration:underline}
+  .agc{display:flex;align-items:flex-start;gap:12px;border:1px solid #ddd;border-left:4px solid #f59e0b;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#fff}
+  .agc:hover{border-color:#1264a3;border-left-color:#f59e0b;background:#f8f8f8}
+  .agc img{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+  .agc .ic{font-size:34px;line-height:1;flex:none;width:56px;text-align:center}
+  .agc .ai{flex:1;min-width:0;font-size:15px;line-height:1.45}
+  .agc .ai .rv{background:#1d1c1d;color:#fff;border-radius:999px;padding:0 8px;font-size:11px;font-weight:600}
+  .agc .am{font-size:12px;color:#616061}
+  .agc .at{font-size:13px;color:#454245;margin-top:2px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .msg .lk{font-weight:900;color:#1264a3}
+  .msg .mt a{color:inherit;text-decoration:none}
+  .msg .mt a:hover{text-decoration:underline}
   .psec{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 8px}
   .psec:first-of-type{margin-top:0}
   @media (max-width:900px){ .modal.xl{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0} .cv{grid-template-columns:1fr;grid-template-rows:minmax(50vh,1fr) auto;overflow:auto} .cvside{border-left:0;border-top:1px solid var(--line)} .ago{margin-left:0} }
