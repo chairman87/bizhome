@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무 분장</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610031607">
-<script src="common.js?v=202610031607"></script>
+<link rel="stylesheet" href="common.css?v=202610031616">
+<script src="common.js?v=202610031616"></script>
 <style>
   /* 업무 R&R 판 */
   .rnr{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin-bottom:18px;overflow:hidden}
@@ -25,6 +25,8 @@
   .rnr td.d{white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;line-height:1.6;font-size:13px;padding:8px 10px}
   .wrap-wide{max-width:1800px}
   .rnr .footer{margin-top:12px;color:var(--red);white-space:pre-wrap;line-height:1.6;font-size:13px}
+  .rnr .tnote{margin-top:8px;color:var(--red);white-space:pre-wrap;line-height:1.6;font-size:13px}   /* 팀 표 바로 아래 안내문 */
+  .rnr .tnote.empty{color:var(--fg3)}
   .rnr [data-edit]{cursor:text;border-radius:4px}
   .rnr [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
   .rnr .inline{width:100%;font:inherit;border:2px solid var(--blue);border-radius:4px;padding:4px 6px;background:var(--bg);resize:vertical;line-height:1.5}
@@ -70,7 +72,7 @@
 
 /* ================================================================
    업무 분장 (R&R) — 버전으로 쌓임. 첫 화면에는 최신 버전, 이전 버전은 언제든 열람
-   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, head(헤드 이름), rows:[{name, duties}]  (예전 role 칸은 더 이상 안 씀)}], footer(하단 안내문) }
+   한 버전 = { version, title, effective_date, note(변경 요약), teams:[{name, head(헤드 이름), note(그 팀 표 바로 아래 안내문), rows:[{name, duties}]  (예전 role 칸은 더 이상 안 씀)}], footer(하단 안내문) }
    조직도는 teams 에서 바로 그림: 팀 순서대로 나란히, 이웃 팀의 head 가 같으면 헤드 상자 하나가 그 팀들 위에 걸침
 ================================================================ */
 const R = () => (DATA.rnr || []).slice().sort((a, b) => (b.version || 0) - (a.version || 0));
@@ -134,7 +136,7 @@ function rnrBodyHtml(v, editable){
   return `${orgHtml(v, editable)}<div class="teams">${teams.map((t, ti) => `<div class="team"><h3><span${ed('team', ti)}>${esc(t.name)}</span></h3>
     <table><thead><tr><th>이름</th><th>업무</th></tr></thead><tbody>
     ${(t.rows || []).map((r, ri) => `<tr><td class="n"${ed('name', ti, ri)}>${esc(r.name)}</td><td class="d"${ed('duties', ti, ri)}>${esc(r.duties)}</td></tr>`).join('') || '<tr><td colspan="2" class="hint">없음</td></tr>'}
-    </tbody></table></div>`).join('')}</div>
+    </tbody></table>${t.note || editable ? `<div class="tnote ${t.note ? '' : 'empty'}"${ed('tnote', ti)}>${esc(t.note || '(이 팀 안내문 없음 · 더블클릭해서 입력)')}</div>` : ''}</div>`).join('')}</div>
     ${v.footer || editable ? `<div class="footer"${ed('footer')}>${esc(v.footer || (editable ? '(하단 안내문 없음 · 더블클릭해서 입력)' : ''))}</div>` : ''}`;
 }
 /* 더블클릭 편집: 그 칸이 입력창으로 바뀌고, 다른 곳을 클릭하면 현재 버전에 바로 저장. Esc 는 취소 */
@@ -143,8 +145,8 @@ function bindInlineEdit(){
   document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = () => {
     const cur = latestRnr(); if (!cur || el.querySelector('textarea,input')) return;
     const kind = el.dataset.edit, ti = +el.dataset.ti, ri = el.dataset.ri === '' ? null : +el.dataset.ri;
-    const get = () => kind === 'title' ? cur.title : kind === 'footer' ? (cur.footer || '') : kind === 'team' ? cur.teams[ti].name : kind === 'head' ? (cur.teams[ti].head || '') : (cur.teams[ti].rows[ri][kind] || '');
-    const multi = kind === 'duties' || kind === 'footer';
+    const get = () => kind === 'title' ? cur.title : kind === 'footer' ? (cur.footer || '') : kind === 'team' ? cur.teams[ti].name : kind === 'head' ? (cur.teams[ti].head || '') : kind === 'tnote' ? (cur.teams[ti].note || '') : (cur.teams[ti].rows[ri][kind] || '');
+    const multi = kind === 'duties' || kind === 'footer' || kind === 'tnote';
     const old = get();
     const box = document.createElement(multi ? 'textarea' : 'input');
     box.value = old; box.className = 'inline';
@@ -156,7 +158,7 @@ function bindInlineEdit(){
       const val = box.value.trim();
       if (!save || val === old.trim()) { render(); return; }
       const n = JSON.parse(JSON.stringify(cur));
-      if (kind === 'title') n.title = val || old; else if (kind === 'footer') n.footer = val; else if (kind === 'team') n.teams[ti].name = val || old; else if (kind === 'head') n.teams[ti].head = val; else n.teams[ti].rows[ri][kind] = val;
+      if (kind === 'title') n.title = val || old; else if (kind === 'footer') n.footer = val; else if (kind === 'team') n.teams[ti].name = val || old; else if (kind === 'head') n.teams[ti].head = val; else if (kind === 'tnote') n.teams[ti].note = val; else n.teams[ti].rows[ri][kind] = val;
       await saveRow('rnr', n);
       toast('저장했습니다 (v' + n.version + ' 에 반영)');
     };
@@ -212,12 +214,14 @@ function openRnrEditor(base){
       <div class="th"><input value="${esc(t.name)}" data-tname="${ti}" placeholder="팀 이름"><input class="hd-in" value="${esc(t.head || '')}" data-thead="${ti}" placeholder="헤드 이름 (조직도 위 상자)"><button class="btn sm danger" data-tdel="${ti}">팀 삭제</button></div>
       ${(t.rows || []).map((r, ri) => `<div class="rrow"><input value="${esc(r.name)}" data-rname="${ti}-${ri}" placeholder="이름"><textarea data-rd="${ti}-${ri}" placeholder="맡은 업무 (줄바꿈으로 여러 개)">${esc(r.duties)}</textarea><button class="x" data-rdel="${ti}-${ri}" title="삭제">✕</button></div>`).join('')}
       <button class="addrow2" data-radd="${ti}">＋ 인원 추가</button>
+      <textarea data-tnote="${ti}" placeholder="이 팀 표 바로 아래에 빨간 글씨로 보일 안내문 (선택)" style="width:100%;min-height:40px;margin-top:6px">${esc(t.note || '')}</textarea>
     </div>`).join('') + `<button class="addrow2" id="rTeamAdd">＋ 팀 추가</button>`;
   /* 화면의 입력값을 draft 에 반영 */
   const collect = () => {
     draft.title = $('#rTitle').value.trim(); draft.effective_date = $('#rDate').value; draft.note = $('#rNote').value.trim(); draft.footer = $('#rFooter').value.trim();
     document.querySelectorAll('[data-tname]').forEach(i => draft.teams[+i.dataset.tname].name = i.value.trim());
     document.querySelectorAll('[data-thead]').forEach(i => draft.teams[+i.dataset.thead].head = i.value.trim());
+    document.querySelectorAll('[data-tnote]').forEach(i => draft.teams[+i.dataset.tnote].note = i.value.trim());
     document.querySelectorAll('[data-rname]').forEach(i => { const [a, b] = i.dataset.rname.split('-').map(Number); draft.teams[a].rows[b].name = i.value.trim(); });
     document.querySelectorAll('[data-rd]').forEach(i => { const [a, b] = i.dataset.rd.split('-').map(Number); draft.teams[a].rows[b].duties = i.value.trim(); });
   };
@@ -237,7 +241,7 @@ function openRnrEditor(base){
       </div>
       <div class="f"><label>변경 요약 (무엇이 바뀌었는지 한 줄)</label><input id="rNote" placeholder="예: 안상형 영상 개수 12→15, 황려은 CS 추가" maxlength="200"></div>
       <div id="rTeams"></div>
-      <div class="f"><label>하단 안내문 (빨간 글씨로 표시)</label><textarea id="rFooter" style="min-height:50px">${esc(draft.footer)}</textarea></div>
+      <div class="f"><label>맨 아래 공통 안내문 (빨간 글씨 · 팀별 안내문은 각 팀 칸에)</label><textarea id="rFooter" style="min-height:50px">${esc(draft.footer)}</textarea></div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="rSave">v${nextVer} 으로 저장</button></div>`, { wide: true });
   paint();
@@ -245,7 +249,7 @@ function openRnrEditor(base){
   $('#rSave').onclick = async () => {
     collect();
     if (!draft.title) { $('#rTitle').focus(); toast('제목을 입력하세요', true); return; }
-    draft.teams = draft.teams.map(t => ({ name: t.name || '팀', head: t.head || '', rows: (t.rows || []).filter(r => r.name || r.duties) })).filter(t => t.rows.length || t.name);
+    draft.teams = draft.teams.map(t => ({ name: t.name || '팀', head: t.head || '', note: t.note || '', rows: (t.rows || []).filter(r => r.name || r.duties) })).filter(t => t.rows.length || t.name);
     if (!draft.teams.length) { toast('팀과 인원을 하나 이상 넣어 주세요', true); return; }
     closeModal();
     await saveRow('rnr', { id: uid(), version: nextVer, ...draft, created_by: me, created_at: nowIso() });
