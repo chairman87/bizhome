@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032124">
-<script src="common.js?v=202610032124"></script>
+<link rel="stylesheet" href="common.css?v=202610032132">
+<script src="common.js?v=202610032132"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -47,7 +47,10 @@
   .gdx{top:0;bottom:0;width:1px}
   .gdy{left:0;right:0;height:1px}
   .selbox{position:absolute;border:1px solid var(--blue);background:rgba(37,99,235,.08);z-index:30;pointer-events:none}
-  .selinfo{position:sticky;top:8px;z-index:40;display:inline-block;margin:0 0 8px;background:var(--blue);color:#fff;font-size:12px;font-weight:600;border-radius:999px;padding:3px 12px}
+  .edtools{position:sticky;top:8px;z-index:40;display:flex;align-items:center;gap:6px;margin:0 0 8px}
+  .editing .pg .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* 편집 중에는 이름을 한 줄로: 보는 화면보다 칸이 길어지지 않게 */
+  .selinfo[hidden]{display:none !important}
+  .selinfo{display:inline-block;background:var(--blue);color:#fff;font-size:12px;font-weight:600;border-radius:999px;padding:3px 12px}
   .rz{position:absolute;top:0;right:-9px;width:16px;height:100%;cursor:ew-resize;z-index:3}
   .rz::after{content:"";position:absolute;top:50%;left:6px;width:5px;height:44px;max-height:70%;transform:translateY(-50%);border-radius:3px;background:var(--line2)}
   .rz:hover::after,.resizing .rz::after{background:var(--blue)}
@@ -211,7 +214,7 @@ function layoutBlocks(){
   const cv = $('#cv'); if (!cv) return;
   const A = cv.parentElement.clientWidth, stack = A < 700 && !editing;
   const els = [...cv.children].filter(el => el.dataset.blk);
-  const items = els.map(el => { const r = M().find(x => x.id === el.dataset.blk) || {}; return { id: el.dataset.blk, el, r, w: blkW(r), x: r.x, y: r.y, so: r.sort_order || 0 }; });
+  const items = els.map(el => { const r = M().find(x => x.id === el.dataset.blk) || {}; return { id: el.dataset.blk, el, r, w: blkW(r), x: r.x, y: r.y, sh: r.h, so: r.sort_order || 0 }; });
   const posd = items.filter(i => i.x != null && i.y != null).sort((a, b) => a.y - b.y || a.x - b.x), auto = items.filter(i => i.x == null || i.y == null).sort((a, b) => a.so - b.so);
   cv.classList.toggle('stack', stack);
   if (stack) { [...posd, ...auto].forEach(i => cv.appendChild(i.el)); cv.style.cssText = ''; LAY = []; return; }
@@ -219,7 +222,15 @@ function layoutBlocks(){
   items.forEach(i => { i.el.style.width = i.w + 'px'; });
   items.forEach(i => { i.h = i.el.offsetHeight; });
   const placed = [];
-  const put = (i, left) => { let top = Math.max(0, i.y || 0); for (const p of placed) if (left < p.left + p.w && left + i.w > p.left) top = Math.max(top, p.top + p.h + CV_GAP); i.left = left; i.top = top; placed.push(i); };
+  /* 저장할 때의 높이(h)로 보아 어떤 칸 바로 아래에 붙여 둔 칸(틈이 간격+4px 이내)은, 위 칸의 실제 높이가 달라져도(팀원에게 안 보이는 메뉴, 공지 개수 등) 그 바로 아래에 붙음.
+     붙여 둔 게 아닌 칸은 놓은 자리 그대로, 위 칸과 겹칠 때만 겹치지 않을 만큼 내려감 */
+  const put = (i, left) => {
+    const above = placed.filter(p => left < p.left + p.w && left + i.w > p.left);
+    const stuck = above.some(p => p.sh != null && p.y != null && i.y - (p.y + p.sh) >= -2 && i.y - (p.y + p.sh) <= CV_GAP + 4);
+    let top = stuck ? 0 : Math.max(0, i.y || 0);
+    for (const p of above) top = Math.max(top, p.top + p.h + CV_GAP);
+    i.left = left; i.top = top; placed.push(i);
+  };
   posd.forEach(i => put(i, Math.max(0, Math.min(CV_W - i.w, i.x))));
   let cy = placed.reduce((m, p) => Math.max(m, p.top + p.h + CV_GAP), 0), line = [], lw = 0;
   const flush = () => { if (!line.length) return; let x = Math.max(0, Math.round((FLOW_W - lw) / 2)), bottom = cy; line.forEach(i => { i.left = x; i.top = cy; x += i.w + CV_GAP; bottom = Math.max(bottom, cy + i.h); placed.push(i); }); cy = bottom + CV_GAP; line = []; lw = 0; };
@@ -234,9 +245,21 @@ function layoutBlocks(){
 let layTimer; window.addEventListener('resize', () => { clearTimeout(layTimer); layTimer = setTimeout(layoutBlocks, 80); });
 window.addEventListener('load', () => setTimeout(layoutBlocks, 50));
 /* 편집에서 칸을 옮기거나 길이를 바꾼 뒤: 그 칸의 값을 바꾸고 → 다시 배치해 보고 → 화면에 놓인 그대로(위치·길이)를 모든 칸에 저장 */
+let UNDO = [], REDO = [];   // 배치 되돌리기 기록 (메뉴 편집 중, 최근 50번)
+const laySnap = () => blocks().map(r => ({ id: r.id, x: r.x ?? null, y: r.y ?? null, width: r.width ?? null, h: r.h ?? null }));
+async function persistLayout(rows){
+  try {
+    await Promise.all(rows.map(async r => {
+      if (store.client) { const { error } = await store.client.from('menu').update({ x: r.x ?? null, y: r.y ?? null, width: r.width ?? null, h: r.h ?? null }).eq('id', r.id); if (error) throw error; }
+      else await store.upsert('menu', r);
+    }));
+    return true;
+  } catch (e) { toast('배치 저장 실패: ' + (e.message || e), true); reload(); return false; }
+}
 async function saveLayout(patches){   // patches = { 칸id: {x, y, width 중 바뀔 것}, … }
   if (!guard()) return;
-  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (r && (r.x == null || r.y == null)) { r.x = i.left; r.y = i.top; r._dirty = true; } });   // 아직 위치가 없던 칸은 지금 보이는 자리로 고정
+  UNDO.push(laySnap()); if (UNDO.length > 50) UNDO.shift(); REDO = [];
+  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (r && (r.x == null || r.y == null)) { r.x = i.left; r.y = i.top; r._dirty = true; } if (r && r.h == null) { r.h = i.h; r._dirty = true; } });   // 아직 위치가 없던 칸은 지금 보이는 자리로 고정
   for (const [id, patch] of Object.entries(patches)) {
     const row = M().find(x => x.id === id); if (!row) continue;
     Object.assign(row, patch); row._dirty = true;
@@ -244,14 +267,40 @@ async function saveLayout(patches){   // patches = { 칸id: {x, y, width 중 바
   }
   layoutBlocks();
   const changed = [];
-  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (!r) return; if (r.x !== i.left || r.y !== i.top || r._dirty) { r.x = i.left; r.y = i.top; delete r._dirty; changed.push(r); } });
-  try {
-    await Promise.all(changed.map(async r => {
-      if (store.client) { const { error } = await store.client.from('menu').update({ x: r.x, y: r.y, width: r.width ?? null }).eq('id', r.id); if (error) throw error; }
-      else await store.upsert('menu', r);
-    }));
-  } catch (e) { toast('배치 저장 실패: ' + (e.message || e), true); reload(); return; }
-  render();
+  LAY.forEach(i => { const r = M().find(x => x.id === i.id); if (!r) return; if (r.x !== i.left || r.y !== i.top || r.h !== i.h || r._dirty) { r.x = i.left; r.y = i.top; r.h = i.h; delete r._dirty; changed.push(r); } });
+  if (await persistLayout(changed)) render();
+}
+/* Ctrl+Z = 배치 되돌리기, Ctrl+Y(또는 Ctrl+Shift+Z) = 다시 하기. 옮기기·길이 조절만 되돌림 */
+async function undoLayout(redo){
+  if (!editing || !guard()) return;
+  const from = redo ? REDO : UNDO, to = redo ? UNDO : REDO;
+  const snap = from.pop(); if (!snap) { toast(redo ? '다시 할 것이 없습니다' : '되돌릴 것이 없습니다'); return; }
+  to.push(laySnap());
+  const changed = [];
+  snap.forEach(sn => { const r = M().find(x => x.id === sn.id); if (!r) return; if ((r.x ?? null) !== sn.x || (r.y ?? null) !== sn.y || (r.width ?? null) !== sn.width || (r.h ?? null) !== sn.h) { r.x = sn.x; r.y = sn.y; r.width = sn.width; r.h = sn.h; changed.push(r); } });
+  if (await persistLayout(changed)) { render(); toast(redo ? '다시 했습니다' : '되돌렸습니다'); }
+}
+document.addEventListener('keydown', e => {
+  if (!editing || !(e.ctrlKey || e.metaKey) || (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) || $('#modal .mb')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z') { e.preventDefault(); undoLayout(e.shiftKey); } else if (k === 'y') { e.preventDefault(); undoLayout(true); }
+});
+/* 겹치게 놓았을 때: 다른 칸을 밀어내지 않고, 옮긴 칸(묶음)을 가장 가까운 빈자리(겹친 칸의 옆·위·아래)로 보냄 */
+function freeSpot(L0, T0, W, H, others){
+  const hit = (l, t) => others.filter(o => l < o.left + o.w + CV_GAP - 1 && l + W + CV_GAP - 1 > o.left && t < o.top + o.h + CV_GAP - 1 && t + H + CV_GAP - 1 > o.top);
+  if (!hit(L0, T0).length) return { L: L0, T: T0 };
+  const seen = new Set(), queue = [{ l: L0, t: T0 }]; let best = null, n = 0;
+  const dist = c => Math.abs(c.l - L0) + Math.abs(c.t - T0);
+  while (queue.length && n++ < 400) {
+    queue.sort((a, b) => dist(a) - dist(b));
+    const c = queue.shift(), key = c.l + ',' + c.t; if (seen.has(key)) continue; seen.add(key);
+    if (best && dist(c) >= dist(best)) break;
+    const hs = hit(c.l, c.t);
+    if (!hs.length) { best = c; continue; }
+    hs.forEach(o => [[o.left + o.w + CV_GAP, c.t], [o.left - CV_GAP - W, c.t], [c.l, o.top + o.h + CV_GAP], [c.l, o.top - CV_GAP - H]].forEach(([l, t]) => { if (l >= 0 && t >= 0 && l + W <= CV_W) queue.push({ l, t }); }));
+  }
+  if (best) return { L: best.l, T: best.t };
+  return { L: L0, T: others.filter(o => L0 < o.left + o.w && L0 + W > o.left).reduce((m, o) => Math.max(m, o.top + o.h + CV_GAP), 0) };
 }
 let SEL = new Set();   // 메뉴 편집에서 선택한 칸들 (같이 옮김)
 const pagesOf = id => M().filter(x => x.type === 'page' && x.parent === id).sort(bySort);
@@ -294,10 +343,10 @@ function render(){
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
-    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 아래쪽 칸이 밑으로 밀립니다). 다른 칸 가까이 가져가면 <b>자석처럼 딱 붙습니다</b>(빨간 선이 보이면 줄이 맞은 것). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
+    ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 다른 칸은 그대로 두고, 옮긴 칸이 가장 가까운 빈자리에 붙습니다). 잘못 옮겼으면 <b>Ctrl+Z</b> 로 되돌립니다. 다른 칸 가까이 가져가면 <b>자석처럼 딱 붙습니다</b>(빨간 선이 보이면 줄이 맞은 것). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
-    ${editing ? '<div id="selInfo" class="selinfo" hidden></div>' : ''}
+    ${editing ? `<div class="edtools"><button class="btn sm" id="undoBtn" ${UNDO.length ? '' : 'disabled'} title="Ctrl+Z">↶ 되돌리기</button><button class="btn sm" id="redoBtn" ${REDO.length ? '' : 'disabled'} title="Ctrl+Y">↷ 다시 하기</button><span id="selInfo" class="selinfo" hidden></span></div>` : ''}
     <div class="cvwrap"><div id="cv">${blocks().map((d, di, arr) => {
       const rz = editing ? `<span class="rz" data-rz="${d.id}" title="좌우로 끌면 가로 길이가 바뀝니다 (더블클릭 = 기본 길이로)"></span>` : '';
       if (d.type === 'board') {   // 공지사항·업무공유·이달의 목표 판
@@ -306,7 +355,7 @@ function render(){
         return `<div class="bwrap" data-blk="${d.id}" style="width:${blkW(d)}px"><div class="bin">${html}${rz}</div></div>`;
       }
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
-      if (d.href === 'projects' && !editing) return projectDept(d, c);   // 프로젝트 폴더: 프로젝트가 자동으로 나열됨
+      if (d.href === 'projects') return projectDept(d, c, rz);   // 프로젝트 폴더: 프로젝트가 자동으로 나열됨
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
       return `<section class="dept" style="background:${c.bg};width:${blkW(d)}px" data-dept="${d.id}" data-blk="${d.id}">${rz}
         <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${pages.length}</span>
@@ -328,7 +377,7 @@ function render(){
     ${admin && !editing ? `<div class="foot">"준비 중" 페이지는 아직 화면이 없습니다. 연결할 화면이 생기면 메뉴 편집에서 지정합니다.</div>` : ''}
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
-  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SEL = new Set(); render(); };
+  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SEL = new Set(); UNDO = []; REDO = []; render(); };
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-notice]').forEach(el => el.onclick = () => openNotice(el.dataset.notice));
   bindGoals();
@@ -344,13 +393,15 @@ function render(){
   const da = $('#deptAdd'); if (da) da.onclick = () => openDept(null);
   layoutBlocks();
   if (editing) bindMenuDrag();
+  const ub = $('#undoBtn'); if (ub) ub.onclick = () => undoLayout(false);
+  const rb = $('#redoBtn'); if (rb) rb.onclick = () => undoLayout(true);
 }
 /* 프로젝트 폴더(menu 의 폴더 줄에 href='projects'): 페이지를 따로 등록하지 않아도 진행 중인 프로젝트가 나열되고, 누르면 그 프로젝트의 기록 화면으로 바로 감 */
-function projectDept(d, c){
+function projectDept(d, c, rz = ''){
   const list = (DATA.projects || []).filter(p => p.status !== '완료').sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   const done = (DATA.projects || []).length - list.length;
-  return `<section class="dept" style="background:${c.bg};width:${blkW(d)}px" data-dept="${d.id}" data-blk="${d.id}">
-    <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${list.length}</span></h2>
+  return `<section class="dept" style="background:${c.bg};width:${blkW(d)}px" data-dept="${d.id}" data-blk="${d.id}">${rz}
+    <h2><span class="nm" style="background:${c.tagBg};color:${c.tagFg}">${esc(d.name)}</span><span class="n">${list.length}</span><span class="ed"><button data-dedit="${d.id}" title="폴더 이름·색 바꾸기">✎</button><button class="del" data-ddel="${d.id}" title="폴더 삭제">✕</button></span></h2>
     ${list.map(p => `<a class="pg" href="projects.html?p=${p.id}"><span class="ic">🗂️</span><span class="t">${esc(p.name)}</span>${p.status === '보류' ? '<span class="soon">보류</span>' : ''}</a>`).join('')}
     ${done ? `<a class="pg na" href="projects.html"><span class="ic">📦</span><span class="t">완료한 프로젝트 ${done}개</span></a>` : ''}
     <a class="addpg" href="projects.html#new" style="display:block;text-decoration:none">＋ 새 프로젝트</a>
@@ -418,6 +469,8 @@ function bindMenuDrag(){
         if (!moved) return;
         el.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true });   // 놓는 순간의 클릭으로 창이 열리지 않게
         if (!dx && !dy) { render(); return; }
+        const spot = freeSpot(minL + dx, minT + dy, gW, gH, others); dx = spot.L - minL; dy = spot.T - minT;   // 다른 칸과 겹치면 가장 가까운 빈자리로
+        if (!dx && !dy) { render(); return; }
         const patches = {}; group.forEach(g => { patches[g.id] = { x: g.left + dx, y: g.top + dy }; });
         saveLayout(patches);
       };
@@ -454,7 +507,8 @@ function bindMenuDrag(){
       const left = el.getBoundingClientRect().left; let w = it.w, moved = false;
       el.classList.add('resizing'); document.body.classList.add('rzing');
       const wc = []; LAY.forEach(o => { if (o.id !== it.id) wc.push(o.left - CV_GAP - it.left, o.left + o.w - it.left); });   // 오른쪽 끝이 옆 칸에 딱 닿거나, 다른 칸의 오른쪽 끝과 줄이 맞는 길이
-      const move = ev => { moved = true; w = Math.max(MIN_W, Math.min(CV_W - it.left, magnet(ev.clientX - left, wc.filter(v => v >= MIN_W)))); el.style.width = w + 'px'; h.dataset.w = w + 'px'; };
+      const wall = LAY.filter(o => o.id !== it.id && o.left >= it.left + it.w - 1 && o.top < it.top + it.h && o.top + o.h > it.top).reduce((m, o) => Math.min(m, o.left - CV_GAP - it.left), CV_W - it.left);   // 오른쪽에 있는 칸을 넘어가지 않음
+      const move = ev => { moved = true; w = Math.max(MIN_W, Math.min(wall, magnet(ev.clientX - left, wc.filter(v => v >= MIN_W)))); el.style.width = w + 'px'; h.dataset.w = w + 'px'; };
       const up = () => {
         document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
         el.classList.remove('resizing'); document.body.classList.remove('rzing'); delete h.dataset.w;
@@ -579,7 +633,7 @@ function openDept(id){
   document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { color = b.dataset.c; document.querySelectorAll('[data-c]').forEach(x => x.style.borderColor = x.dataset.c === color ? DEPT_COLORS[x.dataset.c].tagFg : 'transparent'); });
   const save = async () => {
     const name = $('#dName').value.trim(); if (!name) { $('#dName').focus(); toast('부서 이름을 입력하세요', true); return; }
-    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: d ? d.href || null : null, width: d && d.width != null ? d.width : null, x: d && d.x != null ? d.x : null, y: d && d.y != null ? d.y : null, sort_order: d ? d.sort_order : blocks().length, created_at: d ? d.created_at : nowIso() };
+    const n = { id: d ? d.id : uid(), type: 'dept', parent: null, name, icon: null, color, href: d ? d.href || null : null, width: d && d.width != null ? d.width : null, x: d && d.x != null ? d.x : null, y: d && d.y != null ? d.y : null, h: d && d.h != null ? d.h : null, sort_order: d ? d.sort_order : blocks().length, created_at: d ? d.created_at : nowIso() };
     closeModal();
     await saveRow('menu', n);
     toast(d ? '저장했습니다' : '부서를 추가했습니다');
