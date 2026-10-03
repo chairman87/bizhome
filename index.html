@@ -5,30 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610031940">
-<script src="common.js?v=202610031940"></script>
+<link rel="stylesheet" href="common.css?v=202610031932">
+<script src="common.js?v=202610031932"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
   .dept{border-radius:10px;padding:10px;flex:0 1 260px;min-width:0}   /* 폴더 폭은 내용에 맞춰 좁게 고정 (위의 공지·결정사항 판 폭에 맞추지 않음) */
   .depts .adddept{flex:0 1 260px;width:auto}
   @media(max-width:640px){.dept,.depts .adddept{flex:1 1 100%}}
-  /* 홈 두 칸 배치: 왼쪽에 공지사항·업무공유·이달의 목표(좁게), 오른쪽에 폴더들. 화면이 좁으면(1100px 미만) 위아래로 쌓임 */
-  .home{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:20px;align-items:start}
-  .home.solo{display:block}
-  .home .hleft .nboard{max-width:none;margin:0 0 14px}
-  .home .hleft .nboard .hd{flex-wrap:wrap;row-gap:2px;padding:9px 12px}
-  .home .hleft .nrow{grid-template-columns:minmax(0,1fr) auto auto;gap:8px;padding:9px 12px}
-  .home .hleft .nrow .by{display:none}
-  .home .hleft .nrow .dt{font-size:11px}
-  .home .hleft .nrow .ok{padding:2px 7px}
-  .home .hleft .grow{padding:9px 12px;font-size:13px}
-  .home .hleft .goals .gnote{padding:8px 12px}
-  .home:not(.solo) .depts{justify-content:flex-start}
-  .home:not(.solo) .dept{flex:1 1 230px;max-width:290px}
-  .home:not(.solo) .foot{text-align:left}
-  @media(max-width:1100px){.home{display:block}.home .hleft .nboard{margin:0 auto 14px}.home:not(.solo) .depts{justify-content:center}.home:not(.solo) .foot{text-align:center}}
-  @media(max-width:640px){.home:not(.solo) .dept{max-width:none}}
   .dept h2{margin:4px 6px 10px;font-size:14px;display:flex;align-items:center;gap:6px}
   .dept h2 .nm{padding:2px 8px;border-radius:4px}
   .dept h2 .n{font-weight:400;color:var(--fg2);flex:1}
@@ -213,10 +197,10 @@ function render(){
     'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
-  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:1640px">
+  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}">
     ${editing ? `<div class="editbar">✎ 편집 중: 폴더와 페이지를 <b>끌어서</b> 순서를 바꾸거나 페이지를 다른 폴더로 옮길 수 있습니다(화살표 버튼도 됩니다). 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
-    ${(() => { const boards = editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard(); return `<div class="home ${boards ? '' : 'solo'}">${boards ? `<aside class="hleft">${boards}</aside>` : ''}<div class="hright">`; })()}
+    ${editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
     <div class="depts">${depts().map((d, di, arr) => {
       const c = DEPT_COLORS[d.color] || DEPT_COLORS.gray;
       const pages = pagesOf(d.id).filter(p => editing || canSee(p));   // 볼 수 있는 사람이 정해진 메뉴는 그 사람과 관리자만
@@ -237,7 +221,6 @@ function render(){
     }).join('')}
     ${admin && editing ? `<button class="adddept" id="deptAdd">＋ 부서 추가</button>` : ''}</div>
     ${admin && !editing ? `<div class="foot">"준비 중" 페이지는 아직 화면이 없습니다. 연결할 화면이 생기면 메뉴 편집에서 지정합니다.</div>` : ''}
-    </div></div>
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
   const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; render(); };
