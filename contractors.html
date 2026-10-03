@@ -6,8 +6,8 @@
 <title>외주 용역관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202610031604">
-<script src="common.js?v=202610031604"></script>
+<link rel="stylesheet" href="common.css?v=202610031607">
+<script src="common.js?v=202610031607"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -69,7 +69,9 @@ const calcTax = gross => { const tax = floor10(gross * 0.03), local = floor10(ta
 /* 차인지급액(실제 보낼 돈)을 정해 놓고 지급액을 거꾸로 구함 */
 const grossFromNet = net => { const guess = Math.round(net / 0.967); for (let g = guess + 40; g >= guess - 40; g--) { if (g > 0 && calcTax(g).net === net) return g; } return guess; };   // 큰 쪽부터 찾아야 300,000 같은 딱 떨어지는 값이 나옴
 const maskRrn = r => { r = String(r || ''); return isAdmin() ? r : r.replace(/^(\d{6}-?\d)\d*$/, '$1******'); };
-const fmtRrn = r => { const d = String(r || '').replace(/\D/g, ''); return d.length === 13 ? d.slice(0, 6) + '-' + d.slice(6) : String(r || '').trim(); };
+/* 주민등록번호(13자리 → 000000-0000000) 또는 사업자등록번호(10자리 → 000-00-00000). 사업자번호는 가리지 않음 */
+const fmtRrn = r => { const d = String(r || '').replace(/\D/g, ''); return d.length === 13 ? d.slice(0, 6) + '-' + d.slice(6) : d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3, 5) + '-' + d.slice(5) : String(r || '').trim(); };
+const isBizNo = r => String(r || '').replace(/\D/g, '').length === 10;
 const monthLabel = m => { const [y, mm] = m.split('-'); return `${y}년 ${Number(mm)}월`; };
 const DOC_KINDS = ['신분증', '통장사본'];
 const hasDoc = (c, kind) => (c.files || []).some(f => f.kind === kind);
@@ -121,7 +123,7 @@ function payHtml(){
       <div class="stat"><div class="l">차인지급액 (실제 이체)</div><div class="v">${won(sum('net'))}원</div><div class="s">${unpaid.length ? `<span style="color:var(--orange)">아직 이체 전 ${unpaid.length}명</span>` : list.length ? '전원 이체 완료' : ''}</div></div>
     </div>
     ${list.length ? `<div class="tablewrap"><table class="pay"><thead><tr>
-      <th data-sort="name">성명${sortArrow(sort, 'name')}</th><th>주민등록번호</th><th class="n" data-sort="gross">지급액${sortArrow(sort, 'gross')}</th><th class="n">소득세</th><th class="n">지방소득세</th><th class="n" data-sort="net">차인지급액${sortArrow(sort, 'net')}</th><th>용역내역</th><th>이체 계좌</th><th>지급일</th><th>파일</th></tr></thead><tbody>
+      <th data-sort="name">성명${sortArrow(sort, 'name')}</th><th>주민·사업자번호</th><th class="n" data-sort="gross">지급액${sortArrow(sort, 'gross')}</th><th class="n">소득세</th><th class="n">지방소득세</th><th class="n" data-sort="net">차인지급액${sortArrow(sort, 'net')}</th><th>용역내역</th><th>이체 계좌</th><th>지급일</th><th>파일</th></tr></thead><tbody>
       ${list.map(p => { const c = C().find(x => x.id === p.contractor_id) || {}; return `<tr class="row" data-pay="${p.id}">
         <td><b>${esc(p.name)}</b></td><td><span class="rrn">${esc(maskRrn(fmtRrn(c.rrn)))}</span></td>
         <td class="n">${won(p.gross)}</td><td class="n">${won(p.tax)}</td><td class="n">${won(p.local_tax)}</td><td class="n"><b>${won(p.net)}</b></td>
@@ -142,12 +144,12 @@ function peopleHtml(){
       <span class="count">${list.length}명 · 서류 미비 ${list.filter(c => c.active && (!hasDoc(c, '신분증') || !hasDoc(c, '통장사본'))).length}명</span></div>
     ${list.length ? `<div class="grid">${list.map(c => `<div class="card2" data-person="${c.id}">
       <div class="hd">${avatar(c.name)}<span>${esc(c.name)}</span>${c.role ? `<span class="role">${esc(c.role)}</span>` : ''}${c.active ? '' : '<span class="off">거래 종료</span>'}</div>
-      <div class="row"><span>주민번호 <b class="rrn">${esc(maskRrn(fmtRrn(c.rrn))) || '-'}</b></span>${c.phone ? `<span>연락처 <b>${esc(c.phone)}</b></span>` : ''}</div>
+      <div class="row"><span>${isBizNo(c.rrn) ? '사업자번호' : '주민번호'} <b class="rrn">${esc(maskRrn(fmtRrn(c.rrn))) || '-'}</b></span>${c.phone ? `<span>연락처 <b>${esc(c.phone)}</b></span>` : ''}</div>
       <div class="row"><span>계좌 <b>${esc(c.bank || '-')}</b></span></div>
       <div class="docs">${DOC_KINDS.map(k => `<span class="d ${hasDoc(c, k) ? 'ok' : ''}">${hasDoc(c, k) ? '✓' : '✕'} ${k}</span>`).join('')}${(c.files || []).filter(f => !DOC_KINDS.includes(f.kind)).length ? `<span class="d ok">📎 기타 ${(c.files || []).filter(f => !DOC_KINDS.includes(f.kind)).length}</span>` : ''}</div>
       <div class="files">${(c.files || []).map(f => `<a href="${esc(f.url)}?download=${encodeURIComponent(f.name)}" download="${esc(f.name)}" title="내려받기">${esc(f.kind || '')} ${esc(f.name)}</a>`).join('')}</div>
       <div class="row hint">지급 ${PAY().filter(p => p.contractor_id === c.id).length}회 · 최근 ${(PAY().filter(p => p.contractor_id === c.id).map(p => p.month).sort().pop() || '-')}</div>
-    </div>`).join('')}</div>` : '<div class="empty">아직 등록된 외주 인력이 없습니다.<br><b>＋ 외주 인력 등록</b>으로 이름, 주민등록번호, 계좌, 신분증·통장사본을 넣어 두세요.</div>'}`;
+    </div>`).join('')}</div>` : '<div class="empty">아직 등록된 외주 인력이 없습니다.<br><b>＋ 외주 인력 등록</b>으로 이름, 주민등록번호(또는 사업자번호), 계좌, 신분증·통장사본을 넣어 두세요.</div>'}`;
 }
 
 /* ---------- 전체 지급 기록 ---------- */
@@ -220,7 +222,7 @@ function openPerson(id){
         <div class="f"><label>용역내역 (기본값)</label><input id="cRole" value="${esc(c.role || '')}" placeholder="예: 인플루언서"></div>
       </div>
       <div class="f2">
-        <div class="f"><label>주민등록번호 ${isAdmin() ? '' : '(관리자만 전체 보임)'}</label><input id="cRrn" value="${esc(isAdmin() ? fmtRrn(c.rrn) : maskRrn(fmtRrn(c.rrn)))}" placeholder="예: 010131-4677817" inputmode="numeric" ${isAdmin() || !c0 ? '' : 'disabled'}></div>
+        <div class="f"><label>주민등록번호 또는 사업자번호 ${isAdmin() ? '' : '(주민번호는 관리자만 전체 보임)'}</label><input id="cRrn" value="${esc(isAdmin() ? fmtRrn(c.rrn) : maskRrn(fmtRrn(c.rrn)))}" placeholder="주민번호 13자리 또는 사업자번호 10자리" inputmode="numeric" ${isAdmin() || !c0 ? '' : 'disabled'}></div>
         <div class="f"><label>연락처</label><input id="cPhone" value="${esc(c.phone || '')}" placeholder="010-0000-0000"></div>
       </div>
       <div class="f"><label>이체 계좌 (은행 · 계좌번호 · 예금주)</label><input id="cBank" value="${esc(c.bank || '')}" placeholder="예: 카카오 3333-01-1234567 황혜빈"></div>
@@ -238,7 +240,7 @@ function openPerson(id){
   $('#cSave').onclick = async () => {
     const name = $('#cName').value.trim(); if (!name) { $('#cName').focus(); toast('성명을 입력하세요', true); return; }
     const rrnIn = $('#cRrn').disabled ? (c0 ? c0.rrn : '') : $('#cRrn').value.trim();
-    if (rrnIn && rrnIn.replace(/\D/g, '').length !== 13) { $('#cRrn').focus(); toast('주민등록번호는 13자리입니다', true); return; }
+    if (rrnIn && ![13, 10].includes(rrnIn.replace(/\D/g, '').length)) { $('#cRrn').focus(); toast('주민등록번호는 13자리, 사업자번호는 10자리입니다', true); return; }
     const files = [...boxes['신분증'].files.map(f => ({ ...f, kind: '신분증' })), ...boxes['통장사본'].files.map(f => ({ ...f, kind: '통장사본' })), ...boxes['기타'].files.map(f => ({ ...f, kind: '기타' }))];
     const row = { id: c0 ? c0.id : uid(), name, rrn: rrnIn ? fmtRrn(rrnIn) : null, bank: $('#cBank').value.trim() || null, phone: $('#cPhone').value.trim() || null,
       role: $('#cRole').value.trim() || null, files, memo: $('#cMemo').value.trim() || null, active: $('#cActive') ? $('#cActive').checked : true,
@@ -273,7 +275,7 @@ function exportXlsx(){
   if (typeof XLSX === 'undefined') { toast('엑셀 도구를 불러오지 못했습니다. 새로고침 후 다시 시도하세요', true); return; }
   const list = sortBy(monthPays(), { key: 'name', dir: 'asc' });
   const title = `${monthLabel(month)} 사업소득지급내역`;
-  const rows = [[title], [], ['성명', '주민등록번호', '지급액', '소득세', '지방소득세', '차인지급액', '용역내역']];
+  const rows = [[title], [], ['성명', '주민(사업자)등록번호', '지급액', '소득세', '지방소득세', '차인지급액', '용역내역']];
   list.forEach(p => { const c = C().find(x => x.id === p.contractor_id) || {}; rows.push([p.name, fmtRrn(c.rrn), p.gross, p.tax, p.local_tax, p.net, p.service || '']); });
   const s = k => list.reduce((a, p) => a + (Number(p[k]) || 0), 0);
   rows.push(['합계', '', s('gross'), s('tax'), s('local_tax'), s('net'), '']);
