@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032152">
-<script src="common.js?v=202610032152"></script>
-<script src="channel.js?v=202610032152"></script>
+<link rel="stylesheet" href="common.css?v=202610032158">
+<script src="common.js?v=202610032158"></script>
+<script src="channel.js?v=202610032158"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -199,10 +199,11 @@ function normalize(table, r){
 /* ---------- 화면 ---------- */
 function render(){
   if (composing && cur && $('#composer') && $('#app').contains(document.activeElement)) { renderWaiting = true; return; }
-  if (location.hash === '#new' && !openedNew && DATA.projects) { openedNew = true; history.replaceState(null, '', location.pathname); cur = ''; QP = ''; renderList(); openProject(null); return; }
-  const p = P().find(x => x.id === cur);
-  if (!p) { cur = ''; renderList(); return; }
-  renderProject(p);
+  // 슬랙 모양 화면(channel.js 의 slRender): 왼쪽 채널 목록 + 오른쪽 채널. 고른 채널이 없으면 가장 최근에 기록이 있던 진행 중 채널을 엶
+  let p = P().find(x => x.id === cur);
+  if (!p) { p = P().filter(x => x.status !== '완료').sort((a, b) => String(projLastAt(b.id) || b.created_at || '').localeCompare(String(projLastAt(a.id) || a.created_at || '')))[0] || P()[0] || null; cur = p ? p.id : ''; }
+  slRender(p);
+  if (location.hash === '#new' && !openedNew && DATA.projects) { openedNew = true; history.replaceState(null, '', location.pathname); openProject(null); }
 }
 function renderList(){
   const list = P().slice().sort((a, b) => (a.status === '완료') - (b.status === '완료') || String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -487,9 +488,9 @@ async function delPhase(p, ph){
 function openProject(id){
   const p = id ? P().find(x => x.id === id) : null;
   const d = p || { name: '', goal: '', status: '진행중', start_date: todayStr(), target_date: '', owner: me, memo: '' };
-  openModal(`${modalHead(p ? '프로젝트 설정' : '새 프로젝트')}
+  openModal(`${modalHead(p ? '채널 설정' : '새 채널 (프로젝트)')}
     <div class="mb">
-      <div class="f"><label>프로젝트 이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 바이세라 레몬타치온" maxlength="80"></div>
+      <div class="f"><label>채널(프로젝트) 이름 *</label><input id="pName" value="${esc(d.name)}" placeholder="예: 바이세라 레몬타치온" maxlength="80"></div>
       <div class="f"><label>목표 · 설명</label><textarea id="pGoal" placeholder="무엇을 언제까지 어떻게">${esc(d.goal || '')}</textarea></div>
       <div class="f3">
         <div class="f"><label>시작일</label><input type="date" id="pStart" value="${esc(d.start_date || '')}"></div>
@@ -499,7 +500,6 @@ function openProject(id){
       <div class="f"><label>프로젝트 리더</label><select id="pOwner"><option value="">미정</option>${memberOptions(d.owner)}</select></div>
       <div class="f"><label>참여 팀원</label><div class="mpick">${members.map(m => `<label><input type="checkbox" data-mem value="${esc(m.name)}" ${(d.members || []).includes(m.name) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('')}</div></div>
       <div class="f"><label>NAS 폴더 경로 (영상 같은 큰 파일을 둔 곳)</label><input id="pNas" value="${esc(d.nas_path || '')}" placeholder="예: Z:\\프로젝트\\흑생마 유사 브랜드" maxlength="300"><div class="hint">채널 위에 글자로 보여 주고 복사 버튼을 붙입니다. 큰 파일은 NAS 에 두고 경로만 적어 주세요.</div></div>
-      ${p ? '' : `<div class="f"><label>단계별 할 일(프로세스) 넣기</label><select id="pTpl">${Object.keys(TEMPLATES).map(t => `<option>${t}</option>`).join('')}</select><div class="hint">자료 카드와 결정만 쌓아 둘 거면 넣지 않아도 됩니다. "화장품 브랜드 런칭"을 고르면 8단계 32개 항목이 미리 들어갑니다.</div></div>`}
     </div>
     <div class="mf">
       ${p && isAdmin() ? `<button class="btn danger left" id="pDel">프로젝트 삭제</button>` : ''}
@@ -512,7 +512,7 @@ function openProject(id){
     const row = { ...(p || {}), id: p ? p.id : uid(), name, goal: $('#pGoal').value.trim() || null, status: $('#pStatus').value, start_date: $('#pStart').value || null, target_date: $('#pTarget').value || null, owner: $('#pOwner').value || null,
       members: [...document.querySelectorAll('[data-mem]:checked')].map(x => x.value), nas_path: $('#pNas').value.trim() || null,
       checks: p ? p.checks : [], phases: p ? p.phases : [], created_by: p ? p.created_by : me, created_at: p ? p.created_at : nowIso() };
-    const tplName = p ? null : $('#pTpl').value;
+    const tplName = null;   // 프로세스(단계별 할 일) 탭을 뺐으므로 새 채널에는 틀을 넣지 않음
     closeModal();
     if (!p && tplName) { row.phases = TEMPLATES[tplName].map(([ph]) => ph); }
     await saveRow('projects', row);

@@ -76,18 +76,16 @@ function talkHtml(p){
     const del = e.type === 'msg' && (e.by === me || isAdmin()) ? `<button class="mx" data-mdel="${e.log.id}" title="메시지 삭제">✕</button>` : '';
     return head + `<div class="msg">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
   }).join('');
-  return `<div class="talk" id="logwrap">
-    <div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
-      ${rows || `<div class="empty">아직 기록이 없습니다.<br>아래 칸에 한마디 적거나, 제안서·견적서 파일을 끌어다 놓아 보세요. 파일을 붙이면 <b>자료 카드</b>로 올라갑니다.</div>`}</div>
-    <div class="talkbox composer" id="composer">
+  return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
+      ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div>이 채널의 시작입니다.<br>아래 칸에 한마디 적거나, 제안서·견적서 파일을 끌어다 놓아 보세요. 파일을 붙이면 <b>자료 카드</b>로 올라갑니다.</div>`}</div></div>
+    <div class="slcomp"><div class="talkbox composer" id="composer">
       <div class="tkcard" id="tkCard" hidden><span class="tl">📑 자료 카드로 올라갑니다</span><input id="tkTitle" maxlength="120" placeholder="자료 제목 (비우면 파일 이름)" value="${esc(comp.title || '')}">
         <select id="tkKind">${CARD_KINDS.map(k => `<option ${(comp.ckind || '제안서') === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
         <span class="kpick"><button type="button" class="lchip" data-ts="결정 대기">결정 대기</button><button type="button" class="lchip" data-ts="참고 자료">참고 자료</button></span></div>
-      <textarea id="cBody" maxlength="4000" placeholder="메시지를 적으세요. 파일을 끌어다 놓거나 캡처를 Ctrl+V 로 붙이면 자료 카드로 올라갑니다">${esc(comp.text)}</textarea>
+      <textarea id="cBody" rows="1" maxlength="4000" placeholder="#${esc(p.name)} 에 메시지 보내기">${esc(comp.text)}</textarea>
       ${comp.box.html}
-      <div class="crow"><span class="hint">Enter 보내기 · Shift+Enter 줄바꿈</span><span class="sp"></span><button class="btn primary" id="cSend">보내기</button></div>
-    </div>
-  </div>`;
+      <div class="crow"><button type="button" class="plus" id="tkPlus" title="파일 첨부 (PDF·이미지)">＋</button><span class="hint">Enter 보내기 · Shift+Enter 줄바꿈 · 파일은 끌어다 놓거나 Ctrl+V</span><span class="sp"></span><button type="button" class="send" id="cSend" title="보내기">➤</button></div>
+    </div></div>`;
 }
 async function sendTalk(p){
   const c = getComp(p.id);
@@ -104,22 +102,73 @@ async function sendTalk(p){
 function bindTalk(p){
   if (!$('#composer')) { bindCards(p); return; }
   const c = getComp(p.id), body = $('#cBody');
+  $('#tkPlus').onclick = () => { const b = document.querySelector('#cFiles [data-pick]'); if (b) b.click(); };
   bindBox(p);
-  const paint = () => { const on = c.box.files.length > 0; const k = $('#tkCard'); if (!k) return; k.hidden = !on; document.querySelectorAll('[data-ts]').forEach(b => b.classList.toggle('on', b.dataset.ts === (c.cstatus || '결정 대기'))); };
+  const paint = () => { const on = c.box.files.length > 0; const k = $('#tkCard'); if (!k) return; k.hidden = !on; const sb = $('#cSend'); if (sb) sb.classList.toggle('on', on || !!c.text.trim()); document.querySelectorAll('[data-ts]').forEach(b => b.classList.toggle('on', b.dataset.ts === (c.cstatus || '결정 대기'))); };
   c.paint = paint; paint();
   document.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { c.cstatus = b.dataset.ts; paint(); });
   $('#tkTitle').oninput = () => { c.title = $('#tkTitle').value; };
   $('#tkKind').onchange = () => { c.ckind = $('#tkKind').value; };
-  body.oninput = () => { c.text = body.value; body.style.height = 'auto'; body.style.height = Math.min(220, body.scrollHeight) + 'px'; };
+  const grow = () => { body.style.height = 'auto'; body.style.height = Math.min(220, body.scrollHeight) + 'px'; };
+  body.oninput = () => { c.text = body.value; grow(); paint(); }; grow();
   body.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendTalk(p); } };   // 한글 조합 중 Enter 는 무시
   $('#cSend').onclick = () => sendTalk(p);
   const more = $('#talkMore'); if (more) more.onclick = () => { talkLimit += 100; talkStick = false; render(); };
-  document.querySelectorAll('.talk [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
+  document.querySelectorAll('#tscroll [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
   document.querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { if (confirm('이 메시지를 삭제할까요?')) { talkStick = false; await removeRow('project_logs', b.dataset.mdel); } });
   if (typeof bindTalkExtra === 'function') bindTalkExtra(p);
-  if (talkStick) window.scrollTo(0, document.body.scrollHeight);   // 새로 열었거나 맨 아래를 보고 있었으면 최신 글이 보이게
 }
-window.addEventListener('scroll', () => { talkStick = window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }, { passive: true });
+
+/* ---------- 슬랙 모양 화면: 왼쪽 채널 목록 + 오른쪽 채널(머리 · 메시지/자료 카드 · 입력칸) ---------- */
+let sideOpen = false;
+function slRender(p){
+  if (tab !== 'cards') tab = 'talk';
+  const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
+  const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
+  const act = P().filter(x => x.status !== '완료').sort(byName), done = P().filter(x => x.status === '완료').sort(byName);
+  const item = x => { const pend = cardsOf(x.id).filter(c => c.status === '결정 대기').length, d = daysAgo(projLastAt(x.id)); return `<button class="slch ${p && x.id === p.id ? 'on' : ''}" data-open="${x.id}" title="${d == null ? '아직 기록 없음' : '마지막 기록 ' + (d === 0 ? '오늘' : d + '일 전')}"><span class="hash">#</span><span class="nm">${esc(x.name)}</span>${d != null && d >= 7 && x.status !== '완료' ? '<span class="stale" title="7일 넘게 기록이 없습니다">●</span>' : ''}${pend ? `<span class="bd" title="결정 대기 ${pend}건">${pend}</span>` : ''}</button>`; };
+  const mem = p ? (Array.isArray(p.members) ? p.members : []).filter(n => n !== p.owner) : [];
+  const pend = p ? cardsOf(p.id).filter(c => c.status === '결정 대기').length : 0;
+  $('#app').innerHTML = headerHtml({ icon: '🗂️', title: '프로젝트' }) + `<div class="sl ${sideOpen ? 'side-open' : ''}">
+    <aside class="sls">
+      <div class="slst">프로젝트 채널</div>
+      <div class="slsec">진행 중</div>${act.map(item).join('') || '<div class="slnone">아직 채널이 없습니다</div>'}
+      <button class="sladd" id="newP"><span class="hash">＋</span>채널 추가</button>
+      ${done.length ? `<div class="slsec">종료</div>${done.map(item).join('')}` : ''}
+    </aside>
+    <section class="slm" id="logwrap">${!DATA.projects ? `<div class="slempty">프로젝트 저장 표가 아직 없습니다.</div>` : !p ? `<div class="slempty"><div class="big">프로젝트 채널</div>프로젝트 하나의 자료와 의견, 결정이 날짜순으로 쌓이는 곳입니다.<br>왼쪽의 <b>＋ 채널 추가</b>로 첫 채널을 만들어 보세요.</div>` : `
+      <div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2><span class="hash">#</span> ${esc(p.name)}</h2>${p.status !== '진행중' ? stP(p.status) : ''}
+        <span class="sp"></span>${p.owner ? `<span class="ld" title="프로젝트 리더">${who(p.owner)}</span>` : ''}${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
+        ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}<button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button></div>
+      <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📑 자료 카드${pend ? `<span class="bd">${pend}</span>` : ''}</button>
+        <span class="sp"></span>${agoHtml(p.id)}</div>
+      <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
+      ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${cardsHtml(p)}</div></div>`}`}
+    </section></div>`;
+  bindHeader(() => {}, null, m => `리더인 채널 ${P().filter(x => x.owner === m.name && x.status !== '완료').length}개`);
+  slFit();
+  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
+  const np = $('#newP'); if (np) np.onclick = () => openProject(null);
+  if (!p) return;
+  $('#slMenu').onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); };
+  document.querySelectorAll('.sltab').forEach(b => b.onclick = () => { tab = b.dataset.tab; LS.set('proj_tab', tab); talkStick = true; render(); });
+  $('#editP').onclick = () => openProject(p.id);
+  bindChHead(p);
+  if (QCARD && !openedCard) { openedCard = true; setTimeout(() => openCard(QCARD), 0); }
+  if (tab === 'cards') bindCards(p); else bindTalk(p);
+  const sc = $('#tscroll');
+  if (sc) { sc.dataset.tab = tab; sc.dataset.pid = p.id;
+    const same = prev && prev.tab === tab && prev.id === p.id;
+    const toEnd = tab === 'talk' && (talkStick || !same || prev.stick);
+    if (toEnd) { sc.scrollTop = sc.scrollHeight; sc.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', () => { sc.scrollTop = sc.scrollHeight; }, { once: true }); }); }
+    else if (same) sc.scrollTop = prev.top;
+    talkStick = false; }
+  const k = keep && $(keep); if (k) { k.focus(); try { k.setSelectionRange(k.value.length, k.value.length); } catch {} }
+}
+/* 화면 높이에 꼭 맞춤: 메시지 영역만 스크롤되고 입력칸은 항상 아래에 */
+function slFit(){ const sl = document.querySelector('.sl'); if (sl) sl.style.height = Math.max(320, window.innerHeight - sl.getBoundingClientRect().top) + 'px'; }
+window.addEventListener('resize', slFit);
 
 /* ---------- 자료 카드 탭 ---------- */
 function cardsHtml(p){
@@ -327,6 +376,70 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .cvrev.on{border-color:var(--blue);background:#f5f9ff}
   .cvrev .rm{margin-top:2px;white-space:pre-wrap;word-break:break-word;color:var(--fg2)}
   .cvfoot{margin-top:auto;padding-top:8px;display:flex;gap:6px;justify-content:flex-end}
+  /* 슬랙 모양 */
+  body:has(.sl){overflow:hidden}
+  .sl{display:grid;grid-template-columns:260px minmax(0,1fr);background:#fff;font-family:Lato,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+  .sls{background:#3f0e40;color:#cfc3cf;overflow:auto;padding:0 0 16px;display:flex;flex-direction:column}
+  .slst{color:#fff;font-weight:900;font-size:17px;padding:14px 16px 12px;border-bottom:1px solid #5d3d5e;margin-bottom:8px}
+  .slsec{font-size:13px;color:#b9a9ba;padding:10px 16px 4px}
+  .slnone{font-size:13px;color:#8d7b8e;padding:4px 16px}
+  .slch,.sladd{display:flex;align-items:center;gap:8px;width:calc(100% - 16px);margin:0 8px;padding:4px 8px;border:0;border-radius:6px;background:transparent;color:#cfc3cf;font:inherit;font-size:15px;text-align:left;cursor:pointer}
+  .slch:hover,.sladd:hover{background:#350d36}
+  .slch.on{background:#1164a3;color:#fff}
+  .slch .hash,.sladd .hash{width:16px;text-align:center;opacity:.7;flex:none}
+  .slch .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slch .bd{background:#cd2553;color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:0 7px;line-height:18px}
+  .slch .stale{color:#e8912d;font-size:9px}
+  .sladd{opacity:.85;margin-top:2px}
+  .slm{display:flex;flex-direction:column;min-width:0;min-height:0;background:#fff}
+  .slm.drag .talkbox{border:2px dashed #1264a3;background:#f5f9ff}
+  .slh{display:flex;align-items:center;gap:8px;padding:10px 16px 6px;flex-wrap:wrap}
+  .slh h2{margin:0;font-size:18px;font-weight:900;color:#1d1c1d;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slh h2 .hash{color:#616061;font-weight:400}
+  .slh .sp,.slt .sp{flex:1}
+  .slh .mm{font-size:13px;color:#616061;border:1px solid #ddd;border-radius:6px;padding:2px 8px}
+  .slmenu{display:none;border:1px solid #ddd;background:#fff;border-radius:6px;padding:2px 8px;font-size:16px}
+  .slt{display:flex;align-items:center;gap:2px;padding:0 12px;border-bottom:1px solid #e3e3e3}
+  .sltab{border:0;background:transparent;padding:7px 10px 8px;font:inherit;font-size:13px;font-weight:700;color:#616061;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .sltab:hover{color:#1d1c1d;background:#f8f8f8}
+  .sltab.on{color:#1d1c1d;border-bottom-color:#611f69}
+  .sltab .bd{background:#cd2553;color:#fff;border-radius:999px;font-size:11px;padding:0 6px;line-height:17px}
+  .slt .ago{margin:0}
+  .slpin{display:flex;gap:8px;align-items:flex-start;padding:6px 16px;background:#fffbea;border-bottom:1px solid #f3e7b0;font-size:13px;cursor:pointer;max-height:96px;overflow:auto}
+  .slpin:hover{background:#fff6d6}
+  .slpin .pt{white-space:pre-wrap;word-break:break-word;line-height:1.5}
+  .slpin .pt.none{color:#9a8a5a}
+  .slscroll{flex:1;min-height:0;overflow:auto}
+  .slpad{padding:14px 16px}
+  .slempty{padding:40px 20px;color:#616061;line-height:1.8;font-size:14px}
+  .slempty .big{font-size:26px;font-weight:900;color:#1d1c1d;margin-bottom:6px}
+  .sl .tfeed{padding:8px 0 10px}
+  .sl .tfeed > #talkMore{margin:6px 20px}
+  .sl .tday{margin:10px 0 2px;position:relative;justify-content:center}
+  .sl .tday::before{position:absolute;left:0;right:0;top:50%;background:#e3e3e3}
+  .sl .tday::after{display:none}
+  .sl .tday span{position:relative;background:#fff;border:1px solid #e3e3e3;border-radius:24px;padding:3px 14px;font-size:13px;font-weight:700;color:#1d1c1d}
+  .sl .msg{padding:6px 20px;border-radius:0;gap:10px}
+  .sl .msg:hover{background:#f8f8f8}
+  .sl .msg > .av{width:36px;height:36px;border-radius:6px;font-size:16px;margin-top:3px}
+  .sl .msg .mh2 b{font-weight:900;font-size:15px;color:#1d1c1d}
+  .sl .msg .mh2 .tm{font-size:12px;color:#616061}
+  .sl .msg .mt{font-size:15px;line-height:1.47;color:#1d1c1d}
+  .sl .msg .mt.sys{color:#616061;font-size:14px}
+  .sl .msg .mt .re{color:#1264a3;font-size:14px}
+  .sl .cchip{border:1px solid #ddd;border-radius:12px;max-width:440px;padding:10px 12px;margin-top:6px}
+  .sl .cchip:hover{border-color:#1264a3;background:#f8f8f8;box-shadow:none}
+  .slcomp{padding:0 20px 16px}
+  .sl .talkbox{position:static;margin:0;border:1px solid #868686;border-radius:8px;padding:8px 10px 6px;box-shadow:none;gap:6px}
+  .sl .talkbox:focus-within{border-color:#1d1c1d;outline:0;box-shadow:0 0 0 1px #1d1c1d}
+  .sl .talkbox textarea{font-size:15px;line-height:1.47;min-height:24px;resize:none}
+  .sl .talkbox .attach .row > :not(.up){display:none}
+  .sl .talkbox .attach .hint.up{display:inline}
+  .sl .talkbox .plus{width:28px;height:28px;border-radius:50%;border:0;background:#f0f0f0;color:#444;font-size:16px;line-height:1;cursor:pointer}
+  .sl .talkbox .plus:hover{background:#e0e0e0}
+  .sl .talkbox .send{width:34px;height:28px;border-radius:6px;border:0;background:#f0f0f0;color:#aaa;font-size:14px;cursor:pointer}
+  .sl .talkbox .send.on{background:#007a5a;color:#fff}
+  @media (max-width:820px){ .sl{grid-template-columns:minmax(0,1fr)} .sls{display:none;position:absolute;z-index:30;top:auto;bottom:0;left:0;width:270px;box-shadow:4px 0 16px rgba(0,0,0,.3)} .sl{position:relative} .sl.side-open .sls{display:flex;top:0} .slmenu{display:inline-block} .slh .ld{display:none} .sl .msg{padding:6px 12px} .slcomp{padding:0 10px 10px} .sl .talkbox .crow .hint{display:none} }
   .psec{font-size:13px;font-weight:700;color:var(--fg2);margin:18px 2px 8px}
   .psec:first-of-type{margin-top:0}
   @media (max-width:900px){ .modal.xl{width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0} .cv{grid-template-columns:1fr;grid-template-rows:minmax(50vh,1fr) auto;overflow:auto} .cvside{border-left:0;border-top:1px solid var(--line)} .ago{margin-left:0} }
