@@ -166,7 +166,8 @@ function slRender(p){
     </aside>
     <section class="slm" id="logwrap">${!DATA.projects ? `<div class="slempty">프로젝트 저장 표가 아직 없습니다.</div>` : agenda ? agendaHtml() : !p ? `<div class="slempty"><div class="big">프로젝트 채널</div>프로젝트 하나의 자료와 의견, 결정이 날짜순으로 쌓이는 곳입니다.<br>왼쪽의 <b>＋ 채널 추가</b>로 첫 채널을 만들어 보세요.</div>` : `
       <div class="slh"><button class="slmenu" id="slMenu" title="채널 목록">☰</button><h2><span class="hash">#</span> ${esc(p.name)}</h2>${p.status !== '진행중' ? stP(p.status) : ''}
-        <span class="sp"></span>${p.owner ? `<span class="ld" title="프로젝트 리더">${who(p.owner)}</span>` : ''}${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
+        <span class="ldr ${p.owner ? '' : 'none'}" title="프로젝트 리더 (⚙ 설정에서 바꿉니다)"><span class="lb">리더</span>${p.owner ? avatar(p.owner) + '<b>' + esc(fullName(p.owner)) + '</b>' : '<b>미정</b>'}</span>
+        <span class="sp"></span>${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
         ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}<button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button></div>
       <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
@@ -660,6 +661,10 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .slh h2{margin:0;font-size:18px;font-weight:900;color:#1d1c1d;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slh h2 .hash{color:#616061;font-weight:400}
   .slh .sp,.slt .sp{flex:1}
+  .ldr{display:inline-flex;align-items:center;gap:6px;background:#f4ede4;border:1px solid #e8d9c5;border-radius:999px;padding:3px 12px 3px 4px;font-size:14px;color:#1d1c1d;white-space:nowrap}
+  .ldr .lb{background:#611f69;color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:2px 8px}
+  .ldr .av{width:22px;height:22px;font-size:12px;border-radius:6px}
+  .ldr.none{color:#9a8a8a}
   .slh .mm{font-size:13px;color:#616061;border:1px solid #ddd;border-radius:6px;padding:2px 8px}
   .slmenu{display:none;border:1px solid #ddd;background:#fff;border-radius:6px;padding:2px 8px;font-size:16px}
   .slt{display:flex;align-items:center;gap:2px;padding:0 12px;border-bottom:1px solid #e3e3e3}
@@ -702,7 +707,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .sl .talkbox .plus:hover{background:#e0e0e0}
   .sl .talkbox .send{width:34px;height:28px;border-radius:6px;border:0;background:#f0f0f0;color:#aaa;font-size:14px;cursor:pointer}
   .sl .talkbox .send.on{background:#007a5a;color:#fff}
-  @media (max-width:820px){ .sl{grid-template-columns:minmax(0,1fr)} .sls{display:none;position:absolute;z-index:30;top:auto;bottom:0;left:0;width:270px;box-shadow:4px 0 16px rgba(0,0,0,.3)} .sl{position:relative} .sl.side-open .sls{display:flex;top:0} .slmenu{display:inline-block} .slh .ld{display:none} .sl .msg{padding:6px 12px} .slcomp{padding:0 10px 10px} .sl .talkbox .crow .hint{display:none} }
+  @media (max-width:820px){ .sl{grid-template-columns:minmax(0,1fr)} .sls{display:none;position:absolute;z-index:30;top:auto;bottom:0;left:0;width:270px;box-shadow:4px 0 16px rgba(0,0,0,.3)} .sl{position:relative} .sl.side-open .sls{display:flex;top:0} .slmenu{display:inline-block} .sl .msg{padding:6px 12px} .slcomp{padding:0 10px 10px} .sl .talkbox .crow .hint{display:none} }
   .sltab .cn{font-size:11px;color:#616061;font-weight:400}
   .sl .msg.t-dec{background:#f3fbf5}
   .sl .msg.t-dec:hover{background:#eaf7ee}
