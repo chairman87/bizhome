@@ -167,6 +167,7 @@ function renderApp(){
     if (accessState === 'denied') { $('#app').innerHTML = headerHtml({ icon: APP.icon, title: APP.title }) + `<main class="wrap"><div class="empty">이 화면은 볼 수 있는 사람이 정해져 있어 <b>${esc(me)}</b>님은 열 수 없습니다.<br>필요하면 관리자에게 요청하세요.<br><br><a class="btn" href="index.html">홈으로</a></div></main>`; bindHeader(() => {}, null, () => ''); return; }
   }
   APP.render();
+  refreshProjNews();   // 왼쪽 위 '프로젝트' 탭의 빨간 숫자(홈에서는 '프로젝트 소식' 판도)
 }
 /* 한 줄 저장(화면 먼저 바꾸고 저장소에 씀). 실패하면 알리고 다시 읽음 */
 async function saveRow(table, row){
@@ -466,7 +467,7 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
     <nav class="sw" title="인트라넷과 프로젝트 사이를 오갑니다">
       <a class="swt ${page === 'projects.html' ? '' : 'on'}" href="index.html">${BRAND_LOGO}${esc(BRAND.name)}</a>
-      <a class="swt ${page === 'projects.html' ? 'on' : ''}" href="projects.html">🗂️ 프로젝트</a>
+      <a class="swt ${page === 'projects.html' ? 'on' : ''}" href="projects.html">🗂️ 프로젝트${page !== 'projects.html' && projUnread() ? `<span class="badge" id="pnBadge" title="새 글이 있는 채널 수">${projUnread()}</span>` : ''}</a>
     </nav>
     ${title === BRAND.name || page === 'projects.html' ? '<span class="swsp"></span>' : `<a class="brand page" href="${esc(page)}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>`}
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
@@ -475,6 +476,63 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
     ${newLabel ? `<button class="btn primary" id="newBtn">+ <span class="newtxt">${esc(newLabel)}</span></button>` : ''}
     <button class="me" id="meBtn" title="사용자 바꾸기 / 팀원 관리">${avatar(me)}${esc(me)}${isAdmin() ? '<span class="hint" style="font-size:10px">관리자</span>' : ''}</button>
   </header>`;
+}
+/* ---------- 프로젝트 새 글 (왼쪽 위 '프로젝트' 탭의 빨간 숫자 + 홈의 '프로젝트 소식' 판) ----------
+   채널 화면과 같은 기준: 내가 그 채널을 마지막으로 본 시각(project_reads.seen._channel) 뒤에 남이 올린 메시지·파일·수정본·댓글·결정·업무·업무공유.
+   프로젝트 화면은 channel.js 가 직접 다루므로 여기서는 손대지 않음. 다른 화면에서는 필요한 칸만 따로 읽어 옴(30초 동안 다시 안 읽음) */
+let PN = null, pnAt = 0, pnLoading = null, pnSig = '';
+const pnSeen = pid => (PN && PN.seen[pid]) || {};
+const pnUnreadEv = e => e.by !== me && String(e.at) > (pnSeen(e.pid)._channel || '');
+const projUnread = () => !PN || !PN.hasReads ? 0 : PN.projects.filter(p => PN.events.some(e => e.pid === p.id && pnUnreadEv(e))).length;   // 새 글이 있는 채널 수 (아직 프로젝트 화면을 한 번도 안 연 사람은 0 — 처음 열 때 그때까지의 글을 읽은 것으로 치는 채널 화면과 같게)
+async function loadProjNews(force){
+  if (!store.client || !me) return PN;
+  if (!force && PN && Date.now() - pnAt < 30000) return PN;
+  if (pnLoading) return pnLoading;
+  pnLoading = (async () => {
+    try {
+      const q = async (t, sel, f) => { let b = store.client.from(t).select(sel); if (f) b = f(b); const { data } = await b; return data || []; };
+      const [reads, projects, logs, cards, decs, tasks, shares] = await Promise.all([
+        q('project_reads', 'project_id,seen', b => b.eq('member', me)),
+        q('projects', 'id,name,status'),
+        q('project_logs', 'id,project_id,created_by,created_at,body,files'),
+        q('project_cards', 'id,project_id,title,created_by,created_at,revisions,comments'),
+        q('project_decisions', 'id,project_id,card_id,created_by,created_at,body,status'),
+        q('tasks', 'id,project_id,title,created_by,created_at,assignee', b => b.not('project_id', 'is', null)),
+        q('decisions', 'id,project_id,title,created_by,created_at,targets', b => b.not('project_id', 'is', null)),
+      ]);
+      const seen = {}; reads.forEach(r => { seen[r.project_id] = r.seen || {}; });
+      const ev = [], first = t => String(t || '').split('\n').find(x => x.trim()) || '';
+      logs.forEach(l => ev.push({ pid: l.project_id, at: l.created_at, by: l.created_by, kind: 'msg', text: first(l.body) || ((l.files || []).length ? `📎 ${(l.files[0] || {}).name || '파일'}` : ''), href: `projects.html?p=${l.project_id}` }));
+      cards.forEach(c => {
+        const revs = Array.isArray(c.revisions) ? c.revisions : [], href = `projects.html?p=${c.project_id}&card=${c.id}`;
+        ev.push({ pid: c.project_id, at: c.created_at, by: c.created_by, kind: 'card', text: `📎 ${c.title || '파일'}`, href });
+        revs.slice(1).forEach(r => ev.push({ pid: c.project_id, at: r.at, by: r.by, kind: 'rev', text: `📎 ${c.title || ''} ${r.no}차 수정본`, href }));
+        (Array.isArray(c.comments) ? c.comments : []).forEach(m => ev.push({ pid: c.project_id, at: m.at, by: m.by, kind: 'cmt', text: `↳ ${c.title || ''}: ${first(m.text)}`, href }));
+      });
+      decs.forEach(d => ev.push({ pid: d.project_id, at: d.created_at, by: d.created_by, kind: 'dec', text: `✅ ${d.status ? d.status + ' · ' : ''}${first(d.body)}`, href: `projects.html?p=${d.project_id}${d.card_id ? '&card=' + d.card_id : ''}` }));
+      tasks.filter(t => isAdmin() || !(t.assignee && t.assignee === t.created_by) || t.assignee === me).forEach(t => ev.push({ pid: t.project_id, at: t.created_at, by: t.created_by, kind: 'task', text: `📝 업무: ${t.title}`, href: `projects.html?p=${t.project_id}` }));
+      shares.filter(d => isAdmin() || !(Array.isArray(d.targets) && d.targets.length) || d.targets.includes(me) || d.created_by === me).forEach(d => ev.push({ pid: d.project_id, at: d.created_at, by: d.created_by, kind: 'share', text: `📣 업무공유: ${d.title}`, href: `projects.html?p=${d.project_id}` }));
+      const names = {}; projects.forEach(p => { names[p.id] = p.name; });
+      PN = { projects, seen, hasReads: reads.length > 0, events: ev.filter(e => e.at && names[e.pid]).map(e => ({ ...e, pname: names[e.pid] })).sort((a, b) => String(b.at).localeCompare(String(a.at))) };
+      pnAt = Date.now();
+    } catch (e) { console.warn('프로젝트 새 글을 읽지 못했습니다', e); }
+    pnLoading = null;
+    return PN;
+  })();
+  return pnLoading;
+}
+/* 화면을 그린 뒤 호출: 읽어 온 것이 바뀌었으면 숫자를 다시 그림. 홈(APP.onProjNews)은 소식 판까지 다시 그림 */
+async function refreshProjNews(){
+  const page = location.pathname.split('/').pop() || 'index.html';
+  if (page === 'projects.html' || !store.client || !me) return;
+  await loadProjNews(true);
+  if (!PN) return;
+  const sig = JSON.stringify([PN.events.slice(0, 30).map(e => e.at + e.by), Object.values(PN.seen).map(s => s._channel), projUnread()]);
+  if (sig === pnSig) return;
+  pnSig = sig;
+  const tab = document.querySelector('.swt[href="projects.html"]'), n = projUnread();
+  if (tab) { let b = tab.querySelector('.badge'); if (!n) { if (b) b.remove(); } else { if (!b) { b = document.createElement('span'); b.className = 'badge'; b.id = 'pnBadge'; b.title = '새 글이 있는 채널 수'; tab.appendChild(b); } b.textContent = n; } }
+  if (typeof APP.onProjNews === 'function') APP.onProjNews();
 }
 function bindHeader(onTab, onNew, counter){
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => onTab(b.dataset.view));

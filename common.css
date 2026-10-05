@@ -25,6 +25,7 @@ a{color:var(--blue)}
 .sw{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px;flex:none}
 .swt{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;font-size:15px;font-weight:700;color:var(--fg2);text-decoration:none;white-space:nowrap}
 .swt:hover{color:var(--fg)}
+.swt .badge{background:var(--red);color:#fff;font-size:11px;border-radius:999px;padding:0 6px;font-weight:700;line-height:16px;margin-left:2px}
 .swt.on{background:var(--bg);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.14)}
 .swt .logo-sm{width:20px;height:20px;border-radius:6px}
 .swsp{margin-right:8px}

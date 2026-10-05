@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610032311">
-<script src="common.js?v=202610032311"></script>
+<link rel="stylesheet" href="common.css?v=202610060845">
+<script src="common.js?v=202610060845"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -116,6 +116,11 @@
   .nrow .new{font-size:10px;color:#fff;background:var(--red);border-radius:4px;padding:0 4px;margin-left:6px;font-weight:600;vertical-align:1px}
   .nrow .pin{margin-right:4px}
   .nrow .rd{font-size:11px;color:var(--fg3);margin-left:6px}
+  .prow{grid-template-columns:auto minmax(0,1fr) 70px 80px;color:inherit;text-decoration:none}
+  .prow .ch{font-size:12px;font-weight:700;color:#611f69;background:#f4ecf5;border-radius:6px;padding:1px 7px;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+  .prow.unread .ch{background:#611f69;color:#fff}
+  @container (max-width:620px){.prow{grid-template-columns:auto minmax(0,1fr) 80px}.prow .by{display:none}}
+  @container (max-width:360px){.prow{grid-template-columns:minmax(0,1fr) 80px}.prow .ch{display:none}}
   .nboard .hd:last-child{border-bottom:0}
   .nboard .none{padding:14px;color:var(--fg3);font-size:13px;text-align:center}
   /* 이달의 목표 판 (업무공유 판 아래) */
@@ -345,12 +350,12 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
     ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 다른 칸은 그대로 두고, 옮긴 칸이 가장 가까운 빈자리에 붙습니다). 잘못 옮겼으면 <b>Ctrl+Z</b> 로 되돌립니다. 다른 칸 가까이 가져가면 <b>자석처럼 딱 붙습니다</b>(빨간 선이 보이면 줄이 맞은 것). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
-    ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard()}
+    ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard() + projNewsBoard()}
     ${editing ? `<div class="edtools"><button class="btn sm" id="undoBtn" ${UNDO.length ? '' : 'disabled'} title="Ctrl+Z">↶ 되돌리기</button><button class="btn sm" id="redoBtn" ${REDO.length ? '' : 'disabled'} title="Ctrl+Y">↷ 다시 하기</button><span id="selInfo" class="selinfo" hidden></span></div>` : ''}
     <div class="cvwrap"><div id="cv">${blocks().map((d, di, arr) => {
       const rz = editing ? `<span class="rz" data-rz="${d.id}" title="좌우로 끌면 가로 길이가 바뀝니다 (더블클릭 = 기본 길이로)"></span>` : '';
       if (d.type === 'board') {   // 공지사항·업무공유·이달의 목표 판
-        const html = d.href === 'board:notices' ? noticeBoard(notices) : d.href === 'board:decisions' ? decisionBoard() : d.href === 'board:goals' ? goalBoard() : '';
+        const html = d.href === 'board:notices' ? noticeBoard(notices) : d.href === 'board:decisions' ? decisionBoard() : d.href === 'board:goals' ? goalBoard() : d.href === 'board:projnews' ? projNewsBoard() : '';
         if (!html) return '';
         return `<div class="bwrap" data-blk="${d.id}" style="width:${blkW(d)}px"><div class="bin">${html}${rz}</div></div>`;
       }
@@ -782,6 +787,23 @@ function editDecision(id){
   };
 }
 
+/* ---------- 홈의 '프로젝트 소식' 판 (이달의 목표 아래) ----------
+   프로젝트 채널에 올라온 글을 최근 것부터. 아직 안 읽은 글은 전부 + 그 밖의 최근 7일 글 5개. 누르면 그 채널(파일이면 그 파일)로 감.
+   읽음 기준은 채널 화면과 같음(common.js 의 PN). 글 읽음 처리는 채널에 들어갔을 때 됨 */
+function projNewsBoard(){
+  if (!DATA.projects) return '';
+  if (!PN) return `<section class="nboard pnews"><div class="hd"><h2>🗂️ 프로젝트 소식</h2><a href="projects.html">프로젝트로 →</a></div><div class="none">불러오는 중…</div></section>`;
+  const un = PN.events.filter(pnUnreadEv), rest = PN.events.filter(e => !pnUnreadEv(e) && isRecent(e.at)).slice(0, 5);
+  const list = [...un.slice(0, 12), ...rest], ch = projUnread();
+  if (!PN.events.length && !isAdmin()) return '';
+  return `<section class="nboard pnews">
+    <div class="hd"><h2>🗂️ 프로젝트 소식 <span class="cnt">${un.length ? `새 글 ${un.length}건 · 채널 ${ch}개` : list.length ? '' : PN.events.length ? '새 소식 없음' : ''}</span></h2><a href="projects.html">프로젝트로 →</a></div>
+    ${list.length ? list.map(e => `<a class="nrow prow ${pnUnreadEv(e) ? 'unread' : ''}" href="${esc(e.href)}" title="눌러서 채널로 가기">
+      <span class="ch"># ${esc(e.pname)}</span><span class="t">${esc(e.text || '')}${pnUnreadEv(e) ? '<span class="new">NEW</span>' : ''}</span>
+      <span class="by">${esc(e.by || '')}</span><span class="dt">${fmtDateTime(e.at).slice(5, 16)}</span></a>`).join('')
+    : `<div class="none">${PN.events.length ? '최근 7일 동안 올라온 글이 없습니다.' : '아직 프로젝트 채널에 올라온 글이 없습니다.'}</div>`}
+  </section>`;
+}
 /* ---------- 홈의 '이달의 목표' 판 (업무공유 판 아래) ----------
    한 달 = goals 표 한 줄 { month:'YYYY-MM', items:[{text, done}], note }. 관리자만 적고 고치며, 달성한 줄은 체크. ‹ › 로 다른 달도 봄 */
 const thisMonth = () => todayStr().slice(0, 7);
@@ -843,7 +865,8 @@ function openGoalEdit(){
   };
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms'], render });
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms', 'project_logs', 'project_cards', 'project_decisions'], render,
+  onProjNews: () => { if (!editing && !document.querySelector('.modal')) render(); } });   // 프로젝트 소식이 바뀌면 판을 다시 그림 (편집 중이거나 창이 열려 있으면 건너뜀)
 </script>
 </body>
 </html>
