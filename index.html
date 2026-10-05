@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610060845">
-<script src="common.js?v=202610060845"></script>
+<link rel="stylesheet" href="common.css?v=202610060852">
+<script src="common.js?v=202610060852"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -788,20 +788,19 @@ function editDecision(id){
 }
 
 /* ---------- 홈의 '프로젝트 소식' 판 (이달의 목표 아래) ----------
-   프로젝트 채널에 올라온 글을 최근 것부터. 아직 안 읽은 글은 전부 + 그 밖의 최근 7일 글 5개. 누르면 그 채널(파일이면 그 파일)로 감.
+   프로젝트 채널에 올라온 글을 최근 것부터 5개. 안 읽은 글은 NEW 표시. 누르면 그 채널(파일이면 그 파일)로 감.
    읽음 기준은 채널 화면과 같음(common.js 의 PN). 글 읽음 처리는 채널에 들어갔을 때 됨 */
 function projNewsBoard(){
   if (!DATA.projects) return '';
   if (!PN) return `<section class="nboard pnews"><div class="hd"><h2>🗂️ 프로젝트 소식</h2><a href="projects.html">프로젝트로 →</a></div><div class="none">불러오는 중…</div></section>`;
-  const un = PN.events.filter(pnUnreadEv), rest = PN.events.filter(e => !pnUnreadEv(e) && isRecent(e.at)).slice(0, 5);
-  const list = [...un.slice(0, 12), ...rest], ch = projUnread();
+  const un = PN.events.filter(pnUnreadEv), list = PN.events.slice(0, 5), ch = projUnread();
   if (!PN.events.length && !isAdmin()) return '';
   return `<section class="nboard pnews">
     <div class="hd"><h2>🗂️ 프로젝트 소식 <span class="cnt">${un.length ? `새 글 ${un.length}건 · 채널 ${ch}개` : list.length ? '' : PN.events.length ? '새 소식 없음' : ''}</span></h2><a href="projects.html">프로젝트로 →</a></div>
     ${list.length ? list.map(e => `<a class="nrow prow ${pnUnreadEv(e) ? 'unread' : ''}" href="${esc(e.href)}" title="눌러서 채널로 가기">
       <span class="ch"># ${esc(e.pname)}</span><span class="t">${esc(e.text || '')}${pnUnreadEv(e) ? '<span class="new">NEW</span>' : ''}</span>
       <span class="by">${esc(e.by || '')}</span><span class="dt">${fmtDateTime(e.at).slice(5, 16)}</span></a>`).join('')
-    : `<div class="none">${PN.events.length ? '최근 7일 동안 올라온 글이 없습니다.' : '아직 프로젝트 채널에 올라온 글이 없습니다.'}</div>`}
+    : `<div class="none">아직 프로젝트 채널에 올라온 글이 없습니다.</div>`}
   </section>`;
 }
 /* ---------- 홈의 '이달의 목표' 판 (업무공유 판 아래) ----------

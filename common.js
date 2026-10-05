@@ -482,7 +482,7 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
    프로젝트 화면은 channel.js 가 직접 다루므로 여기서는 손대지 않음. 다른 화면에서는 필요한 칸만 따로 읽어 옴(30초 동안 다시 안 읽음) */
 let PN = null, pnAt = 0, pnLoading = null, pnSig = '';
 const pnSeen = pid => (PN && PN.seen[pid]) || {};
-const pnUnreadEv = e => e.by !== me && String(e.at) > (pnSeen(e.pid)._channel || '');
+const pnUnreadEv = e => !!(PN && PN.hasReads) && e.by !== me && String(e.at) > (pnSeen(e.pid)._channel || '');   // 프로젝트 화면을 한 번도 안 연 사람은 새 글 없음으로 (탭 숫자와 같은 기준)
 const projUnread = () => !PN || !PN.hasReads ? 0 : PN.projects.filter(p => PN.events.some(e => e.pid === p.id && pnUnreadEv(e))).length;   // 새 글이 있는 채널 수 (아직 프로젝트 화면을 한 번도 안 연 사람은 0 — 처음 열 때 그때까지의 글을 읽은 것으로 치는 채널 화면과 같게)
 async function loadProjNews(force){
   if (!store.client || !me) return PN;
