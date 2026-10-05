@@ -721,7 +721,6 @@ function decisionBoard(){
   const all = dMine().sort((a, b) => ((dForMe(a) && !dRead(a)) ? 0 : 1) - ((dForMe(b) && !dRead(b)) ? 0 : 1) || String(dDate(b)).localeCompare(String(dDate(a))) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
   const need = d => dForMe(d) && !dRead(d);
   const todo = all.filter(need).length, list = [...all.filter(need), ...all.filter(d => !need(d) && isRecent(d.created_at)).slice(0, RECENT_MAX)];
-  if (!all.length && !admin) return '';
   return `<section class="nboard">
     <div class="hd"><h2>✅ 업무공유 <span class="cnt">${todo ? `확인할 것 ${todo}건` : list.length ? '' : all.length ? '새 업무공유 없음' : ''}</span></h2>
       ${admin ? '<a href="decisions.html#new">＋ 업무공유 쓰기</a>' : ''}<a href="decisions.html">전체 보기 →</a></div>
@@ -729,7 +728,7 @@ function decisionBoard(){
       <span class="t">${d.topic ? `<span class="rd" style="margin:0 6px 0 0">[${esc(d.topic)}]</span>` : ''}${esc(d.title)}${(d.files || []).length ? ' 📎' : ''}${d.link ? ' 🔗' : ''}${un ? '<span class="new">NEW</span>' : ''}${admin ? `<span class="rd" title="확인한 사람 수">✓ ${aud.filter(n => DREADS(d).includes(n)).length}/${aud.length}</span>` : ''}</span>
       <span class="by">${esc(d.created_by || '')}</span><span class="dt">${fmtDate(dDate(d))}</span>
       ${!dForMe(d) ? '<span class="ok">-</span>' : un ? '<span class="ok" data-dok title="눌러서 확인">확인</span>' : '<span class="ok">✓ 확인완료</span>'}</div>`; }).join('')
-    : all.length ? '' : `<div class="none">아직 업무공유 글이 없습니다. 오른쪽 위 <b>＋ 업무공유 쓰기</b>로 남겨 보세요.</div>`}
+    : all.length ? '' : `<div class="none">아직 업무공유 글이 없습니다.${admin ? ' 오른쪽 위 <b>＋ 업무공유 쓰기</b>로 남겨 보세요.' : ''}</div>`}
   </section>`;
 }
 async function confirmDecision(id){
@@ -794,7 +793,6 @@ function projNewsBoard(){
   if (!DATA.projects) return '';
   if (!PN) return `<section class="nboard pnews"><div class="hd"><h2>🗂️ 프로젝트 소식</h2><a href="projects.html">프로젝트로 →</a></div><div class="none">불러오는 중…</div></section>`;
   const un = PN.events.filter(pnUnreadEv), list = PN.events.slice(0, 5), ch = projUnread();
-  if (!PN.events.length && !isAdmin()) return '';
   return `<section class="nboard pnews">
     <div class="hd"><h2>🗂️ 프로젝트 소식 <span class="cnt">${un.length ? `새 글 ${un.length}건 · 채널 ${ch}개` : list.length ? '' : PN.events.length ? '새 소식 없음' : ''}</span></h2><a href="projects.html">프로젝트로 →</a></div>
     ${list.length ? list.map(e => `<a class="nrow prow ${pnUnreadEv(e) ? 'unread' : ''}" href="${esc(e.href)}" title="눌러서 채널로 가기">
@@ -815,7 +813,6 @@ function goalBoard(){
   if (!DATA.goals) return '';
   const ym = gMonth(), g = goalOf(ym), items = gItems(g), admin = isAdmin(), cur = ym === thisMonth();
   const months = (DATA.goals || []).filter(x => gItems(x).length).map(x => x.month);
-  if (!admin && !months.length) return '';   // 아직 아무 달도 적지 않았으면 팀원에게는 판을 안 보임
   const hasPrev = months.some(m => m < ym), hasNext = ym < thisMonth() || (admin && ym <= thisMonth());   // 관리자는 다음 달 목표를 미리 적을 수 있음
   const done = items.filter(i => i.done).length;
   return `<section class="nboard goals">
