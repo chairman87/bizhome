@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610061133">
-<script src="common.js?v=202610061133"></script>
+<link rel="stylesheet" href="common.css?v=202610061616">
+<script src="common.js?v=202610061616"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -174,6 +174,7 @@ const SCREENS = [
   ['leave.html', '연차/휴가 등록'],
   ['notices.html', '공지사항'],
   ['decisions.html', '업무공유 (대표 결정·공유)'],
+  ['worklog.html', '업무일지 (퇴근 전 하루 보고)'],
   ['accounts.html', '운영계정 (자료실)'],
   ['accounts.html?dept=마케팅', '마케팅계정 (마케팅)'],
   ['subscriptions.html', '구독관리 (매월 지출)'],
@@ -341,6 +342,7 @@ function render(){
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
+    'worklog.html': worklogBadge(),   // 받는 사람: 안 읽은 일지 수 / 쓰는 사람: 평일 16시 이후 오늘 일지를 안 썼으면 1
     'docs.html': docs.filter(d => d.expire_date && dayDiff(d.expire_date) <= 30).length,   // 유효기간 30일 내(지난 것 포함)
     'alarms.html': (DATA.alarms || []).filter(a => !(Array.isArray(a.reads) && a.reads.includes(me))).length,   // 내가 아직 안 읽은 알람
     'comments.html': (DATA.ad_comments || []).filter(c => c.flag && !c.ok_by && !c.hidden && !c.deleted).length,   // 보이는 상태의 이상 의심 댓글 (숨기거나 '문제없음' 하면 빠짐)
@@ -713,6 +715,17 @@ const DTARGETS = d => Array.isArray(d.targets) ? d.targets : [];
 const dRead = d => DREADS(d).includes(me);
 const dAudience = d => DTARGETS(d).length ? DTARGETS(d) : members.map(m => m.name);
 const dForMe = d => dAudience(d).includes(me);
+/* 업무일지 홈 배지 (worklog.html 과 같은 기준). 설정 settings.id='worklog' → {writers, readers}, readers 가 비면 관리자 전원 */
+function worklogBadge(){
+  const logs = DATA.worklogs; if (!logs) return 0;
+  const st = ((DATA.settings || []).find(s => s.id === 'worklog') || {}).value || {};
+  const writers = Array.isArray(st.writers) ? st.writers : [], readers0 = Array.isArray(st.readers) ? st.readers : [], readers = readers0.length ? readers0 : admins().map(m => m.name);
+  let n = 0;
+  if (readers.includes(me)) n += logs.filter(l => l.author !== me && !(Array.isArray(l.reads) && l.reads.includes(me))).length;
+  const now = new Date(), wd = now.getDay() >= 1 && now.getDay() <= 5;
+  if (writers.includes(me) && wd && now.getHours() >= 16 && !logs.some(l => l.author === me && l.log_date === todayStr())) n += 1;
+  return n;
+}
 const dMine = () => (DATA.decisions || []).filter(d => isAdmin() || !DTARGETS(d).length || DTARGETS(d).includes(me) || d.created_by === me);   // 대상이 정해진 글은 그 사람들과 관리자만
 const dDate = d => d.decided_at || (d.created_at || '').slice(0, 10);
 function decisionBoard(){
@@ -861,7 +874,7 @@ function openGoalEdit(){
   };
 }
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms', 'project_logs', 'project_cards', 'project_decisions'], render,
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'worklogs', 'settings', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'alarms', 'project_logs', 'project_cards', 'project_decisions'], render,
   onProjNews: () => { if (!editing && !document.querySelector('.modal')) render(); } });   // 프로젝트 소식이 바뀌면 판을 다시 그림 (편집 중이거나 창이 열려 있으면 건너뜀)
 </script>
 </body>

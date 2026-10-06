@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무일지</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610061616">
+<script src="common.js?v=202610061616"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn.primary{padding:9px 16px;font-size:14px}
+  .today{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:13px;color:var(--fg2);background:var(--bg2);border-radius:8px;padding:8px 12px;margin-bottom:14px}
+  .today b{color:var(--fg)}
+  .today .ok{color:var(--green);font-weight:600}
+  .today .no{color:var(--fg3)}
+  .today .late{color:var(--red);font-weight:600}
+  .feed{display:flex;flex-direction:column;gap:10px}
+  .day{font-size:13px;font-weight:700;color:var(--fg2);margin:12px 2px 0;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .feed .day:first-child{margin-top:0}
+  .lg{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:14px 16px}
+  .lg.unread{border-color:#93c5fd;background:#f5f9ff;box-shadow:inset 4px 0 0 var(--blue)}
+  .lg .lhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--fg2);margin-bottom:8px}
+  .lg .lhead .sp{flex:1}
+  .lg .sec{margin-top:8px}
+  .lg .sec h4{margin:0 0 4px;font-size:12px;color:var(--fg3);font-weight:600}
+  .lg .txt{white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14px;color:var(--fg);padding:8px 10px;background:var(--bg2);border-radius:6px}
+  .lg .txt a{word-break:break-all}
+  .lg .files{margin-top:8px}
+  .lg .lfoot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--fg2)}
+  .lg .lfoot .sp{flex:1}
+  .lg .okd{color:var(--green);font-weight:600}
+  .new{background:var(--red);color:#fff;font-size:10px;border-radius:3px;padding:0 5px;font-weight:600}
+  .cmts{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;display:grid;gap:6px}
+  .cmts .cmadd textarea{min-height:34px}
+  .allow{display:flex;flex-wrap:wrap;gap:6px 8px;font-size:13px;padding:6px 0}
+  .allow label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)}
+  .allow label:has(input:checked){background:#dbeafe;border-color:#93c5fd}
+  #wDone{min-height:160px}
+  #wPlan{min-height:80px}
+  .morebtn{display:block;width:100%;margin-top:12px;padding:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   업무일지 — 정해진 팀원이 퇴근 전에 "오늘 한 일 / 내일 할 일"을 적고, 받는 사람(대표)이 날짜별로 모아 보며 확인·댓글을 남김
+   설정(settings 표, id='worklog'): { writers:[쓰는 사람…], readers:[받는 사람…] } — 관리자가 화면 안 ⚙ 에서 정함. readers 가 비어 있으면 관리자 전원
+   한 장 = { id, log_date, author, done(오늘 한 일), plan(내일 할 일·특이사항), files, reads:[확인한 사람…], comments:[{by,text,at}], created_by, created_at }
+   한 사람이 하루에 한 장: 오늘 것이 이미 있으면 "쓰기" 버튼이 그 장을 고치는 창을 엶
+================================================================ */
+const SETTING_ID = 'worklog';
+const setting = () => ((DATA.settings || []).find(s => s.id === SETTING_ID) || {}).value || {};
+const WRITERS = () => Array.isArray(setting().writers) ? setting().writers : [];
+const READERS = () => { const r = Array.isArray(setting().readers) ? setting().readers : []; return r.length ? r : admins().map(m => m.name); };
+const isWriter = () => WRITERS().includes(me);
+const isReader = () => READERS().includes(me);
+const canWrite = () => isWriter() || isAdmin();
+const READS = l => Array.isArray(l.reads) ? l.reads : [];
+const CMTS = l => Array.isArray(l.comments) ? l.comments : [];
+const isRead = l => READS(l).includes(me);
+/* 일지는 쓴 사람, 받는 사람, 관리자만 봄 */
+const canSee = l => l.author === me || isAdmin() || isReader();
+const L = () => (DATA.worklogs || []).filter(canSee).sort((a, b) => String(b.log_date || '').localeCompare(String(a.log_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const needMe = l => isReader() && l.author !== me && !isRead(l);   // 내가 확인해야 하는데 아직 안 한 일지
+const myToday = () => (DATA.worklogs || []).find(l => l.author === me && l.log_date === todayStr());
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+const dayLabel = s => { const d = parseYmd(s); return d ? `${fmtDate(s)} (${WEEKDAYS[d.getDay()]})` : '날짜 없음'; };
+const isWeekday = s => { const d = parseYmd(s); return d && d.getDay() >= 1 && d.getDay() <= 5; };
+let view = 'all';
+let q = '';
+let limit = 30;   // 처음에는 최근 30장만, '더 보기'를 누르면 30장씩 더
+let lastDay = null;
+const dayHead = l => { if (l.log_date === lastDay) return ''; lastDay = l.log_date; return `<div class="day">${dayLabel(l.log_date)}</div>`; };
+
+function normalize(table, r){ if (table !== 'worklogs') return r; return { ...r, reads: Array.isArray(r.reads) ? r.reads : [], comments: Array.isArray(r.comments) ? r.comments : [], files: Array.isArray(r.files) ? r.files : [] }; }
+
+function render(){
+  const writers = WRITERS().filter(n => members.some(m => m.name === n));
+  const tabs = [{ key: 'all', label: '전체' }];
+  if (isReader()) tabs.push({ key: 'todo', label: '확인할 것', badge: L().filter(needMe).length });
+  if (canWrite()) tabs.push({ key: 'mine', label: '내 일지' });
+  if ((isReader() || isAdmin()) && writers.length) tabs.push(null, ...writers.map(n => ({ key: 'w:' + n, label: n })));
+  if (!tabs.some(t => t && t.key === view)) view = 'all';
+  const mt = myToday();
+  $('#app').innerHTML = headerHtml({ icon: '📝', title: '업무일지', tabs, active: view }) + `<main class="wrap" style="max-width:900px">
+    <div class="actions">${canWrite() ? `<button class="btn primary" id="newBtn2">${mt ? '✎ 오늘 일지 고치기' : '＋ 오늘 업무일지 쓰기'}</button>` : ''}
+      ${isAdmin() ? '<button class="btn" id="setBtn" title="쓰는 사람·받는 사람 정하기">⚙ 쓰는 사람·받는 사람</button>' : ''}
+      <input type="search" id="fq" placeholder="검색 (내용, 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:220px">
+      <span class="count" id="cnt"></span></div>
+    ${todayHtml(writers)}
+    <div id="view">${feedHtml()}</div></main>`;
+  bindHeader(k => { view = k; render(); }, null, m => `확인 안 한 일지 ${(DATA.worklogs || []).filter(l => READERS().includes(m.name) && l.author !== m.name && !READS(l).includes(m.name)).length}장`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(mt ? mt.id : null);
+  const sb = $('#setBtn'); if (sb) sb.onclick = openSettings;
+  const fq = $('#fq'); fq.oninput = () => { q = fq.value; renderView(); };
+  bindView();
+}
+/* 받는 사람·관리자에게: 오늘 누가 썼고 누가 아직인지 한 줄 */
+function todayHtml(writers){
+  if (!DATA.worklogs || !(isReader() || isAdmin()) || !writers.length) return '';
+  const t = todayStr(), late = new Date().getHours() >= 18 && isWeekday(t);
+  return `<div class="today"><b>오늘 ${dayLabel(t)}</b>${writers.map(n => { const l = (DATA.worklogs || []).find(x => x.author === n && x.log_date === t); return `<span class="${l ? 'ok' : late ? 'late' : 'no'}">${esc(n)} ${l ? '✓ 썼음' : '· 아직'}</span>`; }).join('')}</div>`;
+}
+function listOf(){
+  const s = q.trim().toLowerCase();
+  return L().filter(l => (view === 'all' || (view === 'todo' && needMe(l)) || (view === 'mine' && l.author === me) || (view.startsWith('w:') && l.author === view.slice(2)))
+    && (!s || [l.done, l.plan, l.author, ...CMTS(l).map(c => c.text)].some(v => (v || '').toLowerCase().includes(s))));
+}
+function feedHtml(){
+  if (!DATA.worklogs || !DATA.settings) return `<div class="empty">업무일지 저장 표가 아직 없습니다.${isAdmin() ? ' sql-worklogs.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
+  if (!canWrite() && !isReader()) return `<div class="empty"><b>${esc(me)}</b>님은 업무일지를 쓰는 사람·받는 사람으로 정해져 있지 않습니다.<br>필요하면 관리자에게 요청하세요.</div>`;
+  const list = listOf();
+  if (!list.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'todo' ? '확인할 일지가 없습니다. 모두 확인했습니다 👍' : view === 'mine' ? '아직 쓴 일지가 없습니다. <b>＋ 오늘 업무일지 쓰기</b>로 첫 장을 남겨 보세요.' : '아직 업무일지가 없습니다.'}</div>`;
+  const shown = list.slice(0, limit); lastDay = null;
+  return `<div class="feed">${shown.map(l => {
+    const mine = l.author === me, unread = needMe(l), reads = READS(l), readers = READERS().filter(n => n !== l.author);
+    return dayHead(l) + `<article class="lg ${unread ? 'unread' : ''}" data-id="${l.id}">
+      <div class="lhead">${who(l.author)}${unread ? '<span class="new">NEW</span>' : ''}<span class="sp"></span><span>${fmtDateTime(l.updated_at || l.created_at)}${l.updated_by && l.updated_at && l.created_at && l.updated_at.slice(0, 16) !== l.created_at.slice(0, 16) ? ' 고침' : ''}</span></div>
+      <div class="sec"><h4>오늘 한 일</h4><div class="txt">${linkify(l.done || '')}</div></div>
+      ${l.plan ? `<div class="sec"><h4>내일 할 일 · 특이사항</h4><div class="txt">${linkify(l.plan)}</div></div>` : ''}
+      ${filesHtml(l.files)}
+      <div class="lfoot">
+        ${readers.length ? `<span title="받는 사람: ${esc(readers.join(', '))}">확인 ${readers.filter(n => reads.includes(n)).length}/${readers.length}${reads.length ? ` <span class="hint">(${esc(reads.join(', '))})</span>` : ''}</span>` : ''}
+        <span class="sp"></span>
+        ${mine || isAdmin() ? `<button class="btn sm" data-edit="${l.id}">고치기</button><button class="btn sm danger" data-del="${l.id}">삭제</button>` : ''}
+        ${!isReader() || mine ? '' : isRead(l) ? '<span class="okd">✓ 확인했습니다</span>' : `<button class="btn sm primary" data-ok="${l.id}">확인했습니다</button>`}
+      </div>
+      <div class="cmts">${CMTS(l).map(c => `<div class="cm">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${linkify(c.text || '')}<span class="at">${fmtDateTime(c.at)}</span></div></div>`).join('')}
+        <div class="cmadd"><textarea data-ctext="${l.id}" placeholder="댓글 (Ctrl+Enter 로 남기기)"></textarea><button class="btn sm" data-cadd="${l.id}">남기기</button></div></div>
+    </article>`;
+  }).join('')}</div>${list.length > shown.length ? `<button class="btn morebtn" id="moreBtn">더 보기 (${list.length - shown.length}장 더 있음)</button>` : ''}`;
+}
+function renderView(){ $('#view').innerHTML = feedHtml(); bindView(); }
+function bindView(){
+  const c = $('#cnt'); if (c) { const todo = L().filter(needMe).length; c.textContent = `${listOf().length}장${todo ? ` · 확인할 것 ${todo}장` : ''}`; }
+  const mb = $('#moreBtn'); if (mb) mb.onclick = () => { limit += 30; renderView(); };
+  document.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => confirmRead(b.dataset.ok));
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(b.dataset.edit));
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { const l = L().find(x => x.id === b.dataset.del); if (!l || !(l.author === me || isAdmin())) return; if (confirm(`${dayLabel(l.log_date)} ${l.author} 님의 일지를 삭제할까요?`)) { await removeRow('worklogs', l.id); toast('삭제했습니다'); } });
+  document.querySelectorAll('[data-cadd]').forEach(b => b.onclick = () => addComment(b.dataset.cadd));
+  document.querySelectorAll('[data-ctext]').forEach(t => t.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addComment(t.dataset.ctext); } });
+}
+async function confirmRead(id){
+  const l = L().find(x => x.id === id); if (!l || isRead(l)) return;
+  await saveRow('worklogs', { ...l, reads: [...READS(l), me] });
+  toast('확인했습니다');
+}
+async function addComment(id){
+  const t = document.querySelector(`[data-ctext="${id}"]`); const text = t ? t.value.trim() : ''; if (!text) return;
+  const l = L().find(x => x.id === id); if (!l) return;
+  const row = { ...l, comments: [...CMTS(l), { by: me, text, at: nowIso() }], updated_by: l.updated_by };
+  if (isReader() && l.author !== me && !isRead(l)) row.reads = [...READS(l), me];   // 댓글을 남기면 확인한 것으로
+  await saveRow('worklogs', row); toast('댓글을 남겼습니다');
+}
+
+/* 쓰기·고치기 */
+function openEdit(id){
+  if (!canWrite()) { toast('업무일지를 쓰는 사람으로 정해져 있지 않습니다', true); return; }
+  const l = id ? L().find(x => x.id === id) : null;
+  if (l && !(l.author === me || isAdmin())) return;
+  const at = attachBox('wFiles', l ? l.files : [], 'worklogs');   // 사진·파일 첨부 (붙여넣기·끌어놓기 됨)
+  openModal(`${modalHead(l ? `${dayLabel(l.log_date)} 업무일지 고치기` : '오늘 업무일지 쓰기')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>날짜</label><input type="date" id="wDate" value="${esc(l ? l.log_date : todayStr())}"></div>
+        <div class="f"><label>쓴 사람</label><input value="${esc(l ? l.author : me)}" disabled></div>
+      </div>
+      <div class="f"><label>오늘 한 일 *</label><textarea id="wDone" placeholder="한 줄에 하나씩, 한 일을 적어 주세요.&#10;예)&#10;- 레모너리 10월 발주 수량 확인해 비에스바이오에 전달&#10;- 흑생마 쿠팡 광고 소재 2개 교체 (ROAS 낮은 것)&#10;- 파트너스 3명 컨택, 2명 답장 대기">${esc(l ? l.done || '' : '')}</textarea></div>
+      <div class="f"><label>내일 할 일 · 특이사항 (선택)</label><textarea id="wPlan" placeholder="내일 할 일, 막힌 것, 결정이 필요한 것">${esc(l ? l.plan || '' : '')}</textarea>${at.html}</div>
+      <div class="hint">받는 사람: ${esc(READERS().join(', ') || '(없음)')}</div>
+    </div>
+    <div class="mf">${l ? '<button class="btn danger left" id="wDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="wSave">${l ? '저장' : '올리기'}</button></div>`, { wide: true });
+  at.bind(); $('#wDone').focus();
+  $('#wSave').onclick = async () => {
+    const done = $('#wDone').value.trim(); if (!done) { $('#wDone').focus(); toast('오늘 한 일을 적어 주세요', true); return; }
+    const log_date = $('#wDate').value || todayStr(), author = l ? l.author : me;
+    const dup = (DATA.worklogs || []).find(x => x.author === author && x.log_date === log_date && (!l || x.id !== l.id));
+    if (dup) { toast(`${dayLabel(log_date)} 일지는 이미 있습니다. 그 장을 고쳐 주세요`, true); return; }
+    const row = { id: l ? l.id : uid(), log_date, author, done, plan: $('#wPlan').value.trim() || null, files: at.files,
+      reads: l ? READS(l) : [], comments: l ? CMTS(l) : [], created_by: l ? l.created_by : me, created_at: l ? l.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('worklogs', row); toast(l ? '저장했습니다' : '업무일지를 올렸습니다. 수고하셨습니다 👏');
+  };
+  const del = $('#wDel'); if (del) del.onclick = async () => { if (confirm(`${dayLabel(l.log_date)} 일지를 삭제할까요?`)) { closeModal(); await removeRow('worklogs', l.id); toast('삭제했습니다'); } };
+}
+
+/* 설정 (관리자): 쓰는 사람·받는 사람 */
+function openSettings(){
+  if (!isAdmin()) return;
+  const cur = (DATA.settings || []).find(s => s.id === SETTING_ID);
+  const w = WRITERS(), r = Array.isArray(setting().readers) ? setting().readers : [];
+  const box = (name, sel) => `<div class="allow">${members.map(m => `<label><input type="checkbox" data-${name} value="${esc(m.name)}" ${sel.includes(m.name) ? 'checked' : ''}> ${esc(fullName(m.name))}</label>`).join('')}</div>`;
+  openModal(`${modalHead('업무일지 설정')}
+    <div class="mb">
+      <div class="f"><label>쓰는 사람 (퇴근 전에 업무일지를 올리는 팀원)</label>${box('w', w)}
+        <div class="hint">정해진 사람에게는 홈 메뉴에 평일 16시 이후 오늘 일지를 안 썼으면 빨간 표시가 뜹니다.</div></div>
+      <div class="f"><label>받는 사람 (일지를 보고 확인·댓글을 남기는 사람)</label>${box('r', r)}
+        <div class="hint">아무도 고르지 않으면 관리자(${esc(admins().map(m => m.name).join(', '))})가 받습니다.</div></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="sSave">저장</button></div>`);
+  $('#sSave').onclick = async () => {
+    const writers = [...document.querySelectorAll('[data-w]:checked')].map(x => x.value), readers = [...document.querySelectorAll('[data-r]:checked')].map(x => x.value);
+    closeModal(); await saveRow('settings', { id: SETTING_ID, value: { writers, readers }, updated_by: me }); toast('설정을 저장했습니다');
+  };
+}
+
+let openedNew = false;   // 홈에서 #new 로 들어오면 쓰기 창을 바로 엶
+const render0 = render;
+render = function(){ render0(); if (location.hash === '#new' && !openedNew && me && canWrite() && DATA.worklogs) { openedNew = true; history.replaceState(null, '', location.pathname); const mt = myToday(); openEdit(mt ? mt.id : null); } };
+boot({ icon: '📝', title: '업무일지', tables: ['worklogs', 'settings'], render, normalize });
+</script>
+</body>
+</html>
