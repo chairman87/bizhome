@@ -381,7 +381,7 @@ const filesCount = files => (files && files.length) ? `<span class="cmt" title="
    사용: const at = attachBox('mFiles', 기존목록, 'tasks'); 창 html 에 at.html 넣고 openModal 뒤 at.bind(); 저장할 때 at.files */
 function attachBox(id, initial = [], folder = 'etc', { rename = false } = {}){   // rename: 파일 이름 고치기 허용
   const files = (initial || []).map(f => ({ ...f })), orig = new Set(files.map(f => f.path));   // 처음부터 있던 파일은 빼도 보관함에서 지우지 않음
-  const box = { files, html: `<div class="attach" id="${id}"><div class="list"></div><div class="row"><button type="button" class="btn sm" data-pick>📎 파일 첨부</button><span class="hint">캡처한 뒤 이 창에서 <b>Ctrl+V</b> 로 붙여넣거나, 파일을 끌어다 놓아도 됩니다</span><input type="file" multiple hidden><input type="text" hidden class="cnt" value="${files.length}"></div></div>` };
+  const box = { files, html: `<div class="attach" id="${id}"><div class="list"></div><div class="row"><button type="button" class="btn sm" data-pick>📎 파일 첨부</button><span class="hint">캡처한 뒤 이 창에서 <b>Ctrl+V</b> 로 붙여넣거나, 파일을 끌어다 놓아도 됩니다</span><input type="file" multiple hidden><input type="text" hidden class="cnt" value="${esc(String(files.length) + files.map(f => f.name).join('|'))}"></div></div>` };
   box.bind = () => {
     const el = $('#' + id); if (!el) return;
     const inp = el.querySelector('input[type=file]'), cnt = el.querySelector('.cnt');
