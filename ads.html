@@ -121,7 +121,7 @@
 /* ================================================================
    광고 영상 리스트 — 마케팅 팀장이 구글시트로 관리하던 표
    한 줄 = { product(제품), date(게재일), title(영상 타이틀), editor(편집자), meta_account(메타 계정),
-            meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(사유/수정 콘티) }
+            meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(콘티 메모), files(콘티 파일) }
 ================================================================ */
 const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
 const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑' };
@@ -196,7 +196,7 @@ function listOf(p){
 }
 function productHtml(p){
   const list = sortBy(listOf(p), sort, { meta_budget: b => { const n = Number(String(b || '').replace(/,/g, '')); return isNaN(n) ? -1 : n; } });
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['note', '사유 / 수정 콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['meta_budget', '예산'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['note', '콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.tstate && '틱톡 ' + filter.tstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
@@ -228,7 +228,7 @@ function productHtml(p){
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
       ${hasGoogle(p) ? `<td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
-      <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="사유 / 수정 콘티" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
+      <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="콘티 (메모)" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
     ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
@@ -242,7 +242,7 @@ function productHtml(p){
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       ${hasGoogle(p) ? `<td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>` : ''}
-      <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}</td>
+      <td class="note" data-edit="note" data-id="${a.id}">${esc(a.note || '')}${(a.files || []).length ? `<span class="cmt" title="콘티 파일 ${a.files.length}개 (줄을 누르면 열림)">📎 ${a.files.length}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 /* 맨 위 입력 줄에서 바로 추가 (Enter). 게재일·편집자·메타는 다음 줄에도 남겨 연달아 넣기 편하게 */
@@ -363,6 +363,7 @@ function inlineEdit(el){
 function openAd(id, preset = {}){
   const a = id ? G().find(x => x.id === id) : null;
   const d = a || { product: PRODUCTS.includes(view) ? view : PRODUCTS[0], date: todayStr(), title: '', editor: '', meta_account: '', meta_budget: '', tiktok: '', google: false, status: '운영중', note: '', ...preset };
+  const fAt = attachBox('aFiles', d.files, 'ads');   // 콘티 파일 (보관함 ads 폴더)
   openModal(`${modalHead(a ? '영상 정보' : '영상 추가')}
     <div class="mb">
       <div class="f3">
@@ -378,7 +379,7 @@ function openAd(id, preset = {}){
       </div>
       <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
       <div class="f" ${hasGoogle(d.product) ? '' : 'style="display:none"'}><label>구글</label><select id="aGoogle"><option value="0" ${!d.google ? 'selected' : ''}>X</option><option value="1" ${d.google ? 'selected' : ''}>O</option></select></div>
-      <div class="f"><label>질병 예방/치료 오인 사유 · 수정 콘티</label><textarea id="aNote">${esc(d.note || '')}</textarea></div>
+      <div class="f"><label>콘티</label><textarea id="aNote" placeholder="콘티 내용이나 메모. 파일(사진·PDF·문서)은 아래에 첨부">${esc(d.note || '')}</textarea>${fAt.html}</div>
       ${a ? `<div class="hint">등록: ${esc(a.created_by || '')} ${fmtDateTime(a.created_at)}${a.updated_by ? ` · 마지막 수정: ${esc(a.updated_by)} ${fmtDateTime(a.updated_at)}` : ''}</div>` : ''}
     </div>
     <div class="mf">
@@ -386,11 +387,11 @@ function openAd(id, preset = {}){
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
     </div>`, { wide: true });
-  $('#aTitle').focus();
+  fAt.bind(); $('#aTitle').focus();
   $('#aSave').onclick = async () => {
     const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
     const row = { id: a ? a.id : uid(), product: $('#aProduct').value, date: $('#aDate').value || null, title, editor: $('#aEditor').value.trim() || null, meta_account: $('#aMeta').value.trim() || null,
-      meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, google: $('#aGoogle').value === '1', status: $('#aStatus').value, note: $('#aNote').value.trim() || null,
+      meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, google: $('#aGoogle').value === '1', status: $('#aStatus').value, note: $('#aNote').value.trim() || null, files: fAt.files,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('ads', row); toast(a ? '저장했습니다' : '영상을 추가했습니다');
   };
