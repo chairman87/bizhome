@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무일지</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610061616">
-<script src="common.js?v=202610061616"></script>
+<link rel="stylesheet" href="common.css?v=202610061629">
+<script src="common.js?v=202610061629"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -172,10 +172,11 @@ function openEdit(id){
       </div>
       <div class="f"><label>오늘 한 일 *</label><textarea id="wDone" placeholder="한 줄에 하나씩, 한 일을 적어 주세요.&#10;예)&#10;- 레모너리 10월 발주 수량 확인해 비에스바이오에 전달&#10;- 흑생마 쿠팡 광고 소재 2개 교체 (ROAS 낮은 것)&#10;- 파트너스 3명 컨택, 2명 답장 대기">${esc(l ? l.done || '' : '')}</textarea></div>
       <div class="f"><label>내일 할 일 · 특이사항 (선택)</label><textarea id="wPlan" placeholder="내일 할 일, 막힌 것, 결정이 필요한 것">${esc(l ? l.plan || '' : '')}</textarea>${at.html}</div>
-      <div class="hint">받는 사람: ${esc(READERS().join(', ') || '(없음)')}</div>
+      <div class="hint">받는 사람: ${esc(READERS().join(', ') || '(없음)')}${isAdmin() ? ' · <a href="#" id="wSet">바꾸기 (쓰는 사람·받는 사람 설정)</a>' : ''}</div>
     </div>
     <div class="mf">${l ? '<button class="btn danger left" id="wDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="wSave">${l ? '저장' : '올리기'}</button></div>`, { wide: true });
   at.bind(); $('#wDone').focus();
+  const ws = $('#wSet'); if (ws) ws.onclick = e => { e.preventDefault(); closeModal(); openSettings(); };   // 쓰기 창에서 바로 설정 창으로
   $('#wSave').onclick = async () => {
     const done = $('#wDone').value.trim(); if (!done) { $('#wDone').focus(); toast('오늘 한 일을 적어 주세요', true); return; }
     const log_date = $('#wDate').value || todayStr(), author = l ? l.author : me;
