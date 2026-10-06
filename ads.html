@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610061117">
-<script src="common.js?v=202610061117"></script>
+<link rel="stylesheet" href="common.css?v=202610061133">
+<script src="common.js?v=202610061133"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -51,8 +51,10 @@
   .wk .d{background:var(--bg);min-height:150px;padding:0 0 6px;cursor:pointer}
   .wk .d:hover{background:var(--bg2)}
   .wk .d.out{background:#fafaf9}
-  .wk .d .dn{background:#e5e5e5;font-weight:700;padding:3px 8px;font-size:13px}
-  .wk .d.today .dn{color:var(--red)}
+  .wk .d .dn{background:#e5e5e5;color:#111;font-weight:700;padding:3px 8px;font-size:13px}   /* 평일: 까만색 */
+  .wk .d.holi .dn{color:#dc2626}                                                              /* 공휴일: 빨간색 (이름은 날짜 옆에 작게) */
+  .wk .d.holi .dn small{font-weight:500;font-size:11px;margin-left:6px}
+  .wk .d.today .dn{background:#fde68a}                                                        /* 오늘: 노란 바탕 (글자색은 평일·공휴일 규칙 그대로) */
   .wk .d.out .dn{color:var(--fg3)}
   .wk .it{padding:2px 8px;font-size:12px;line-height:1.45;cursor:pointer;word-break:break-word}
   .wk .it:hover{background:#fffbea}
@@ -139,6 +141,13 @@ const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', b
 let filter = freshFilter();
 let month = todayStr().slice(0, 7);   // 월별 탭에서 보는 달 (YYYY-MM)
 let monthQ = '';   // 월별 현황 검색어 (걸린 영상만 달력에서 노랗게 표시)
+/* 공휴일 (달력 날짜를 빨갛게). 토·일에 걸린 공휴일은 달력에 안 나오므로 대체공휴일만 적음. 해마다 연말에 다음 해 것을 추가할 것. */
+const HOLIDAYS = {
+  '2026-01-01': '신정', '2026-02-16': '설 연휴', '2026-02-17': '설날', '2026-02-18': '설 연휴', '2026-03-02': '삼일절 대체', '2026-05-05': '어린이날', '2026-05-25': '부처님오신날 대체',
+  '2026-06-03': '지방선거', '2026-08-17': '광복절 대체', '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-28': '추석 대체', '2026-10-05': '개천절 대체', '2026-10-09': '한글날', '2026-12-25': '성탄절',
+  '2027-01-01': '신정', '2027-02-08': '설 연휴', '2027-02-09': '설 대체', '2027-03-01': '삼일절', '2027-05-05': '어린이날', '2027-05-13': '부처님오신날', '2027-08-16': '광복절 대체',
+  '2027-09-14': '추석 연휴', '2027-09-15': '추석', '2027-09-16': '추석 연휴', '2027-10-04': '개천절 대체', '2027-10-11': '한글날 대체', '2027-12-27': '성탄절 대체',
+};
 let sort = { key: 'date', dir: 'desc' };
 
 const uniq = arr => [...new Set(arr.filter(Boolean))].sort();
@@ -321,7 +330,8 @@ function monthHtml(){
       const day = new Date(d); day.setDate(d.getDate() + i);
       const key = ymd(day), out = day.getMonth() !== m - 1;
       const items = inMonth.filter(a => a.date === key).sort((a, b) => PRODUCTS.indexOf(a.product) - PRODUCTS.indexOf(b.product));
-      cells += `<div class="d ${out ? 'out' : ''} ${key === todayStr() ? 'today' : ''}" data-day="${key}"><div class="dn">${out ? '' : `${m}/${day.getDate()}`}</div>
+      const holi = HOLIDAYS[key];   // 공휴일이면 이름, 아니면 undefined
+      cells += `<div class="d ${out ? 'out' : ''} ${key === todayStr() ? 'today' : ''} ${holi ? 'holi' : ''}" data-day="${key}"><div class="dn">${out ? '' : `${m}/${day.getDate()}${holi ? `<small>${esc(holi)}</small>` : ''}`}</div>
         ${items.map(a => `<div class="it ${a.status === '삭제·수정필요' ? 'del' : ''} ${q ? (hit(a) ? 'hit' : 'dim') : ''}" data-open="${a.id}" title="${esc(a.title)} · ${esc(a.editor || '')} · ${a.status}"><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b>${esc(a.title)}${a.editor ? '_' + esc(a.editor) : ''}</div>`).join('')}</div>`;
     }
   }
