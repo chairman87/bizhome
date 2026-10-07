@@ -366,9 +366,50 @@ async function uploadFile(file, folder = 'etc'){
   const r = await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'POST', headers: { ...fileHeaders(), 'Content-Type': f.type || 'application/octet-stream', 'x-upsert': 'true' }, body: f });
   if (!r.ok) { const t = await r.text(); throw new Error(/not found|Bucket/i.test(t) ? '파일 보관함이 아직 준비되지 않았습니다 (sql-files.sql 실행 필요)' : t.slice(0, 120)); }
   const name = file.name && !/^image\.\w+$/.test(file.name) ? file.name : `캡처 ${fmtDateTime(nowIso()).slice(5)}.${ext}`;
-  return { name, path, url: fileUrl(path), type: f.type, size: f.size, by: me, at: nowIso() };
+  const out = { name, path, url: fileUrl(path), type: f.type, size: f.size, by: me, at: nowIso() };
+  try {   // PDF·PPT 등은 첫 장 미리보기 그림을 같이 올림 (실패해도 파일 올리기는 그대로)
+    const th = await makeThumb(f);
+    if (th) { const tp = path + '.thumb.jpg'; const r2 = await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${tp}`, { method: 'POST', headers: { ...fileHeaders(), 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: th }); if (r2.ok) { out.thumb = fileUrl(tp); out.thumb_path = tp; } }
+  } catch {}
+  return out;
 }
 async function deleteFile(path){ try { await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'DELETE', headers: fileHeaders() }); } catch {} }
+
+/* ---------- 첫 장 미리보기 그림 (썸네일) ----------
+   PDF: pdf.js 로 1쪽을 그려 JPEG 로. pptx·docx·xlsx: 파일(zip) 안의 docProps/thumbnail.jpeg(파워포인트가 저장할 때 넣는 첫 장 그림)를 꺼냄.
+   라이브러리는 필요할 때만 내려받음. 못 만들면 null (아이콘으로 표시) */
+const _libs = {};
+const loadScript = src => _libs[src] || (_libs[src] = new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('라이브러리를 못 내려받음: ' + src)); document.head.appendChild(s); }));
+const THUMB_W = 640;
+async function canvasJpeg(c){ return new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.82)); }
+async function makeThumb(file){
+  const name = file.name || '';
+  if (isPdfFile(file)) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const page = await pdf.getPage(1);
+    const v0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: THUMB_W / v0.width });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return canvasJpeg(c);
+  }
+  if (/\.(pptx|docx|xlsx|xlsm)$/i.test(name)) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const ent = Object.keys(zip.files).find(k => /^docProps\/thumbnail\.(jpe?g|png)$/i.test(k));
+    if (!ent) return null;
+    const blob = await zip.file(ent).async('blob');
+    const src = URL.createObjectURL(blob);
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+    const r = Math.min(1, THUMB_W / img.width);
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(src);
+    return canvasJpeg(c);
+  }
+  return null;
+}
 
 /* 첨부 목록 보기: 사진·PDF 는 누르면 새 창에서 크게, 엑셀·PPT·워드는 마이크로소프트 온라인 뷰어로 바로 보여줌,
    그 밖의 파일(한글 hwp 등 뷰어가 없는 형식)은 누르면 바로 내려받음. 왼쪽 위 ⬇ 를 누르면 언제나 내려받기
@@ -382,7 +423,7 @@ function fileOpenUrl(f){ return (isImg(f) || isPdfFile(f)) ? f.url : isOffice(f)
 function filesHtml(files, { edit = false, rename = false } = {}){
   files = files || []; if (!files.length && !edit) return '';
   return `<div class="files">${files.map((f, i) => { const open = fileOpenUrl(f), view = open !== dlUrl(f);
-    return `<div class="file"><a href="${esc(open)}" target="_blank" rel="noopener" title="${esc(f.name)}${isOffice(f) ? ' (온라인 뷰어로 보기)' : view ? '' : ' (누르면 내려받음)'}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : `<span class="doc">${fileIcon(f)}</span>`}${rename ? '' : `<span class="nm">${esc(f.name)}</span>`}</a><a class="dl" href="${esc(dlUrl(f))}" title="내려받기 (${esc(f.name)})">⬇</a>${rename ? `<input class="ren" data-ren="${i}" value="${esc(f.name)}" title="파일 이름 바꾸기 (내려받을 때 이 이름으로 저장됨)" maxlength="120">` : ''}${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`; }).join('')}</div>`;
+    return `<div class="file"><a href="${esc(open)}" target="_blank" rel="noopener" title="${esc(f.name)}${isOffice(f) ? ' (온라인 뷰어로 보기)' : view ? '' : ' (누르면 내려받음)'}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : f.thumb ? `<img class="th" src="${esc(f.thumb)}" alt="${esc(f.name)}" loading="lazy">` : `<span class="doc">${fileIcon(f)}</span>`}${rename ? '' : `<span class="nm">${esc(f.name)}</span>`}</a><a class="dl" href="${esc(dlUrl(f))}" title="내려받기 (${esc(f.name)})">⬇</a>${rename ? `<input class="ren" data-ren="${i}" value="${esc(f.name)}" title="파일 이름 바꾸기 (내려받을 때 이 이름으로 저장됨)" maxlength="120">` : ''}${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`; }).join('')}</div>`;
 }
 const filesCount = files => (files && files.length) ? `<span class="cmt" title="첨부 ${files.length}개">📎 ${files.length}</span>` : '';
 
@@ -396,7 +437,7 @@ function attachBox(id, initial = [], folder = 'etc', { rename = false } = {}){  
     const inp = el.querySelector('input[type=file]'), cnt = el.querySelector('.cnt');
     const draw = () => {
       el.querySelector('.list').innerHTML = filesHtml(files, { edit: true, rename }); cnt.value = String(files.length) + files.map(f => f.name).join('|');   // cnt: 창 닫을 때 "입력 중" 판단용
-      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [f] = files.splice(Number(b.dataset.rm), 1); draw(); if (f && f.path && !orig.has(f.path)) deleteFile(f.path); });
+      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const [f] = files.splice(Number(b.dataset.rm), 1); draw(); if (f && f.path && !orig.has(f.path)) { deleteFile(f.path); if (f.thumb_path) deleteFile(f.thumb_path); } });
       el.querySelectorAll('[data-ren]').forEach(inp => { inp.onclick = e => e.stopPropagation(); inp.onchange = () => { const v = inp.value.trim(); if (v) files[Number(inp.dataset.ren)].name = v; else inp.value = files[Number(inp.dataset.ren)].name; cnt.value = String(files.length) + files.map(f => f.name).join('|'); }; });
     };
     box.add = async list => {

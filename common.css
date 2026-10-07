@@ -234,6 +234,7 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .file{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;width:150px}
 .file a{display:block;color:inherit;text-decoration:none}
 .file img{display:block;width:100%;height:100px;object-fit:cover;background:#f1f5f9}
+.file img.th{object-position:top;background:#fff;border-bottom:1px solid var(--line)}
 .file .doc{display:flex;align-items:center;justify-content:center;height:56px;font-size:26px;background:#f8fafc}
 .file .nm{display:block;font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg2)}
 .file .ren{display:block;width:100%;border:0;border-top:1px solid var(--line);font:inherit;font-size:11px;padding:4px 6px;background:#fffbea;color:var(--fg);box-sizing:border-box}
