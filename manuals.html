@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무 매뉴얼</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610071827">
-<script src="common.js?v=202610071827"></script>
+<link rel="stylesheet" href="common.css?v=202610071833">
+<script src="common.js?v=202610071833"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -37,7 +37,11 @@
   .rd .body .h{display:block;font-weight:700;font-size:15px;margin-top:6px}
   .rd .lnk{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--blue);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rd .lnk:hover{text-decoration:underline}
-  .rd .file a:not(.dl){cursor:zoom-in}
+  .rd .fsel{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .rd .fsel .sp{flex:1}
+  .rd .fsel a.btn{text-decoration:none}
+  .rd .fsel .btn{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rd .inv{height:clamp(360px, calc(100vh - 300px), 900px)}
 </style>
 </head>
 <body>
@@ -110,21 +114,26 @@ function bindView(){
   document.querySelectorAll('[data-open]').forEach(el => el.onclick = () => openRead(el.dataset.open));
 }
 
-/* 보기 창 */
+/* 보기 창: 첨부(PDF·pptx·사진)가 있으면 창을 넓게 열고 그 안에 바로 띄움. 첨부가 여럿이면 위쪽 단추로 바꿔 봄 */
 function openRead(id){
   const m = M().find(x => x.id === id); if (!m) return;
-  const t = TARGETS(m);
+  const t = TARGETS(m), files = m.files || [], viewable = files.filter(canView), others = files.filter(f => !canView(f));
   openModal(`${modalHead(esc(m.title), isAdmin() ? `<button class="btn sm" id="rEdit">고치기</button>` : '')}
     <div class="rd">
       <div class="meta">${m.category ? `<span class="ctag">${esc(m.category)}</span>` : ''}<span>담당자: ${t.length ? t.map(n => esc(fullName(n))).join(', ') : '전체'}</span><span>· ${esc(m.updated_by || m.created_by || '')} · ${fmtDate((m.updated_at || m.created_at || '').slice(0, 10))}</span></div>
-      <div class="body">${bodyHtml(m.content) || '<span class="hint">내용이 없습니다</span>'}</div>
+      ${m.content ? `<div class="body">${bodyHtml(m.content)}</div>` : ''}
       ${m.link ? `<a class="lnk" href="${esc(linkHref(m.link))}" target="_blank" rel="noopener">🔗 ${esc(linkText(m.link))}</a>` : ''}
-      ${filesHtml(m.files)}
+      ${viewable.length ? `<div class="fsel">${viewable.map((f, i) => `<button type="button" class="btn sm ${i ? '' : 'primary'}" data-fv="${i}" title="${esc(f.name)}">${fileIcon(f)} ${esc(f.name)}</button>`).join('')}<span class="sp"></span><a class="btn sm" id="rDl" href="${esc(dlUrl(viewable[0]))}">⬇ 내려받기</a><a class="btn sm" id="rNew" href="${esc(fileOpenUrl(viewable[0]))}" target="_blank" rel="noopener">↗ 새 창</a></div><div class="inv" id="inv"></div>` : ''}
+      ${others.length ? filesHtml(others) : ''}
+      ${!m.content && !files.length ? '<div class="hint">내용이 없습니다</div>' : ''}
     </div>
-    <div class="mf"><button class="btn" data-close>닫기</button></div>`, { wide: true });
+    <div class="mf"><button class="btn" data-close>닫기</button></div>`, { wide: true, cls: viewable.length ? 'xl' : '' });
   const e = $('#rEdit'); if (e) e.onclick = () => { closeModal(); openEdit(id); };
-  // 첨부를 누르면 새 창 대신 이 화면 안 뷰어로 (PDF 는 쪽마다 넘겨 보고, pptx 는 온라인 뷰어를 끼움). ⬇ 는 그대로 내려받기
-  document.querySelectorAll('#modal .rd .file').forEach((el, i) => { const f = (m.files || [])[i]; const a = el.querySelector('a:not(.dl)'); if (f && a && canView(f)) { a.title = f.name + ' (누르면 크게 보기)'; a.onclick = ev => { ev.preventDefault(); openViewer(f); }; } });
+  if (viewable.length) {
+    const show = i => { const f = viewable[i]; mountViewer($('#inv'), f); $('#rDl').href = dlUrl(f); $('#rNew').href = fileOpenUrl(f); document.querySelectorAll('[data-fv]').forEach(b => b.classList.toggle('primary', Number(b.dataset.fv) === i)); };
+    document.querySelectorAll('[data-fv]').forEach(b => b.onclick = () => show(Number(b.dataset.fv)));
+    show(0);
+  }
 }
 
 /* 쓰기·고치기 (관리자) */

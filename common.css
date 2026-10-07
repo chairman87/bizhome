@@ -247,20 +247,25 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .attach .up{color:var(--blue);font-weight:600}
 .modal.drop{outline:3px dashed var(--blue);outline-offset:-6px}
 .cm .files{margin-top:6px}
-/* 창 안 뷰어 (openViewer) */
+/* 첨부 미리보기 칸 (mountViewer) + 화면 가득 뷰어 (openViewer) */
+.modal.xl{max-width:1280px}
+.pv{position:relative;background:#1c1c1e;border-radius:8px;overflow:hidden}
+.pv .pvb{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px}
+.pv canvas,.pv img{max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.5);cursor:pointer}
+.pv iframe{width:100%;height:100%;border:0;background:#fff;border-radius:4px}
+.pv .vl{color:#ddd;font-size:14px}
+.pv .pvp{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.55);padding:2px 12px;border-radius:999px;font-size:12px;pointer-events:none}
+.pv .pvp:empty{display:none}
+.pv .vnav{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:60px;border:0;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;font-size:32px;line-height:60px;cursor:pointer;padding:0;z-index:1}
+.pv .vnav:hover{background:rgba(255,255,255,.3)}
+.pv .vnav:disabled{opacity:.25;cursor:default}
+.pv .vnav.l{left:8px}.pv .vnav.r{right:8px}
 .vw{position:fixed;inset:0;z-index:60;background:#1c1c1e;display:flex;flex-direction:column}
 .vw .vh{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#2c2c2e;color:#fff;font-size:13px;flex:none}
 .vw .vh .vn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
-.vw .vh .vp{color:#bbb;white-space:nowrap}
 .vw .vh .sp{flex:1}
 .vw .vh .btn{background:#3a3a3c;border-color:#48484a;color:#fff;text-decoration:none}
 .vw .vh .btn:hover{background:#505052}
-.vw .vb{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto;padding:12px;position:relative}
-.vw .vb canvas,.vw .vb img{max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.5);cursor:pointer}
-.vw .vb iframe{width:100%;height:100%;border:0;background:#fff;border-radius:4px}
-.vw .vb .vl{color:#ddd;font-size:14px}
-.vw .vnav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:34px;line-height:64px;cursor:pointer;padding:0}
-.vw .vnav:hover{background:rgba(255,255,255,.28)}
-.vw .vnav:disabled{opacity:.25;cursor:default}
-.vw .vnav.l{left:10px}.vw .vnav.r{right:10px}
-@media(max-width:600px){.vw .vnav{width:34px;height:52px;font-size:28px;line-height:52px}}
+.vw .vb{flex:1;min-height:0;position:relative}
+.vw .vb > div{position:absolute;inset:8px}
+@media(max-width:600px){.pv .vnav{width:32px;height:50px;font-size:26px;line-height:50px}}

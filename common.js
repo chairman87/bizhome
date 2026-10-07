@@ -324,7 +324,7 @@ function logout(){ me = ''; LS.del('bizhome_me'); renderApp(); }
 /* ---------- 모달(팝업 창) ---------- */
 /* 팝업 창. 바깥을 클릭해도 닫히지 않음(입력 중 실수 방지). 취소·✕·Esc 로 닫고, 입력한 내용이 있으면 Esc 때 한 번 물어봄 */
 function openModal(html, opts = {}){
-  $('#modal').innerHTML = `<div class="ov" id="ov"><div class="modal ${opts.wide ? 'wide' : ''}">${html}</div></div>`;
+  $('#modal').innerHTML = `<div class="ov" id="ov"><div class="modal ${opts.wide ? 'wide' : ''} ${opts.cls || ''}">${html}</div></div>`;   // cls: 'xl' 이면 아주 넓은 창
   const snapshot = () => [...document.querySelectorAll('#modal input:not([type=hidden]), #modal textarea')].map(i => i.type === 'checkbox' ? String(i.checked) : i.value).join('');
   const initial = snapshot();
   const dirty = () => snapshot() !== initial;
@@ -411,51 +411,56 @@ async function makeThumb(file){
   return null;
 }
 
-/* ---------- 창 안 뷰어: 첨부를 화면 가득 띄워 한 장씩 넘겨 봄 ----------
-   PDF: pdf.js 로 쪽마다 창 크기에 맞춰 그림 (← → 키, 양옆 단추, 쪽 그림 좌우 누르기). 사진: 그대로 크게.
-   pptx·docx·xlsx: 마이크로소프트 온라인 뷰어(embed)를 창 안에 끼움 — 슬라이드 넘김은 뷰어 자체 단추.
-   사용: openViewer(fileObj). Esc 또는 ✕ 로 닫힘(뒤의 창은 그대로) */
+/* ---------- 첨부 미리보기 ----------
+   mountViewer(el, f): 어떤 칸(el) 안에 첨부를 띄움. PDF 는 pdf.js 로 쪽마다 칸 크기에 맞춰 그림(← → 키, 양옆 단추, 쪽 그림 좌우 누르기),
+   사진은 그대로, pptx·docx·xlsx 는 마이크로소프트 온라인 뷰어(embed)를 끼움(슬라이드 넘김은 뷰어 자체 단추).
+   openViewer(f): 화면 가득 검은 바탕에 띄우는 판 (Esc·✕ 로 닫힘, 뒤의 창은 그대로) */
 const canView = f => isImg(f) || isPdfFile(f) || isOffice(f);
 const officeEmbedUrl = f => `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(f.url)}`;
-let VW = null;   // { pdf, page, n, seq, render }
-function closeViewer(){ const el = $('#vw'); if (el) el.remove(); document.removeEventListener('keydown', vwKey, true); window.removeEventListener('resize', vwResize); VW = null; }
-function vwKey(e){ if (!$('#vw')) return; if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); closeViewer(); } else if (VW && VW.pdf && ['ArrowRight', 'ArrowLeft', 'PageDown', 'PageUp'].includes(e.key)) { e.stopImmediatePropagation(); e.preventDefault(); vwGo(e.key === 'ArrowRight' || e.key === 'PageDown' ? 1 : -1); } }
-let vwResizeTimer; function vwResize(){ clearTimeout(vwResizeTimer); vwResizeTimer = setTimeout(() => { if (VW && VW.pdf) VW.render(); }, 150); }
-function vwGo(d){ if (!VW || !VW.pdf) return; const n = Math.min(VW.n, Math.max(1, VW.page + d)); if (n !== VW.page) { VW.page = n; VW.render(); } }
-async function openViewer(f){
+async function mountViewer(el, f){
+  if (el._pv) el._pv.off();   // 같은 칸에 다른 파일을 띄우면 이전 것 정리
+  el.classList.add('pv'); el._pv = null;
+  if (isImg(f)) { el.innerHTML = `<div class="pvb"><img src="${esc(f.url)}" alt=""></div>`; return; }
+  if (!isPdfFile(f)) { el.innerHTML = `<div class="pvb">${isOffice(f) ? `<iframe src="${esc(officeEmbedUrl(f))}" allowfullscreen></iframe>` : '<span class="vl">미리 볼 수 없는 형식입니다. ⬇ 로 내려받아 여세요</span>'}</div>`; return; }
+  el.innerHTML = `<div class="pvb"><span class="vl">불러오는 중…</span></div><button type="button" class="vnav l" title="이전 쪽 (←)">‹</button><button type="button" class="vnav r" title="다음 쪽 (→)">›</button><span class="pvp"></span>`;
+  const st = { page: 1, n: 1, seq: 0, doc: null };
+  const alive = () => document.body.contains(el) && el._pv === st;
+  const render = async () => {
+    if (!alive() || !st.doc) return; const my = ++st.seq;
+    const page = await st.doc.getPage(st.page); if (my !== st.seq || !alive()) return;
+    const v0 = page.getViewport({ scale: 1 }), box = el.querySelector('.pvb');
+    const fit = Math.max(0.1, Math.min((box.clientWidth - 24) / v0.width, (box.clientHeight - 24) / v0.height)), dpr = window.devicePixelRatio || 1;
+    const vp = page.getViewport({ scale: fit * dpr });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.style.width = Math.round(vp.width / dpr) + 'px'; c.style.height = Math.round(vp.height / dpr) + 'px';
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise; if (my !== st.seq || !alive()) return;
+    box.innerHTML = ''; box.appendChild(c);
+    c.onclick = e => { const r = c.getBoundingClientRect(); go(e.clientX < r.left + r.width / 2 ? -1 : 1); };   // 왼쪽 반=이전, 오른쪽 반=다음
+    el.querySelector('.pvp').textContent = `${st.page} / ${st.n}`;
+    el.querySelector('.vnav.l').disabled = st.page <= 1; el.querySelector('.vnav.r').disabled = st.page >= st.n;
+  };
+  const go = d => { const n = Math.min(st.n, Math.max(1, st.page + d)); if (n !== st.page) { st.page = n; render(); } };
+  const key = e => { if (!alive()) { st.off(); return; } if (['ArrowRight', 'ArrowLeft', 'PageDown', 'PageUp'].includes(e.key) && !(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))) { e.stopImmediatePropagation(); e.preventDefault(); go(e.key === 'ArrowRight' || e.key === 'PageDown' ? 1 : -1); } };
+  let rt; const rs = () => { if (!alive()) { st.off(); return; } clearTimeout(rt); rt = setTimeout(render, 150); };
+  st.off = () => { document.removeEventListener('keydown', key, true); window.removeEventListener('resize', rs); if (el._pv === st) el._pv = null; };
+  el._pv = st;
+  document.addEventListener('keydown', key, true); window.addEventListener('resize', rs);
+  el.querySelector('.vnav.l').onclick = () => go(-1); el.querySelector('.vnav.r').onclick = () => go(1);
+  try { await loadPdfjs(); st.doc = await pdfjsLib.getDocument({ url: f.url }).promise; st.n = st.doc.numPages; render(); }
+  catch (e) { if (alive()) el.querySelector('.pvb').innerHTML = `<span class="vl">PDF 를 열지 못했습니다: ${esc(e.message || e)}</span>`; }
+}
+function closeViewer(){ const el = $('#vw'); if (el) { const b = $('#vwBody'); if (b && b._pv) b._pv.off(); el.remove(); } document.removeEventListener('keydown', vwKey, true); }
+function vwKey(e){ if (!$('#vw')) return; if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); closeViewer(); } }
+function openViewer(f){
   closeViewer();
-  const pdf = isPdfFile(f), off = !pdf && !isImg(f) && isOffice(f);
   document.body.insertAdjacentHTML('beforeend', `<div class="vw" id="vw">
-    <div class="vh"><span class="vn" title="${esc(f.name)}">${esc(f.name)}</span><span class="vp" id="vwPage"></span><span class="sp"></span>
+    <div class="vh"><span class="vn" title="${esc(f.name)}">${esc(f.name)}</span><span class="sp"></span>
       <a class="btn sm" href="${esc(dlUrl(f))}" title="내려받기">⬇ 내려받기</a><a class="btn sm" href="${esc(fileOpenUrl(f))}" target="_blank" rel="noopener" title="새 창에서 열기">↗ 새 창</a><button type="button" class="btn sm" id="vwX">✕ 닫기</button></div>
-    <div class="vb" id="vwBody">${isImg(f) ? `<img src="${esc(f.url)}" alt="">` : off ? `<iframe src="${esc(officeEmbedUrl(f))}" allowfullscreen></iframe>` : '<span class="vl">불러오는 중…</span>'}</div>
-    ${pdf ? '<button type="button" class="vnav l" id="vwPrev" title="이전 쪽 (←)">‹</button><button type="button" class="vnav r" id="vwNext" title="다음 쪽 (→)">›</button>' : ''}
+    <div class="vb"><div id="vwBody"></div></div>
   </div>`);
   $('#vwX').onclick = closeViewer;
   document.addEventListener('keydown', vwKey, true);
-  if (!pdf) return;
-  window.addEventListener('resize', vwResize);
-  $('#vwPrev').onclick = () => vwGo(-1); $('#vwNext').onclick = () => vwGo(1);
-  $('#vwBody').onclick = e => { if (e.target.tagName !== 'CANVAS') return; const r = e.target.getBoundingClientRect(); vwGo(e.clientX < r.left + r.width / 2 ? -1 : 1); };   // 쪽 그림의 왼쪽 반=이전, 오른쪽 반=다음
-  try {
-    await loadPdfjs();
-    const doc = await pdfjsLib.getDocument({ url: f.url }).promise;
-    VW = { pdf: doc, page: 1, n: doc.numPages, seq: 0, render: null };
-    VW.render = async () => {
-      if (!$('#vw')) return; const my = ++VW.seq;
-      const page = await doc.getPage(VW.page); if (my !== VW.seq) return;
-      const v0 = page.getViewport({ scale: 1 }), box = $('#vwBody');
-      const fit = Math.min((box.clientWidth - 24) / v0.width, (box.clientHeight - 24) / v0.height), dpr = window.devicePixelRatio || 1;
-      const vp = page.getViewport({ scale: fit * dpr });
-      const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.style.width = Math.round(vp.width / dpr) + 'px'; c.style.height = Math.round(vp.height / dpr) + 'px';
-      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise; if (my !== VW.seq || !$('#vw')) return;
-      box.innerHTML = ''; box.appendChild(c);
-      $('#vwPage').textContent = `${VW.page} / ${VW.n}`;
-      $('#vwPrev').disabled = VW.page <= 1; $('#vwNext').disabled = VW.page >= VW.n;
-    };
-    VW.render();
-  } catch (e) { if ($('#vwBody')) $('#vwBody').innerHTML = `<span class="vl">PDF 를 열지 못했습니다: ${esc(e.message || e)}</span>`; }
+  mountViewer($('#vwBody'), f);
 }
 
 /* 첨부 목록 보기: 사진·PDF 는 누르면 새 창에서 크게, 엑셀·PPT·워드는 마이크로소프트 온라인 뷰어로 바로 보여줌,
