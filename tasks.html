@@ -120,10 +120,17 @@ const isSelf = t => t.assignee && t.assignee === t.created_by;   // 본인이 �
 const stTask = t => (t.status === '요청' && isSelf(t)) ? tag('내 업무', '#e0f2fe', '#0369a1', true) : stHtml(t.status);
 const newForMe = () => T().filter(t => t.assignee === me && t.status === '요청' && !isSelf(t)).length;
 const waitingMe = () => T().filter(t => t.created_by === me && t.status === '보고완료').length;
-/* 보완 요청을 받고 아직 다시 보고하지 않은 업무: 마지막 보고·보완 요청 기록이 '보완 요청'이고 보고완료·완료가 아님 */
-const revisePending = t => { if (isDone(t) || t.status === '보고완료') return false; const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'revise'); return !!c && c.kind === 'revise'; };
-const reviseForMe = () => T().filter(t => t.assignee === me && revisePending(t)).length;
-const reviseHtml = t => revisePending(t) ? ' ' + tag('보완 요청', '#fbeccc', '#9a6700', true) : '';
+/* 보완 요청에 답해야 할 사람. 보완 요청을 쓴 사람의 상대방(담당자가 썼으면 요청자, 요청자·관리자가 썼으면 담당자).
+   그 사람이 뒤에 진행 보고나 댓글을 남기면 끝난 것으로 봄. 보고완료·완료 상태면 없음 */
+function reviseWaiter(t){
+  if (isDone(t) || t.status === '보고완료') return null;
+  const cs = t.comments || [], i = cs.map(x => x.kind).lastIndexOf('revise'); if (i < 0) return null;
+  const r = cs[i], waiter = r.by === t.assignee ? t.created_by : t.assignee; if (!waiter) return null;
+  return cs.slice(i + 1).some(x => (x.kind === 'report' || x.kind === 'comment') && x.by !== r.by) ? null : waiter;
+}
+const revisePending = t => !!reviseWaiter(t);
+const reviseForMe = () => T().filter(t => reviseWaiter(t) === me).length;
+const reviseHtml = t => { const w = reviseWaiter(t); return w ? ' ' + tag(`보완 요청 → ${w}`, '#fbeccc', '#9a6700', true) : ''; };
 
 const VIEWS = () => [
   { key: 'received', label: '업무', badge: newForMe() + waitingMe() + reviseForMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },

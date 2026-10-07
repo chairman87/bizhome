@@ -336,11 +336,11 @@ function render(){
   const admin = isAdmin();
   if (!admin) editing = false;
   const tasks = DATA.tasks || [], leaves = DATA.leaves || [], notices = DATA.notices || [], accounts = (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only), payments = DATA.payments || [], subs = (DATA.subscriptions || []).filter(s => (isAdmin() || !s.admin_only) && s.status !== '해지'), docs = (DATA.docs || []).filter(d => isAdmin() || !d.admin_only);
-  // 보완 요청을 받고 아직 다시 보고하지 않은 업무 (tasks.html 의 revisePending 과 같은 기준)
-  const taskRevisePending = t => { if (t.status === '완료' || t.status === '보고완료') return false; const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'revise'); return !!c && c.kind === 'revise'; };
+  // 보완 요청에 답해야 할 사람 (tasks.html 의 reviseWaiter 와 같은 기준): 보완 요청을 쓴 사람의 상대방이 아직 보고·댓글을 안 남겼으면 그 사람
+  const taskReviseWaiter = t => { if (t.status === '완료' || t.status === '보고완료') return null; const cs = t.comments || [], i = cs.map(x => x.kind).lastIndexOf('revise'); if (i < 0) return null; const r = cs[i], w = r.by === t.assignee ? t.created_by : t.assignee; if (!w) return null; return cs.slice(i + 1).some(x => (x.kind === 'report' || x.kind === 'comment') && x.by !== r.by) ? null : w; };
   const badges = {
     // 남이 나에게 새로 요청한 것 + 내가 요청한 것 중 확인 기다리는 보고 (내가 직접 등록한 내 업무는 제외)
-    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료') || (t.assignee === me && taskRevisePending(t))).length,   // + 보완 요청을 받고 아직 다시 보고 안 한 업무
+    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료') || taskReviseWaiter(t) === me).length,   // + 내가 답해야 할 보완 요청
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
