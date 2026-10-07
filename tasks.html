@@ -130,10 +130,34 @@ function reviseWaiter(t){
 }
 const revisePending = t => !!reviseWaiter(t);
 const reviseForMe = () => T().filter(t => reviseWaiter(t) === me).length;
+
+/* ---------- 업무 탭 숫자 = 내 차례인데 아직 열어 보지 않은 업무 수 ----------
+   내 차례: 남이 나에게 새로 요청(요청 상태) / 내가 요청한 업무의 보고 확인(보고완료) / 보완 요청에 답하기.
+   업무를 눌러 열면 '본 시각'이 남고 숫자가 사라짐. 본 뒤에 남이 보고·댓글을 또 남기면 다시 셈.
+   본 시각은 tasks.seen 칸({이름: 시각}, sql-tasks-seen.sql)에 저장. 그 칸이 아직 없으면 이 브라우저에만 남김 */
+function needMe(t){
+  if (isDone(t)) return false;
+  if (t.assignee === me && t.status === '요청' && !isSelf(t)) return true;
+  if (t.created_by === me && t.status === '보고완료') return true;
+  return reviseWaiter(t) === me;
+}
+const seenLS = () => { try { return JSON.parse(LS.get('bizhome_task_seen_' + me) || '{}'); } catch { return {}; } };
+const seenAt = t => { const a = String((t.seen && t.seen[me]) || ''), b = String(seenLS()[t.id] || ''); return a > b ? a : b; };
+/* 남이 마지막으로 움직인 시각: 남이 등록한 시각, 남이 남긴 보고·댓글·보완 요청 중 가장 늦은 것 */
+const lastOther = t => [t.created_by !== me ? t.created_at : '', ...(t.comments || []).filter(c => c.by !== me).map(c => c.at)].reduce((m, x) => String(x || '') > m ? String(x) : m, '');
+const unseen = t => needMe(t) && seenAt(t) < lastOther(t);
+const unseenCount = () => T().filter(unseen).length;
+async function markSeen(t){
+  if (!t || !unseen(t)) return;
+  const now = nowIso(), ls = seenLS(); ls[t.id] = now; LS.set('bizhome_task_seen_' + me, JSON.stringify(ls));
+  const b = document.querySelector('.tab[data-view="received"] .badge'), n = unseenCount();
+  if (b) { if (n) b.textContent = n; else b.remove(); }
+  try { if (store.client) { const { error } = await store.client.from('tasks').update({ seen: { ...(t.seen || {}), [me]: now } }).eq('id', t.id); if (!error) t.seen = { ...(t.seen || {}), [me]: now }; } } catch {}
+}
 const reviseHtml = t => { const w = reviseWaiter(t); return w ? ' ' + tag(`보완 요청 → ${w}`, '#fbeccc', '#9a6700', true) : ''; };
 
 const VIEWS = () => [
-  { key: 'received', label: '업무', badge: newForMe() + waitingMe() + reviseForMe() }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
+  { key: 'received', label: '업무', badge: unseenCount(), badgeTitle: '내 차례인데 아직 열어 보지 않은 업무 수. 눌러서 열면 사라집니다' }, { key: 'all', label: '전체' }, { key: 'archive', label: '보관함' },
   null, { key: 'assignee', label: '담당자별' }, { key: 'kanban', label: '상황판' }, { key: 'calendar', label: '달력' },
 ];
 
@@ -481,6 +505,7 @@ function bindView(){
 /* ---------- 업무 요청·수정 창 ---------- */
 function openTask(id, preset = {}){
   const t = id ? T().find(x => x.id === id) : null;
+  if (t) markSeen(t);   // 열어 봤으니 업무 탭 숫자에서 뺌
   const d = t || { title: '', assignee: '', priority: '보통', start_date: todayStr(), due_date: '', status: '요청', progress: 0, memo: '', comments: [], ...preset };
   const logs = t ? (t.comments || []) : [];
   const selfMode = !t && preset.self;

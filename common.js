@@ -572,7 +572,7 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
       <a class="swt ${page === 'projects.html' ? 'on' : ''}" href="projects.html">🗂️ 프로젝트${page !== 'projects.html' && projUnread() ? `<span class="badge" id="pnBadge" title="새 글이 있는 채널 수">${projUnread()}</span>` : ''}</a>
     </nav>
     ${title === BRAND.name || page === 'projects.html' ? '<span class="swsp"></span>' : `<a class="brand page" href="${esc(page)}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>`}
-    <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge">${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
+    <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge" ${t.badgeTitle ? `title="${esc(t.badgeTitle)}"` : ''}>${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
     ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}
     ${newLabel ? `<button class="btn primary" id="newBtn">+ <span class="newtxt">${esc(newLabel)}</span></button>` : ''}

@@ -341,7 +341,14 @@ function render(){
   const taskReviseWaiter = t => { if (t.status === '완료' || t.status === '보고완료') return null; const cs = t.comments || [], i = cs.map(x => x.kind).lastIndexOf('revise'); if (i < 0) return null; const r = cs[i], w = r.by === t.assignee ? t.created_by : t.assignee; if (!w) return null; return cs.slice(i + 1).some(x => (x.kind === 'report' || x.kind === 'comment') && x.by !== r.by) ? null : w; };
   const badges = {
     // 남이 나에게 새로 요청한 것 + 내가 요청한 것 중 확인 기다리는 보고 (내가 직접 등록한 내 업무는 제외)
-    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료') || taskReviseWaiter(t) === me).length,   // + 내가 답해야 할 보완 요청
+    // 그중 아직 열어 보지 않은 것만 (tasks.html 의 unseen 과 같은 기준: 본 시각이 남이 마지막으로 움직인 시각보다 앞이면 안 본 것)
+    'tasks.html': tasks.filter(t => {
+      if (!((t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료') || taskReviseWaiter(t) === me)) return false;
+      let ls = {}; try { ls = JSON.parse(LS.get('bizhome_task_seen_' + me) || '{}'); } catch {}
+      const a = String((t.seen && t.seen[me]) || ''), b = String(ls[t.id] || ''), seen = a > b ? a : b;
+      const last = [t.created_by !== me ? t.created_at : '', ...(t.comments || []).filter(c => c.by !== me).map(c => c.at)].reduce((m, x) => String(x || '') > m ? String(x) : m, '');
+      return seen < last;
+    }).length,
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
