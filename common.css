@@ -239,6 +239,8 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .file .ren{display:block;width:100%;border:0;border-top:1px solid var(--line);font:inherit;font-size:11px;padding:4px 6px;background:#fffbea;color:var(--fg);box-sizing:border-box}
 .file .ren:focus{outline:2px solid #bfdbfe;background:#fff}
 .file .rm{position:absolute;top:4px;right:4px;border:0;border-radius:50%;width:20px;height:20px;padding:0;line-height:20px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer}
+.file .dl{position:absolute;top:4px;left:4px;display:block;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;background:rgba(0,0,0,.55);color:#fff;font-size:12px;text-decoration:none;opacity:.75}
+.file .dl:hover{opacity:1;background:var(--blue)}
 .attach{display:grid;gap:6px}
 .attach .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .attach .up{color:var(--blue);font-weight:600}

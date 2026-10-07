@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회사 서류함</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610061733">
-<script src="common.js?v=202610061733"></script>
+<link rel="stylesheet" href="common.css?v=202610071035">
+<script src="common.js?v=202610071035"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -53,7 +53,7 @@ const DEFAULT_TYPES = ['사업자등록증', '통장 사본', '법인인감·사
 const D = () => (DATA.docs || []).filter(d => isAdmin() || !d.admin_only);
 const types = () => [...new Set([...DEFAULT_TYPES, ...(DATA.docs || []).map(d => d.doc_type).filter(Boolean)])];
 const fmtSize = n => !n ? '' : n < 1024 * 1024 ? `${Math.round(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`;
-const dlUrl = f => `${f.url}?download=${encodeURIComponent(f.name || 'file')}`;   // 바로 내려받기 주소
+// dlUrl(바로 내려받기 주소)은 common.js 의 것을 씀
 const expCls = d => { if (!d.expire_date) return ''; const n = dayDiff(d.expire_date); return n < 0 ? 'over' : n <= 30 ? 'soon' : ''; };
 const expText = d => { if (!d.expire_date) return ''; const n = dayDiff(d.expire_date); return n < 0 ? `만료 지남 (${fmtDate(d.expire_date)})` : n === 0 ? '오늘 만료' : n <= 30 ? `${n}일 뒤 만료 (${fmtDate(d.expire_date)})` : `유효기간 ${fmtDate(d.expire_date)}`; };
 

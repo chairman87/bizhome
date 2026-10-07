@@ -370,10 +370,13 @@ async function uploadFile(file, folder = 'etc'){
 }
 async function deleteFile(path){ try { await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${path}`, { method: 'DELETE', headers: fileHeaders() }); } catch {} }
 
-/* 첨부 목록 보기: 사진은 작게, 누르면 새 창에서 크게 */
+/* 첨부 목록 보기: 사진·PDF 는 누르면 새 창에서 크게, 그 밖의 파일(엑셀·PPT 등)은 누르면 바로 내려받음
+   보관함에는 임의 번호 이름으로 저장되므로, 내려받을 때는 ?download=원래이름 을 붙여 올린 파일 이름 그대로 저장되게 함 */
+const dlUrl = f => `${f.url}?download=${encodeURIComponent(f.name || 'file')}`;   // 올린 이름 그대로 내려받는 주소
+const canView = f => isImg(f) || /^application\/pdf$/.test(f.type || '') || /\.pdf$/i.test(f.name || '');   // 브라우저에서 바로 볼 수 있는 형식
 function filesHtml(files, { edit = false, rename = false } = {}){
   files = files || []; if (!files.length && !edit) return '';
-  return `<div class="files">${files.map((f, i) => `<div class="file"><a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : '<span class="doc">📄</span>'}${rename ? '' : `<span class="nm">${esc(f.name)}</span>`}</a>${rename ? `<input class="ren" data-ren="${i}" value="${esc(f.name)}" title="파일 이름 바꾸기 (내려받을 때 이 이름으로 저장됨)" maxlength="120">` : ''}${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`).join('')}</div>`;
+  return `<div class="files">${files.map((f, i) => `<div class="file"><a href="${esc(canView(f) ? f.url : dlUrl(f))}" target="_blank" rel="noopener" title="${esc(f.name)}${canView(f) ? '' : ' (누르면 내려받음)'}">${isImg(f) ? `<img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy">` : `<span class="doc">${canView(f) ? '📕' : '📄'}</span>`}${rename ? '' : `<span class="nm">${esc(f.name)}</span>`}</a><a class="dl" href="${esc(dlUrl(f))}" title="내려받기 (${esc(f.name)})">⬇</a>${rename ? `<input class="ren" data-ren="${i}" value="${esc(f.name)}" title="파일 이름 바꾸기 (내려받을 때 이 이름으로 저장됨)" maxlength="120">` : ''}${edit ? `<button type="button" class="rm" data-rm="${i}" title="첨부 빼기">✕</button>` : ''}</div>`).join('')}</div>`;
 }
 const filesCount = files => (files && files.length) ? `<span class="cmt" title="첨부 ${files.length}개">📎 ${files.length}</span>` : '';
 
