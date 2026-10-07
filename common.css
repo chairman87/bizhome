@@ -247,3 +247,20 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .attach .up{color:var(--blue);font-weight:600}
 .modal.drop{outline:3px dashed var(--blue);outline-offset:-6px}
 .cm .files{margin-top:6px}
+/* 창 안 뷰어 (openViewer) */
+.vw{position:fixed;inset:0;z-index:60;background:#1c1c1e;display:flex;flex-direction:column}
+.vw .vh{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#2c2c2e;color:#fff;font-size:13px;flex:none}
+.vw .vh .vn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+.vw .vh .vp{color:#bbb;white-space:nowrap}
+.vw .vh .sp{flex:1}
+.vw .vh .btn{background:#3a3a3c;border-color:#48484a;color:#fff;text-decoration:none}
+.vw .vh .btn:hover{background:#505052}
+.vw .vb{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto;padding:12px;position:relative}
+.vw .vb canvas,.vw .vb img{max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.5);cursor:pointer}
+.vw .vb iframe{width:100%;height:100%;border:0;background:#fff;border-radius:4px}
+.vw .vb .vl{color:#ddd;font-size:14px}
+.vw .vnav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:34px;line-height:64px;cursor:pointer;padding:0}
+.vw .vnav:hover{background:rgba(255,255,255,.28)}
+.vw .vnav:disabled{opacity:.25;cursor:default}
+.vw .vnav.l{left:10px}.vw .vnav.r{right:10px}
+@media(max-width:600px){.vw .vnav{width:34px;height:52px;font-size:28px;line-height:52px}}

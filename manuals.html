@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무 매뉴얼</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610071748">
-<script src="common.js?v=202610071748"></script>
+<link rel="stylesheet" href="common.css?v=202610071827">
+<script src="common.js?v=202610071827"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
@@ -37,6 +37,7 @@
   .rd .body .h{display:block;font-weight:700;font-size:15px;margin-top:6px}
   .rd .lnk{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--blue);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rd .lnk:hover{text-decoration:underline}
+  .rd .file a:not(.dl){cursor:zoom-in}
 </style>
 </head>
 <body>
@@ -122,6 +123,8 @@ function openRead(id){
     </div>
     <div class="mf"><button class="btn" data-close>닫기</button></div>`, { wide: true });
   const e = $('#rEdit'); if (e) e.onclick = () => { closeModal(); openEdit(id); };
+  // 첨부를 누르면 새 창 대신 이 화면 안 뷰어로 (PDF 는 쪽마다 넘겨 보고, pptx 는 온라인 뷰어를 끼움). ⬇ 는 그대로 내려받기
+  document.querySelectorAll('#modal .rd .file').forEach((el, i) => { const f = (m.files || [])[i]; const a = el.querySelector('a:not(.dl)'); if (f && a && canView(f)) { a.title = f.name + ' (누르면 크게 보기)'; a.onclick = ev => { ev.preventDefault(); openViewer(f); }; } });
 }
 
 /* 쓰기·고치기 (관리자) */

@@ -381,12 +381,12 @@ async function deleteFile(path){ try { await fetch(`${CONFIG.SUPABASE_URL}/stora
 const _libs = {};
 const loadScript = src => _libs[src] || (_libs[src] = new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('라이브러리를 못 내려받음: ' + src)); document.head.appendChild(s); }));
 const THUMB_W = 640;
+async function loadPdfjs(){ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
 async function canvasJpeg(c){ return new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.82)); }
 async function makeThumb(file){
   const name = file.name || '';
   if (isPdfFile(file)) {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    await loadPdfjs();
     const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
     const page = await pdf.getPage(1);
     const v0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: THUMB_W / v0.width });
@@ -409,6 +409,53 @@ async function makeThumb(file){
     return canvasJpeg(c);
   }
   return null;
+}
+
+/* ---------- 창 안 뷰어: 첨부를 화면 가득 띄워 한 장씩 넘겨 봄 ----------
+   PDF: pdf.js 로 쪽마다 창 크기에 맞춰 그림 (← → 키, 양옆 단추, 쪽 그림 좌우 누르기). 사진: 그대로 크게.
+   pptx·docx·xlsx: 마이크로소프트 온라인 뷰어(embed)를 창 안에 끼움 — 슬라이드 넘김은 뷰어 자체 단추.
+   사용: openViewer(fileObj). Esc 또는 ✕ 로 닫힘(뒤의 창은 그대로) */
+const canView = f => isImg(f) || isPdfFile(f) || isOffice(f);
+const officeEmbedUrl = f => `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(f.url)}`;
+let VW = null;   // { pdf, page, n, seq, render }
+function closeViewer(){ const el = $('#vw'); if (el) el.remove(); document.removeEventListener('keydown', vwKey, true); window.removeEventListener('resize', vwResize); VW = null; }
+function vwKey(e){ if (!$('#vw')) return; if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); closeViewer(); } else if (VW && VW.pdf && ['ArrowRight', 'ArrowLeft', 'PageDown', 'PageUp'].includes(e.key)) { e.stopImmediatePropagation(); e.preventDefault(); vwGo(e.key === 'ArrowRight' || e.key === 'PageDown' ? 1 : -1); } }
+let vwResizeTimer; function vwResize(){ clearTimeout(vwResizeTimer); vwResizeTimer = setTimeout(() => { if (VW && VW.pdf) VW.render(); }, 150); }
+function vwGo(d){ if (!VW || !VW.pdf) return; const n = Math.min(VW.n, Math.max(1, VW.page + d)); if (n !== VW.page) { VW.page = n; VW.render(); } }
+async function openViewer(f){
+  closeViewer();
+  const pdf = isPdfFile(f), off = !pdf && !isImg(f) && isOffice(f);
+  document.body.insertAdjacentHTML('beforeend', `<div class="vw" id="vw">
+    <div class="vh"><span class="vn" title="${esc(f.name)}">${esc(f.name)}</span><span class="vp" id="vwPage"></span><span class="sp"></span>
+      <a class="btn sm" href="${esc(dlUrl(f))}" title="내려받기">⬇ 내려받기</a><a class="btn sm" href="${esc(fileOpenUrl(f))}" target="_blank" rel="noopener" title="새 창에서 열기">↗ 새 창</a><button type="button" class="btn sm" id="vwX">✕ 닫기</button></div>
+    <div class="vb" id="vwBody">${isImg(f) ? `<img src="${esc(f.url)}" alt="">` : off ? `<iframe src="${esc(officeEmbedUrl(f))}" allowfullscreen></iframe>` : '<span class="vl">불러오는 중…</span>'}</div>
+    ${pdf ? '<button type="button" class="vnav l" id="vwPrev" title="이전 쪽 (←)">‹</button><button type="button" class="vnav r" id="vwNext" title="다음 쪽 (→)">›</button>' : ''}
+  </div>`);
+  $('#vwX').onclick = closeViewer;
+  document.addEventListener('keydown', vwKey, true);
+  if (!pdf) return;
+  window.addEventListener('resize', vwResize);
+  $('#vwPrev').onclick = () => vwGo(-1); $('#vwNext').onclick = () => vwGo(1);
+  $('#vwBody').onclick = e => { if (e.target.tagName !== 'CANVAS') return; const r = e.target.getBoundingClientRect(); vwGo(e.clientX < r.left + r.width / 2 ? -1 : 1); };   // 쪽 그림의 왼쪽 반=이전, 오른쪽 반=다음
+  try {
+    await loadPdfjs();
+    const doc = await pdfjsLib.getDocument({ url: f.url }).promise;
+    VW = { pdf: doc, page: 1, n: doc.numPages, seq: 0, render: null };
+    VW.render = async () => {
+      if (!$('#vw')) return; const my = ++VW.seq;
+      const page = await doc.getPage(VW.page); if (my !== VW.seq) return;
+      const v0 = page.getViewport({ scale: 1 }), box = $('#vwBody');
+      const fit = Math.min((box.clientWidth - 24) / v0.width, (box.clientHeight - 24) / v0.height), dpr = window.devicePixelRatio || 1;
+      const vp = page.getViewport({ scale: fit * dpr });
+      const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.style.width = Math.round(vp.width / dpr) + 'px'; c.style.height = Math.round(vp.height / dpr) + 'px';
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise; if (my !== VW.seq || !$('#vw')) return;
+      box.innerHTML = ''; box.appendChild(c);
+      $('#vwPage').textContent = `${VW.page} / ${VW.n}`;
+      $('#vwPrev').disabled = VW.page <= 1; $('#vwNext').disabled = VW.page >= VW.n;
+    };
+    VW.render();
+  } catch (e) { if ($('#vwBody')) $('#vwBody').innerHTML = `<span class="vl">PDF 를 열지 못했습니다: ${esc(e.message || e)}</span>`; }
 }
 
 /* 첨부 목록 보기: 사진·PDF 는 누르면 새 창에서 크게, 엑셀·PPT·워드는 마이크로소프트 온라인 뷰어로 바로 보여줌,
