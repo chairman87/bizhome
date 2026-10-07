@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610071035">
-<script src="common.js?v=202610071035"></script>
+<link rel="stylesheet" href="common.css?v=202610071118">
+<script src="common.js?v=202610071118"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -336,9 +336,11 @@ function render(){
   const admin = isAdmin();
   if (!admin) editing = false;
   const tasks = DATA.tasks || [], leaves = DATA.leaves || [], notices = DATA.notices || [], accounts = (DATA.accounts || []).filter(a => isAdmin() || !a.admin_only), payments = DATA.payments || [], subs = (DATA.subscriptions || []).filter(s => (isAdmin() || !s.admin_only) && s.status !== '해지'), docs = (DATA.docs || []).filter(d => isAdmin() || !d.admin_only);
+  // 보완 요청을 받고 아직 다시 보고하지 않은 업무 (tasks.html 의 revisePending 과 같은 기준)
+  const taskRevisePending = t => { if (t.status === '완료' || t.status === '보고완료') return false; const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'revise'); return !!c && c.kind === 'revise'; };
   const badges = {
     // 남이 나에게 새로 요청한 것 + 내가 요청한 것 중 확인 기다리는 보고 (내가 직접 등록한 내 업무는 제외)
-    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료')).length,
+    'tasks.html': tasks.filter(t => (t.assignee === me && t.status === '요청' && t.created_by !== me) || (t.created_by === me && t.assignee !== me && t.status === '보고완료') || (t.assignee === me && taskRevisePending(t))).length,   // + 보완 요청을 받고 아직 다시 보고 안 한 업무
     'leave.html': isAdmin() ? leaves.filter(l => l.status === '신청').length : 0,
     'notices.html': notices.filter(n => !(Array.isArray(n.reads) && n.reads.includes(me))).length,
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
