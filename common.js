@@ -368,7 +368,7 @@ async function uploadFile(file, folder = 'etc'){
   const name = file.name && !/^image\.\w+$/.test(file.name) ? file.name : `캡처 ${fmtDateTime(nowIso()).slice(5)}.${ext}`;
   const out = { name, path, url: fileUrl(path), type: f.type, size: f.size, by: me, at: nowIso() };
   try {   // PDF·PPT 등은 첫 장 미리보기 그림을 같이 올림 (실패해도 파일 올리기는 그대로)
-    const th = await makeThumb(f);
+    const th = await Promise.race([makeThumb(f), new Promise(ok => setTimeout(() => ok(null), 20000))]);   // 20초 넘으면 썸네일은 포기
     if (th) { const tp = path + '.thumb.jpg'; const r2 = await fetch(`${CONFIG.SUPABASE_URL}/storage/v1/object/${FILE_BUCKET}/${tp}`, { method: 'POST', headers: { ...fileHeaders(), 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: th }); if (r2.ok) { out.thumb = fileUrl(tp); out.thumb_path = tp; } }
   } catch {}
   return out;
@@ -392,7 +392,7 @@ async function makeThumb(file){
     const v0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: THUMB_W / v0.width });
     const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
     const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;   // 'print': 화면 갱신 신호를 안 기다려 탭이 뒤에 있어도 멈추지 않음
     return canvasJpeg(c);
   }
   if (/\.(pptx|docx|xlsx|xlsm)$/i.test(name)) {
