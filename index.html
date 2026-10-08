@@ -312,7 +312,20 @@ function freeSpot(L0, T0, W, H, others){
 }
 let SEL = new Set();   // 메뉴 편집에서 선택한 칸들 (같이 옮김)
 const pagesOf = id => M().filter(x => x.type === 'page' && x.parent === id).sort(bySort);
-let editing = false;
+/* 스크롤 자리 기억: 화면을 다시 그릴 때(옮기기 저장 뒤 등)와 새로고침 뒤에도 보던 자리로 돌아오게. 탭 저장소(sessionStorage)라 탭을 닫으면 지워짐 */
+const SS = { get(k){ try { return sessionStorage.getItem(k); } catch { return null; } }, set(k, v){ try { sessionStorage.setItem(k, v); } catch {} } };
+const SCROLL_KEY = 'bizhome_home_scroll', EDIT_KEY = 'bizhome_home_editing';
+let PENDING_SCROLL = null; try { PENDING_SCROLL = JSON.parse(SS.get(SCROLL_KEY) || 'null'); } catch {}   // 새로고침 전 자리 (처음 그릴 때 한 번 되돌림)
+const scrollState = () => { const cw = $('.cvwrap'); return { x: window.scrollX, y: window.scrollY, cl: cw ? cw.scrollLeft : 0 }; };
+let scrollSaveTimer; const saveScroll = () => { clearTimeout(scrollSaveTimer); scrollSaveTimer = setTimeout(() => SS.set(SCROLL_KEY, JSON.stringify(scrollState())), 100); };
+document.addEventListener('scroll', saveScroll, true);   // 창 스크롤 + 편집판 가로 스크롤 둘 다
+window.addEventListener('pagehide', () => SS.set(SCROLL_KEY, JSON.stringify(scrollState())));
+function restoreScroll(st){
+  if (!st) return;
+  window.scrollTo(st.x || 0, st.y || 0);
+  const cw = $('.cvwrap'); if (cw && st.cl) cw.scrollLeft = st.cl;
+}
+let editing = SS.get(EDIT_KEY) === '1';   // 편집 중에 새로고침해도 편집 상태 유지
 let seeding = false;
 
 async function seedDefault(){
@@ -334,6 +347,7 @@ async function seedDefault(){
 /* ---------- 화면 ---------- */
 function render(){
   if (members.length && admins().length === 0) { ensureAdmin(); return; }
+  const keepScroll = PENDING_SCROLL || scrollState();   // 다시 그리면 페이지가 잠깐 비어 스크롤이 맨 위로 튀므로, 그린 뒤 이 자리로 되돌림
   if (!M().length && isAdmin() && !seeding) { seedDefault(); }
   const admin = isAdmin();
   if (!admin) editing = false;
@@ -394,7 +408,7 @@ function render(){
     ${admin && editing ? `<button class="adddept" id="deptAdd" style="max-width:260px;margin-top:14px">＋ 부서 추가</button>` : ''}
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
-  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SEL = new Set(); UNDO = []; REDO = []; render(); };
+  const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SS.set(EDIT_KEY, editing ? '1' : '0'); SEL = new Set(); UNDO = []; REDO = []; render(); };
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-notice]').forEach(el => el.onclick = () => openNotice(el.dataset.notice));
   bindGoals();
@@ -412,6 +426,8 @@ function render(){
   if (editing) bindMenuDrag();
   const ub = $('#undoBtn'); if (ub) ub.onclick = () => undoLayout(false);
   const rb = $('#redoBtn'); if (rb) rb.onclick = () => undoLayout(true);
+  restoreScroll(keepScroll);
+  if (PENDING_SCROLL && (Math.abs(window.scrollY - (PENDING_SCROLL.y || 0)) <= 2 || M().length)) PENDING_SCROLL = null;   // 새로고침 전 자리로 갔으면(또는 메뉴까지 다 그렸으면) 끝
 }
 /* 프로젝트 폴더(menu 의 폴더 줄에 href='projects'): 페이지를 따로 등록하지 않아도 진행 중인 프로젝트가 나열되고, 누르면 그 프로젝트의 기록 화면으로 바로 감 */
 function projectDept(d, c, rz = ''){
