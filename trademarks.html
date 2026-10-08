@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610082203">
-<script src="common.js?v=202610082203"></script>
+<link rel="stylesheet" href="common.css?v=202610082253">
+<script src="common.js?v=202610082253"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -43,6 +43,7 @@
   .co-tag{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
   .co-tag.a{background:#dcfce7;color:#166534}.co-tag.b{background:#fce7f3;color:#9d174d}
   .lock{opacity:.85}
+  tr.arch td{opacity:.6}
   .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   @media(max-width:640px){.f3{grid-template-columns:1fr}}
   .sec{font-size:12px;font-weight:600;color:var(--fg2);margin-top:6px;border-bottom:1px solid var(--line);padding-bottom:4px}
@@ -86,16 +87,18 @@ let view = LS.get('tm_view') || 'all';
 let q = '';
 
 function normalize(table, d){
-  return { ...d, files: Array.isArray(d.files) ? d.files : [], admin_only: !!d.admin_only, priority: !!d.priority,
+  return { ...d, files: Array.isArray(d.files) ? d.files : [], admin_only: !!d.admin_only, priority: !!d.priority, archived: !!d.archived,
     company: COMPANIES.includes(d.company) ? d.company : COMPANIES[1], status: STATUSES.includes(d.status) ? d.status : '출원', region: d.region || '한국' };
 }
 
+const LIVE = () => T().filter(d => !d.archived);   // 보관함에 넣지 않은 상표만
 const VIEWS = () => [{ key: 'all', label: '전체' }, ...COMPANIES.map(c => ({ key: c, label: c })), null,
-  { key: 'due', label: '할 일·기한', badge: T().filter(d => d.next_date && dueCls(d.next_date)).length }];
+  { key: 'due', label: '할 일·기한', badge: LIVE().filter(d => d.next_date && dueCls(d.next_date)).length },
+  { key: 'archive', label: '📦 보관함', badge: T().filter(d => d.archived).length }];
 
 function render(){
-  const all = T();
-  const list = all.filter(d => (view === 'all' || (view === 'due' ? d.next_action || d.next_date : d.company === view))
+  const all = LIVE();   // 통계·기한은 보관함 밖 상표만
+  const list = (view === 'archive' ? T().filter(d => d.archived) : all).filter(d => (view === 'all' || view === 'archive' || (view === 'due' ? d.next_action || d.next_date : d.company === view))
     && (!q || [d.name, d.region, d.app_no, d.reg_no, d.classes, d.goods, d.agent, d.memo, d.history, d.note, ...(d.files.map(f => f.name))].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
   const cnt = s => all.filter(d => d.status === s).length;
   const dues = all.filter(d => d.next_date && dueCls(d.next_date)).sort((a, b) => a.next_date.localeCompare(b.next_date));
@@ -112,8 +115,9 @@ function render(){
     <div class="actions">
       <input type="search" id="fq" placeholder="검색 (상표명, 번호, 류, 대리인, 파일 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:240px">
       <span class="count">${list.length}건${isAdmin() ? ` · 🔒 관리자만 ${all.filter(d => d.admin_only).length}건` : ''}</span></div>
+    ${view === 'archive' ? '<div class="hint" style="margin-bottom:8px">📦 거절·포기 등 더 신경 쓰지 않는 상표를 모아 둔 곳입니다. 기록과 파일은 그대로 남아 있고, 줄을 눌러 <b>보관함에서 꺼내기</b>를 누르면 다시 목록으로 돌아갑니다.</div>' : ''}
     <div class="hint" style="margin-bottom:8px">줄을 누르면 상세 내용과 파일(등록증·등록원부·청구서)을 볼 수 있고, <b>수정</b>으로 내용을 고치거나 파일을 더 올립니다. 등록번호 형식: 40-2538634 · 출원번호: 40-2026-0096011</div>
-    ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'due' ? '할 일이 적힌 상표가 없습니다.' : '아직 등록된 상표가 없습니다.<br>오른쪽 위 <b>+ 상표 추가</b>로 올려 두세요.'}</div>`}`}
+    ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'archive' ? '보관함이 비어 있습니다. 상표를 눌러 <b>보관함으로 보내기</b>를 누르면 여기로 옵니다.' : view === 'due' ? '할 일이 적힌 상표가 없습니다.' : '아직 등록된 상표가 없습니다.<br>오른쪽 위 <b>+ 상표 추가</b>로 올려 두세요.'}</div>`}`}
   </main>`;
   bindHeader(k => { view = k; LS.set('tm_view', k); render(); }, () => openEdit(null), m => `올린 상표 ${(DATA.trademarks || []).filter(d => d.created_by === m.name).length}건`);
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
@@ -152,7 +156,7 @@ function groupsHtml(list){
   const groups = {};
   list.forEach(d => (groups[d.company] = groups[d.company] || []).push(d));
   return COMPANIES.filter(c => groups[c]).map(c => `
-    <div class="grp"><span class="co-tag ${CO_CLS[c]}">${esc(c)}</span>${view === 'due' ? '할 일' : ''} <span class="n">${groups[c].length}건 · 등록 ${groups[c].filter(d => d.status === '등록').length}</span></div>
+    <div class="grp"><span class="co-tag ${CO_CLS[c]}">${esc(c)}</span>${view === 'due' ? '할 일' : view === 'archive' ? '보관' : ''} <span class="n">${groups[c].length}건 · 등록 ${groups[c].filter(d => d.status === '등록').length}</span></div>
     <div class="tbl"><table>
       ${theadHtml()}
       <tbody>${sortList(groups[c]).map(rowHtml).join('')}</tbody>
@@ -169,7 +173,7 @@ function inlineNote(el){
   box.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); finish(false); } else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); finish(true); } };
 }
 function rowHtml(d){
-  return `<tr class="row ${d.admin_only ? 'lock' : ''}" data-id="${d.id}">
+  return `<tr class="row ${d.admin_only ? 'lock' : ''} ${d.archived ? 'arch' : ''}" data-id="${d.id}">
     <td class="nm">${esc(d.name)}${d.admin_only ? ' 🔒' : ''}<span class="rg">${esc(d.region !== '한국' ? d.region : '')}</span></td>
     <td><span class="st ${ST_CLS(d.status)}">${esc(d.status)}</span>${d.priority ? '<span class="pr">우선심사</span>' : ''}</td>
     <td class="cls">${esc(d.classes || '')}</td>
@@ -205,15 +209,19 @@ function openView(id){
       <div class="dl-list">${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : fileIcon(f)}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(fileOpenUrl(f))}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<div class="hint">아직 올린 파일이 없습니다. 수정에서 등록증·청구서 등을 올려 두세요.</div>'}</div>
       <div class="hint">${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))} 마지막 수정</div>
     </div>
-    <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="tEdit">수정</button></div>`, { wide: true });
+    <div class="mf"><button class="btn left" id="tArch">${d.archived ? '보관함에서 꺼내기' : '📦 보관함으로 보내기'}</button><button class="btn" data-close>닫기</button><button class="btn primary" id="tEdit">수정</button></div>`, { wide: true });
   $('#tEdit').onclick = () => { closeModal(); openEdit(d.id); };
+  $('#tArch').onclick = async () => {   // 상태·기록은 그대로 두고 보관 표시만 바꾼다
+    closeModal(); await saveRow('trademarks', { ...d, archived: !d.archived, updated_by: me });
+    toast(d.archived ? '목록으로 돌려놓았습니다' : '보관함으로 보냈습니다 (맨 끝 📦 보관함 탭)');
+  };
 }
 
 /* 추가·수정 창 */
 function openEdit(id){
   const d0 = id ? (DATA.trademarks || []).find(x => x.id === id) : null;
   const d = d0 || { company: COMPANIES.includes(view) ? view : COMPANIES[1], name: '', region: '한국', status: '출원', priority: false, app_no: '', app_date: '', pub_date: '', reg_no: '', reg_date: '', expire_date: '',
-    classes: '', goods: '', owner: '', agent: '', fee_total: '', fee_note: '', history: '', next_action: '', next_date: '', memo: '', note: '', files: [], admin_only: false };
+    classes: '', goods: '', owner: '', agent: '', fee_total: '', fee_note: '', history: '', next_action: '', next_date: '', memo: '', note: '', files: [], admin_only: false, archived: false };
   const at = attachBox('tFiles', d.files, 'trademarks', { rename: isAdmin() });
   const inp = (id, label, val, extra = '') => `<div class="f"><label>${label}</label><input id="${id}" value="${esc(val || '')}" ${extra}></div>`;
   const date = (id, label, val) => `<div class="f"><label>${label}</label><input type="date" id="${id}" value="${esc(val || '')}"></div>`;
@@ -253,6 +261,7 @@ function openEdit(id){
       <div class="f"><label>비고 (표에 바로 보이는 짧은 메모)</label><textarea id="tNote" style="min-height:40px" placeholder="예: 사장님 확인 필요, 10월 중 결정">${esc(d.note || '')}</textarea></div>
       <div class="f"><label>메모</label><textarea id="tMemo" placeholder="주의할 점, 정산 문제 등">${esc(d.memo || '')}</textarea></div>
       <div class="f"><label>파일 (등록증 · 등록원부 · 청구서 · 통상사용권허가서 등) ${isAdmin() ? '<span class="hint">(파일 아래 노란 칸에서 이름을 고칠 수 있습니다)</span>' : ''}</label>${at.html}</div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="tArch2" ${d.archived ? 'checked' : ''}> 📦 보관함 (거절·포기 등 더 신경 쓰지 않는 상표, 목록에서 빠짐)</label>
       ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="tAdmin" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기</label>` : ''}
     </div>
     <div class="mf">
@@ -272,7 +281,7 @@ function openEdit(id){
       classes: v('#tClasses'), goods: v('#tGoods'), owner: v('#tOwner'), agent: v('#tAgent'),
       fee_total: $('#tFee').value === '' ? null : Number($('#tFee').value), fee_note: v('#tFeeNote'), history: v('#tHistory'),
       next_action: v('#tNext'), next_date: dv('#tNextDate'), memo: v('#tMemo'), note: v('#tNote'), files: at.files,
-      admin_only: $('#tAdmin') ? $('#tAdmin').checked : (d0 ? d0.admin_only : false),
+      admin_only: $('#tAdmin') ? $('#tAdmin').checked : (d0 ? d0.admin_only : false), archived: $('#tArch2').checked,
       created_by: d0 ? d0.created_by : me, created_at: d0 ? d0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('trademarks', row); toast(d0 ? '저장했습니다' : '상표를 추가했습니다');
   };
