@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>파트너스</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610081230">
-<script src="common.js?v=202610081230"></script>
+<link rel="stylesheet" href="common.css?v=202610081240">
+<script src="common.js?v=202610081240"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -47,6 +47,7 @@
   table.ld td{white-space:nowrap;vertical-align:top}
   table.ld td.wrap2{white-space:normal;min-width:220px;max-width:340px;font-size:12px;color:var(--fg2)}
   select.lst{border:1px solid var(--line2);border-radius:6px;font:inherit;font-size:12px;padding:3px 6px;background:#fff}
+  select.lst.l-no{background:#f5f5f4;border-color:#d6d3d1;color:#78716c}
   select.lst.l-pick{background:#fef9c3;border-color:#fde047;color:#854d0e}
   select.lst.l-contact{background:#ffedd5;border-color:#fdba74;color:#c2410c}
   select.lst.l-out{background:#f1f5f9;border-color:#cbd5e1;color:#64748b}
@@ -75,10 +76,11 @@ const STAGES = ['1. 컨택', '2. 견적 협의', '3. 계약 완료', '4. 제품 
 const PRODUCTS = ['레모너리', '서리맥스', '흑생마', '기타'];
 /* 팀원별 컨택 후보 리스트 (partner_leads) */
 const LEAD_OWNERS = ['김채은', '류수연', '전예솔', '안상형', '김홍재'];
-/* 후보 상태 (2026-10-08 개편): 검토대기(흰색) → 선정(노랑) → 컨택/답변대기(주황) → 계약중(초록) → 진행완료(파랑), 안 되면 컨택/진행불가(회색) */
-const LEAD_STATUS = ['검토대기', '선정', '컨택/답변대기', '컨택/진행불가', '계약중', '진행완료'];
+/* 후보 상태 (2026-10-08 개편): 검토대기(흰색) → 선정(노랑) → 컨택/답변대기(주황) → 계약중(초록) → 진행완료(파랑).
+   검토 후 안 뽑으면 미선정(연한 회색), 컨택했는데 안 되면 컨택/진행불가(회색) */
+const LEAD_STATUS = ['검토대기', '미선정', '선정', '컨택/답변대기', '컨택/진행불가', '계약중', '진행완료'];
 const LEAD_OLD = { '검토중': '검토대기', '컨택함': '컨택/답변대기', '진행 결정': '계약중', '보류': '컨택/진행불가', '리스트 제외': '컨택/진행불가', '중복': '컨택/진행불가', '완료': '진행완료' };   // 예전 상태 → 새 상태
-const leadCls = st => ({ '선정': 'l-pick', '컨택/답변대기': 'l-contact', '컨택/진행불가': 'l-out', '계약중': 'l-go', '진행완료': 'l-done' })[st] || '';
+const leadCls = st => ({ '미선정': 'l-no', '선정': 'l-pick', '컨택/답변대기': 'l-contact', '컨택/진행불가': 'l-out', '계약중': 'l-go', '진행완료': 'l-done' })[st] || '';
 const L = () => DATA.partner_leads || [];
 let leadFilter = '';
 const P = () => DATA.partners || [];
