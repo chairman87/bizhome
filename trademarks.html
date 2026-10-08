@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610081939">
-<script src="common.js?v=202610081939"></script>
+<link rel="stylesheet" href="common.css?v=202610082151">
+<script src="common.js?v=202610082151"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -19,6 +19,9 @@
   .grp .n{font-weight:400;color:var(--fg3);font-size:12px}
   .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}
   table{min-width:1100px}
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+  th.sortable:hover{color:var(--blue)}
+  th.sortable.on{color:var(--blue);font-weight:700}
   tr.row{cursor:pointer}
   tr.row:hover td{background:var(--bg2)}
   td.nm{font-weight:700;white-space:nowrap}
@@ -112,18 +115,43 @@ function render(){
   bindHeader(k => { view = k; LS.set('tm_view', k); render(); }, () => openEdit(null), m => `올린 상표 ${(DATA.trademarks || []).filter(d => d.created_by === m.name).length}건`);
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('tr.row[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openView(el.dataset.id); });
+  document.querySelectorAll('th.sortable').forEach(th => th.onclick = () => {   // 같은 칸을 또 누르면 방향 반대로, 다른 칸은 날짜·숫자는 큰 것부터·글자는 가나다순
+    const k = th.dataset.sort;
+    sort = sort.key === k ? { key: k, dir: sort.dir === 'desc' ? 'asc' : 'desc' } : { key: k, dir: /date|files/.test(k) ? 'desc' : 'asc' };
+    LS.set('tm_sort', JSON.stringify(sort)); render();
+  });
 }
 
-/* 회사별로 묶어서 표로. 등록 → 공고 → 출원 → 거절 순, 같은 상태면 이름순 */
+/* 회사별로 묶어서 표로. 기본 정렬은 출원일 최근순, 머리글을 누르면 그 칸으로 정렬(한 번 더 누르면 반대로) */
 const ST_RANK = { '등록': 0, '공고': 1, '출원': 2, '거절': 3, '포기·소멸': 4 };
+const SORT_COLS = [['name', '상표'], ['status', '상태'], ['classes', '류'], ['app_date', '출원번호 · 출원일'], ['reg_date', '등록번호 · 등록일'], ['expire_date', '존속기간 만료'], ['agent', '대리인'], ['next_date', '다음 할 일'], ['files', '파일']];
+let sort = (() => { try { return JSON.parse(LS.get('tm_sort')) || null; } catch { return null; } })() || { key: 'app_date', dir: 'desc' };
+function sortVal(d, key){
+  if (key === 'status') return ST_RANK[d.status] ?? 9;
+  if (key === 'files') return d.files.length;
+  if (key === 'name') return String(d.name || '').toLowerCase();
+  return d[key] || '';
+}
+function sortList(list){
+  const dir = sort.dir === 'desc' ? -1 : 1;
+  return [...list].sort((a, b) => {
+    const va = sortVal(a, sort.key), vb = sortVal(b, sort.key);
+    if (va === '' && vb !== '') return 1; if (vb === '' && va !== '') return -1;   // 빈 값은 항상 맨 뒤
+    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ko');
+    return (c * dir) || String(a.name).localeCompare(String(b.name), 'ko') || String(a.region).localeCompare(String(b.region), 'ko');
+  });
+}
+function theadHtml(){
+  return `<thead><tr>${SORT_COLS.map(([k, label]) => `<th class="sortable ${sort.key === k ? 'on' : ''}" data-sort="${k}" title="눌러서 정렬">${label}${sort.key === k ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}</th>`).join('')}</tr></thead>`;
+}
 function groupsHtml(list){
   const groups = {};
   list.forEach(d => (groups[d.company] = groups[d.company] || []).push(d));
   return COMPANIES.filter(c => groups[c]).map(c => `
     <div class="grp"><span class="co-tag ${CO_CLS[c]}">${esc(c)}</span>${view === 'due' ? '할 일' : ''} <span class="n">${groups[c].length}건 · 등록 ${groups[c].filter(d => d.status === '등록').length}</span></div>
     <div class="tbl"><table>
-      <thead><tr><th>상표</th><th>상태</th><th>류</th><th>출원번호 · 출원일</th><th>등록번호 · 등록일</th><th>존속기간 만료</th><th>대리인</th><th>다음 할 일</th><th>파일</th></tr></thead>
-      <tbody>${groups[c].sort((a, b) => (ST_RANK[a.status] ?? 9) - (ST_RANK[b.status] ?? 9) || String(a.name).localeCompare(String(b.name)) || String(a.region).localeCompare(String(b.region))).map(rowHtml).join('')}</tbody>
+      ${theadHtml()}
+      <tbody>${sortList(groups[c]).map(rowHtml).join('')}</tbody>
     </table></div>`).join('');
 }
 function rowHtml(d){
