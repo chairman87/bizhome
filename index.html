@@ -392,7 +392,6 @@ function render(){
     }).join('')}
     </div></div>
     ${admin && editing ? `<button class="adddept" id="deptAdd" style="max-width:260px;margin-top:14px">＋ 부서 추가</button>` : ''}
-    ${admin && !editing ? `<div class="foot">"준비 중" 페이지는 아직 화면이 없습니다. 연결할 화면이 생기면 메뉴 편집에서 지정합니다.</div>` : ''}
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
   const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SEL = new Set(); UNDO = []; REDO = []; render(); };
