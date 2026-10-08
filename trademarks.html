@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상표관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610081939">
+<script src="common.js?v=202610081939"></script>
+<style>
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
+  .stat .l{font-size:12px;color:var(--fg2)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v.green{color:var(--green)}.stat .v.blue{color:var(--blue)}.stat .v.red{color:var(--red)}.stat .v.orange{color:var(--orange)}
+  .stat .s{font-size:11px;color:var(--fg3)}
+  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .grp{margin:18px 0 8px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .grp .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}
+  table{min-width:1100px}
+  tr.row{cursor:pointer}
+  tr.row:hover td{background:var(--bg2)}
+  td.nm{font-weight:700;white-space:nowrap}
+  td.nm .rg{display:block;font-weight:400;font-size:11px;color:var(--fg3);white-space:normal;max-width:220px}
+  td.no{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}
+  td.no .d{display:block;color:var(--fg3);font-size:11px}
+  td.cls{white-space:nowrap}
+  td.nx{font-size:12px;max-width:240px}
+  td.nx .dt{display:block;font-size:11px;color:var(--fg3);white-space:nowrap}
+  td.nx .dt.soon{color:var(--orange);font-weight:600}
+  td.nx .dt.over{color:var(--red);font-weight:600}
+  .st{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .st.등록{background:#dcfce7;color:#166534}.st.출원{background:#dbeafe;color:#1e40af}.st.공고{background:#ede9fe;color:#5b21b6}
+  .st.거절{background:#fee2e2;color:#991b1b}.st.포기{background:#f1f5f9;color:#475569}
+  .pr{font-size:11px;color:#9a3412;background:#ffedd5;border-radius:4px;padding:1px 5px;margin-left:4px;white-space:nowrap}
+  .co-tag{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .co-tag.a{background:#dcfce7;color:#166534}.co-tag.b{background:#fce7f3;color:#9d174d}
+  .lock{opacity:.85}
+  .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:640px){.f3{grid-template-columns:1fr}}
+  .sec{font-size:12px;font-weight:600;color:var(--fg2);margin-top:6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .dl-list{display:grid;gap:4px}
+  .dl-list .fi{display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:6px;padding:6px 8px;font-size:13px;min-width:0}
+  .dl-list .fi .nm{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.3}
+  .dl-list .fi .sz{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .dl-list .fi a.btn{padding:2px 8px;font-size:12px;text-decoration:none;white-space:nowrap}
+  .view{display:grid;gap:10px}
+  .view .kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:13px}
+  .view .kv b{color:var(--fg2);font-weight:500}
+  .view .kv .pre{white-space:pre-wrap}
+  .due{margin-bottom:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);padding:8px 12px;font-size:13px}
+  .due b{color:#92400e}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   상표관리: 두 회사의 상표 현황(출원 → 공고 → 등록 → 갱신)과 등록증·등록원부·청구서 파일 보관
+   한 줄 = 상표 하나(나라별로 따로). 칸 설명은 sql-trademarks.sql 참고
+   파일은 Supabase Storage 'files' 보관함 trademarks/ 폴더에 저장
+================================================================ */
+const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
+const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b' };
+const STATUSES = ['출원', '공고', '등록', '거절', '포기·소멸'];
+const ST_CLS = s => s === '포기·소멸' ? '포기' : (STATUSES.includes(s) ? s : '출원');
+const REGIONS = ['한국', '마드리드 국제출원', '대만', '미국', '일본', '중국', '베트남', '태국', '인도네시아', '말레이시아', '필리핀', '싱가포르'];
+const AGENTS = ['이정익특허법률사무소 (02-501-7578)', '레이블특허법률사무소 (배지호 변리사, 02-6224-9801)'];
+const T = () => (DATA.trademarks || []).filter(d => isAdmin() || !d.admin_only);
+const fmtSize = n => !n ? '' : n < 1024 * 1024 ? `${Math.round(n / 1024)}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`;
+const won = n => (n == null || n === '') ? '' : Number(n).toLocaleString('ko-KR') + '원';
+const dueCls = s => { if (!s) return ''; const n = dayDiff(s); return n == null ? '' : n < 0 ? 'over' : n <= 90 ? 'soon' : ''; };
+const dueText = s => { if (!s) return ''; const n = dayDiff(s); return n == null ? fmtDate(s) : n < 0 ? `${fmtDate(s)} (${-n}일 지남)` : n === 0 ? '오늘' : n <= 90 ? `${fmtDate(s)} (${n}일 남음)` : fmtDate(s); };
+
+let view = LS.get('tm_view') || 'all';
+let q = '';
+
+function normalize(table, d){
+  return { ...d, files: Array.isArray(d.files) ? d.files : [], admin_only: !!d.admin_only, priority: !!d.priority,
+    company: COMPANIES.includes(d.company) ? d.company : COMPANIES[1], status: STATUSES.includes(d.status) ? d.status : '출원', region: d.region || '한국' };
+}
+
+const VIEWS = () => [{ key: 'all', label: '전체' }, ...COMPANIES.map(c => ({ key: c, label: c })), null,
+  { key: 'due', label: '할 일·기한', badge: T().filter(d => d.next_date && dueCls(d.next_date)).length }];
+
+function render(){
+  const all = T();
+  const list = all.filter(d => (view === 'all' || (view === 'due' ? d.next_action || d.next_date : d.company === view))
+    && (!q || [d.name, d.region, d.app_no, d.reg_no, d.classes, d.goods, d.agent, d.memo, d.history, ...(d.files.map(f => f.name))].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
+  const cnt = s => all.filter(d => d.status === s).length;
+  const dues = all.filter(d => d.next_date && dueCls(d.next_date)).sort((a, b) => a.next_date.localeCompare(b.next_date));
+  $('#app').innerHTML = headerHtml({ icon: '™️', title: '상표관리', tabs: VIEWS(), active: view, newLabel: '상표 추가' })
+    + `<main class="wrap">
+    ${!DATA.trademarks ? `<div class="empty">상표 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-trademarks.sql)을 실행하세요.' : ''}</div>` : `
+    <div class="stats">
+      <div class="stat"><div class="l">등록 완료</div><div class="v green">${cnt('등록')}</div><div class="s">상표권 확보</div></div>
+      <div class="stat"><div class="l">출원·심사 중</div><div class="v blue">${cnt('출원') + cnt('공고')}</div><div class="s">우선심사 ${all.filter(d => d.priority && (d.status === '출원' || d.status === '공고')).length}건</div></div>
+      <div class="stat"><div class="l">거절·포기</div><div class="v red">${cnt('거절') + cnt('포기·소멸')}</div><div class="s">대응 여부 결정</div></div>
+      <div class="stat"><div class="l">기한 90일 안</div><div class="v orange">${dues.length}</div><div class="s">납부·갱신·대응</div></div>
+    </div>
+    ${dues.length && view !== 'due' ? `<div class="due">⏰ <b>기한이 가까운 일:</b> ${dues.slice(0, 3).map(d => `${esc(d.name)} — ${esc(d.next_action || '기한')} (${dueText(d.next_date)})`).join(' · ')}${dues.length > 3 ? ` 외 ${dues.length - 3}건` : ''}</div>` : ''}
+    <div class="actions">
+      <input type="search" id="fq" placeholder="검색 (상표명, 번호, 류, 대리인, 파일 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:240px">
+      <span class="count">${list.length}건${isAdmin() ? ` · 🔒 관리자만 ${all.filter(d => d.admin_only).length}건` : ''}</span></div>
+    <div class="hint" style="margin-bottom:8px">줄을 누르면 상세 내용과 파일(등록증·등록원부·청구서)을 볼 수 있고, <b>수정</b>으로 내용을 고치거나 파일을 더 올립니다. 등록번호 형식: 40-2538634 · 출원번호: 40-2026-0096011</div>
+    ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'due' ? '할 일이 적힌 상표가 없습니다.' : '아직 등록된 상표가 없습니다.<br>오른쪽 위 <b>+ 상표 추가</b>로 올려 두세요.'}</div>`}`}
+  </main>`;
+  bindHeader(k => { view = k; LS.set('tm_view', k); render(); }, () => openEdit(null), m => `올린 상표 ${(DATA.trademarks || []).filter(d => d.created_by === m.name).length}건`);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('tr.row[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openView(el.dataset.id); });
+}
+
+/* 회사별로 묶어서 표로. 등록 → 공고 → 출원 → 거절 순, 같은 상태면 이름순 */
+const ST_RANK = { '등록': 0, '공고': 1, '출원': 2, '거절': 3, '포기·소멸': 4 };
+function groupsHtml(list){
+  const groups = {};
+  list.forEach(d => (groups[d.company] = groups[d.company] || []).push(d));
+  return COMPANIES.filter(c => groups[c]).map(c => `
+    <div class="grp"><span class="co-tag ${CO_CLS[c]}">${esc(c)}</span>${view === 'due' ? '할 일' : ''} <span class="n">${groups[c].length}건 · 등록 ${groups[c].filter(d => d.status === '등록').length}</span></div>
+    <div class="tbl"><table>
+      <thead><tr><th>상표</th><th>상태</th><th>류</th><th>출원번호 · 출원일</th><th>등록번호 · 등록일</th><th>존속기간 만료</th><th>대리인</th><th>다음 할 일</th><th>파일</th></tr></thead>
+      <tbody>${groups[c].sort((a, b) => (ST_RANK[a.status] ?? 9) - (ST_RANK[b.status] ?? 9) || String(a.name).localeCompare(String(b.name)) || String(a.region).localeCompare(String(b.region))).map(rowHtml).join('')}</tbody>
+    </table></div>`).join('');
+}
+function rowHtml(d){
+  return `<tr class="row ${d.admin_only ? 'lock' : ''}" data-id="${d.id}">
+    <td class="nm">${esc(d.name)}${d.admin_only ? ' 🔒' : ''}<span class="rg">${esc(d.region !== '한국' ? d.region : '')}</span></td>
+    <td><span class="st ${ST_CLS(d.status)}">${esc(d.status)}</span>${d.priority ? '<span class="pr">우선심사</span>' : ''}</td>
+    <td class="cls">${esc(d.classes || '')}</td>
+    <td class="no">${esc(d.app_no || '')}<span class="d">${fmtDate(d.app_date)}</span></td>
+    <td class="no">${esc(d.reg_no || '')}<span class="d">${fmtDate(d.reg_date)}</span></td>
+    <td class="no ${dueCls(d.expire_date)}">${fmtDate(d.expire_date)}</td>
+    <td style="font-size:12px;white-space:nowrap">${esc((d.agent || '').replace(/\s*\(.*$/, ''))}</td>
+    <td class="nx">${esc(d.next_action || '')}${d.next_date ? `<span class="dt ${dueCls(d.next_date)}">${dueText(d.next_date)}</span>` : ''}</td>
+    <td>${d.files.length ? `📎 ${d.files.length}` : '<span class="hint">없음</span>'}</td>
+  </tr>`;
+}
+
+/* 보기 창: 내용 전체 + 파일 열기·내려받기 */
+function openView(id){
+  const d = (DATA.trademarks || []).find(x => x.id === id); if (!d) return;
+  const kv = (k, v, pre) => v ? `<b>${k}</b><span class="${pre ? 'pre' : ''}">${esc(v)}</span>` : '';
+  openModal(`${modalHead(`<span class="st ${ST_CLS(d.status)}">${esc(d.status)}</span> ${esc(d.name)}${d.priority ? '<span class="pr">우선심사</span>' : ''}`)}
+    <div class="mb view">
+      <div class="kv">
+        ${kv('회사', d.company)}${kv('나라·지역', d.region)}${kv('상품류', d.classes)}${kv('지정상품', d.goods)}
+        ${kv('출원번호', d.app_no ? `${d.app_no} (${fmtDate(d.app_date)})` : (d.app_date ? `출원일 ${fmtDate(d.app_date)}` : ''))}
+        ${kv('출원공고', fmtDate(d.pub_date))}
+        ${kv('등록번호', d.reg_no ? `${d.reg_no} (${fmtDate(d.reg_date)})` : (d.reg_date ? `등록일 ${fmtDate(d.reg_date)}` : ''))}
+        ${kv('존속기간 만료', d.expire_date ? dueText(d.expire_date) : '')}
+        ${kv('권리자', d.owner)}${kv('대리인', d.agent)}
+        ${kv('비용 합계', won(d.fee_total))}${kv('비용 내역', d.fee_note, true)}
+        ${kv('진행 이력', d.history, true)}
+        ${d.next_action || d.next_date ? `<b>다음 할 일</b><span class="${dueCls(d.next_date)}">${esc(d.next_action || '')}${d.next_date ? ` — <span class="dt ${dueCls(d.next_date)}" style="font-weight:600">${dueText(d.next_date)}</span>` : ''}</span>` : ''}
+        ${kv('메모', d.memo, true)}
+      </div>
+      <div class="sec">파일 ${d.files.length}개</div>
+      <div class="dl-list">${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : fileIcon(f)}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(fileOpenUrl(f))}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<div class="hint">아직 올린 파일이 없습니다. 수정에서 등록증·청구서 등을 올려 두세요.</div>'}</div>
+      <div class="hint">${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))} 마지막 수정</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="tEdit">수정</button></div>`, { wide: true });
+  $('#tEdit').onclick = () => { closeModal(); openEdit(d.id); };
+}
+
+/* 추가·수정 창 */
+function openEdit(id){
+  const d0 = id ? (DATA.trademarks || []).find(x => x.id === id) : null;
+  const d = d0 || { company: COMPANIES.includes(view) ? view : COMPANIES[1], name: '', region: '한국', status: '출원', priority: false, app_no: '', app_date: '', pub_date: '', reg_no: '', reg_date: '', expire_date: '',
+    classes: '', goods: '', owner: '', agent: '', fee_total: '', fee_note: '', history: '', next_action: '', next_date: '', memo: '', files: [], admin_only: false };
+  const at = attachBox('tFiles', d.files, 'trademarks', { rename: isAdmin() });
+  const inp = (id, label, val, extra = '') => `<div class="f"><label>${label}</label><input id="${id}" value="${esc(val || '')}" ${extra}></div>`;
+  const date = (id, label, val) => `<div class="f"><label>${label}</label><input type="date" id="${id}" value="${esc(val || '')}"></div>`;
+  openModal(`${modalHead(d0 ? '상표 수정' : '상표 추가')}
+    <div class="mb">
+      <div class="f3">
+        <div class="f"><label>회사 *</label><select id="tCo">${COMPANIES.map(c => `<option ${d.company === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        ${inp('tName', '상표명 *', d.name, 'placeholder="예: lemonery, 흑생마" maxlength="100"')}
+        <div class="f"><label>나라·지역</label><input id="tRegion" list="regionList" value="${esc(d.region)}"><datalist id="regionList">${REGIONS.map(r => `<option value="${esc(r)}">`).join('')}</datalist></div>
+      </div>
+      <div class="f3">
+        <div class="f"><label>상태 *</label><select id="tStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="f"><label>우선심사</label><label class="hint" style="display:flex;align-items:center;gap:6px;padding:8px 0"><input type="checkbox" id="tPri" ${d.priority ? 'checked' : ''}> 우선심사 신청함</label></div>
+        ${inp('tClasses', '상품류', d.classes, 'placeholder="예: 제29류"')}
+      </div>
+      <div class="f"><label>지정상품</label><input id="tGoods" value="${esc(d.goods || '')}" placeholder="예: 건강기능식품, 식이보충제 …"></div>
+      <div class="sec">출원 · 등록</div>
+      <div class="f3">
+        ${inp('tAppNo', '출원번호', d.app_no, 'placeholder="40-2026-0096011"')}${date('tAppDate', '출원일', d.app_date)}${date('tPubDate', '출원공고일', d.pub_date)}
+      </div>
+      <div class="f3">
+        ${inp('tRegNo', '등록번호', d.reg_no, 'placeholder="40-2538634"')}${date('tRegDate', '등록일', d.reg_date)}${date('tExpire', '존속기간 만료일 (등록일+10년)', d.expire_date)}
+      </div>
+      <div class="f2">
+        ${inp('tOwner', '권리자 명의', d.owner, 'placeholder="예: (주)피에이치뷰티"')}
+        <div class="f"><label>대리인(특허사무소)</label><input id="tAgent" list="agentList" value="${esc(d.agent || '')}"><datalist id="agentList">${AGENTS.map(a => `<option value="${esc(a)}">`).join('')}</datalist></div>
+      </div>
+      <div class="sec">비용 · 이력</div>
+      <div class="f2">
+        <div class="f"><label>비용 합계 (원)</label><input type="number" id="tFee" value="${esc(d.fee_total ?? '')}" placeholder="542000"></div>
+        <div class="f"><label>진행 이력</label><textarea id="tHistory" placeholder="2026-05-12 출원 → 2026-07-14 거절 …" style="min-height:46px">${esc(d.history || '')}</textarea></div>
+      </div>
+      <div class="f"><label>비용 내역</label><textarea id="tFeeNote" placeholder="출원 272,000원 + 우선심사 270,000원 (2026-05-12 청구) …" style="min-height:46px">${esc(d.fee_note || '')}</textarea></div>
+      <div class="f2">
+        ${inp('tNext', '다음 할 일', d.next_action, 'placeholder="예: 등록료 2회차 납부, 거절 대응"')}${date('tNextDate', '기한', d.next_date)}
+      </div>
+      <div class="f"><label>메모</label><textarea id="tMemo" placeholder="주의할 점, 정산 문제 등">${esc(d.memo || '')}</textarea></div>
+      <div class="f"><label>파일 (등록증 · 등록원부 · 청구서 · 통상사용권허가서 등) ${isAdmin() ? '<span class="hint">(파일 아래 노란 칸에서 이름을 고칠 수 있습니다)</span>' : ''}</label>${at.html}</div>
+      ${isAdmin() ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="tAdmin" ${d.admin_only ? 'checked' : ''}> 🔒 관리자만 보기</label>` : ''}
+    </div>
+    <div class="mf">
+      ${d0 && (d0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="tDelete">삭제</button>' : ''}
+      <button class="btn" data-close>취소</button><button class="btn primary" id="tSave">${d0 ? '저장' : '추가'}</button>
+    </div>`, { wide: true });
+  at.bind();
+  $('#tName').focus();
+  // 등록일을 넣으면 만료일(10년 뒤)을 자동으로 채움(비어 있을 때만)
+  $('#tRegDate').onchange = () => { const v = $('#tRegDate').value; if (v && !$('#tExpire').value) $('#tExpire').value = v.replace(/^(\d{4})/, (m, y) => String(Number(y) + 10)); if (v && $('#tStatus').value === '출원') $('#tStatus').value = '등록'; };
+  $('#tSave').onclick = async () => {
+    const name = $('#tName').value.trim();
+    if (!name) { $('#tName').focus(); toast('상표명을 입력하세요', true); return; }
+    const v = s => $(s).value.trim() || null, dv = s => $(s).value || null;
+    const row = { id: d0 ? d0.id : uid(), company: $('#tCo').value, name, region: v('#tRegion') || '한국', status: $('#tStatus').value, priority: $('#tPri').checked,
+      app_no: v('#tAppNo'), app_date: dv('#tAppDate'), pub_date: dv('#tPubDate'), reg_no: v('#tRegNo'), reg_date: dv('#tRegDate'), expire_date: dv('#tExpire'),
+      classes: v('#tClasses'), goods: v('#tGoods'), owner: v('#tOwner'), agent: v('#tAgent'),
+      fee_total: $('#tFee').value === '' ? null : Number($('#tFee').value), fee_note: v('#tFeeNote'), history: v('#tHistory'),
+      next_action: v('#tNext'), next_date: dv('#tNextDate'), memo: v('#tMemo'), files: at.files,
+      admin_only: $('#tAdmin') ? $('#tAdmin').checked : (d0 ? d0.admin_only : false),
+      created_by: d0 ? d0.created_by : me, created_at: d0 ? d0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('trademarks', row); toast(d0 ? '저장했습니다' : '상표를 추가했습니다');
+  };
+  const del = $('#tDelete'); if (del) del.onclick = async () => {
+    if (!confirm(`"${d0.name}" 상표와 첨부 파일을 삭제할까요?`)) return;
+    closeModal(); for (const f of d0.files) if (f.path) deleteFile(f.path);
+    await removeRow('trademarks', d0.id); toast('삭제했습니다');
+  };
+}
+
+boot({ icon: '™️', title: '상표관리', tables: ['trademarks'], render, normalize });
+</script>
+</body>
+</html>
