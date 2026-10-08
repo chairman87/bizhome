@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610082253">
-<script src="common.js?v=202610082253"></script>
+<link rel="stylesheet" href="common.css?v=202610082258">
+<script src="common.js?v=202610082258"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -94,7 +94,7 @@ function normalize(table, d){
 const LIVE = () => T().filter(d => !d.archived);   // 보관함에 넣지 않은 상표만
 const VIEWS = () => [{ key: 'all', label: '전체' }, ...COMPANIES.map(c => ({ key: c, label: c })), null,
   { key: 'due', label: '할 일·기한', badge: LIVE().filter(d => d.next_date && dueCls(d.next_date)).length },
-  { key: 'archive', label: '📦 보관함', badge: T().filter(d => d.archived).length }];
+  { key: 'archive', label: '📦 보관함' }];   // 보관함은 배지(숫자) 없음
 
 function render(){
   const all = LIVE();   // 통계·기한은 보관함 밖 상표만
@@ -180,9 +180,9 @@ function rowHtml(d){
     <td class="no">${esc(d.app_no || '')}<span class="d">${fmtDate(d.app_date)}</span></td>
     <td class="bg" data-note="${d.id}" title="더블클릭해서 적기">${esc(d.note || '')}</td>
     <td class="no">${esc(d.reg_no || '')}<span class="d">${fmtDate(d.reg_date)}</span></td>
-    <td class="no ${dueCls(d.expire_date)}">${fmtDate(d.expire_date)}</td>
+    <td class="no ${d.archived ? '' : dueCls(d.expire_date)}">${fmtDate(d.expire_date)}</td>
     <td style="font-size:12px;white-space:nowrap">${esc((d.agent || '').replace(/\s*\(.*$/, ''))}</td>
-    <td class="nx">${esc(d.next_action || '')}${d.next_date ? `<span class="dt ${dueCls(d.next_date)}">${dueText(d.next_date)}</span>` : ''}</td>
+    <td class="nx">${esc(d.next_action || '')}${d.next_date ? `<span class="dt ${d.archived ? '' : dueCls(d.next_date)}">${d.archived ? fmtDate(d.next_date) : dueText(d.next_date)}</span>` : ''}</td>
     <td>${d.files.length ? `📎 ${d.files.length}` : '<span class="hint">없음</span>'}</td>
   </tr>`;
 }
