@@ -173,7 +173,7 @@
     /* 지금 펼쳐서 파고 있는 주제는 색으로 한 번 더 구분 */
     .board-big .note-item:has(.note-body) .note-title-text { color: #c96442; }
     .board-big .note-item:has(.note-body) .note-arrow { color: #c96442; }
-    .board-big .note-body { margin-bottom: 18px; font-size: 13px; line-height: 1.9; }
+    .board-big .note-body { margin-bottom: 18px; font-size: 12px; line-height: 1.9; }
 
     /* 주제 줄의 '보관' 버튼 */
     .note-archive {
@@ -290,7 +290,7 @@
     /* 메모장형 탭: 제목 아래가 통째로 글 칸 */
     .memo-body {
       width: 100%; box-sizing: border-box; min-height: 100%; margin: 0; padding: 12px 14px;
-      font-family: inherit; font-size: 14px; line-height: 1.9; color: #333;
+      font-family: inherit; font-size: 12px; line-height: 1.9; color: #333;
       background: #fdfcfa; border: 1px solid #eee; border-radius: 8px;
       resize: none; overflow: hidden;
     }
@@ -636,7 +636,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 19:30";
+    const BUILD = "2026-10-11 19:45";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
