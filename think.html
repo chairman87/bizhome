@@ -360,6 +360,19 @@
       background: none; color: #e5e0d8;
     }
     .card-del:hover { background: none; color: #c96442; }
+    /* 탭 보관 단추 (× 왼쪽). 끝난 탭을 위쪽 '보관' 줄로 내려둡니다 */
+    .card-arch {
+      flex-shrink: 0; margin-left: 8px; padding: 2px 8px; font-size: 11px;
+      background: none; color: #d8d2c8; border: 1px solid transparent; border-radius: 6px;
+    }
+    .card-arch:hover { background: #f4f1ea; color: #6b8e5a; border-color: #e2ddd4; }
+    /* 보관 줄 */
+    .strip-toggle { background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+    .strip-toggle:hover { color: #c96442; }
+    .arch-chip { background: #f4f1ea; color: #a99d8d; border-color: #e8e3da; cursor: pointer; }
+    .arch-chip:hover { border-color: #6b8e5a; color: #6b8e5a; }
+    .chip-x { padding: 0 2px; margin-left: 2px; font-size: 13px; line-height: 1; background: none; border: none; color: #cfc8bd; cursor: pointer; }
+    .chip-x:hover { color: #c96442; }
 
     h1 { margin: 0 0 8px; font-size: 20px; line-height: 1.6; }
 
@@ -623,7 +636,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 19:00";
+    const BUILD = "2026-10-11 19:30";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1169,11 +1182,13 @@
       L.push("파고들기  (추출: " + stamp + ")");
       L.push("");
 
-      const boards = loadBoards();
+      const all = loadBoards();
+      const boards = all.filter(b => !b.archived).concat(all.filter(b => b.archived));
       boards.forEach((board) => {
+        const tag = board.archived ? "  [보관한 탭" + (board.archivedAt ? " · " + board.archivedAt : "") + "]" : "";
         if (board.kind === "memo") {
           L.push("================================================");
-          L.push("■ " + (board.title || "제목 없음") + "  (메모장)");
+          L.push("■ " + (board.title || "제목 없음") + "  (메모장)" + tag);
           L.push("================================================");
           L.push("");
           const text = ((readList(board.key)[0] || {}).body || "").replace(/\r\n/g, "\n").trim();
@@ -1185,7 +1200,7 @@
         const list = readList(board.key);
         const arch = readList(board.key + "_archive");
         L.push("================================================");
-        L.push("■ " + (board.title || "제목 없음") + "  (주제 " + list.filter(x => !x.head).length + "개, 보관 " + arch.length + "개)");
+        L.push("■ " + (board.title || "제목 없음") + "  (주제 " + list.filter(x => !x.head).length + "개, 보관 " + arch.length + "개)" + tag);
         L.push("================================================");
         L.push("");
 
@@ -1459,6 +1474,13 @@
       mark.textContent = "저장됨";
       headRow.appendChild(mark);
 
+      const archBtn = document.createElement("button");
+      archBtn.className = "card-arch";
+      archBtn.textContent = "보관";
+      archBtn.title = "끝난 탭을 위쪽 '보관' 줄로 내려둡니다. 언제든 다시 꺼낼 수 있습니다";
+      archBtn.addEventListener("click", () => archiveBoard(board.id));
+      headRow.appendChild(archBtn);
+
       const kill = document.createElement("button");
       kill.className = "card-del";
       kill.textContent = "×";
@@ -1603,6 +1625,33 @@
       document.body.style.setProperty("--strip", (strip.hidden ? 0 : strip.offsetHeight + 12) + "px");
     }
 
+    // ── 탭 보관: 끝난 탭은 지우지 않고 위쪽 '보관' 줄로 내려둡니다 ──
+    function dateText() {
+      const d = new Date();
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    }
+    function archiveBoard(id) {
+      const list = loadBoards();
+      const b = list.find(x => x.id === id);
+      if (!b) return;
+      b.archived = true;
+      b.archivedAt = dateText();
+      saveBoards(list);
+      closeBoard(id);
+      drawLayout();
+    }
+    function unarchiveBoard(id) {
+      const list = loadBoards();
+      const b = list.find(x => x.id === id);
+      if (!b) return;
+      b.archived = false;
+      delete b.archivedAt;
+      saveBoards(list);
+      openBoard(id);        // 꺼내면 바로 펼쳐 보입니다
+      drawLayout();
+    }
+    let ARCH_ROW_OPEN = false;   // 보관 줄을 펼쳐 보는 중인지 (이 창에서만)
+
     // 띠와 카드에 보이는 순서: 주제형 먼저, 메모장형 다음 (각각은 탭 목록 순서대로)
     function stripOrder(boards) {
       return boards.filter(b => b.kind !== "memo").concat(boards.filter(b => b.kind === "memo"));
@@ -1614,9 +1663,10 @@
       strip.innerHTML = "";
       strip.hidden = false;
 
+      const active = boards.filter(b => !b.archived);
       const groups = [
-        { kind: "topic", label: "📋 주제", list: boards.filter(b => b.kind !== "memo") },
-        { kind: "memo",  label: "📝 메모", list: boards.filter(b => b.kind === "memo") }
+        { kind: "topic", label: "📋 주제", list: active.filter(b => b.kind !== "memo") },
+        { kind: "memo",  label: "📝 메모", list: active.filter(b => b.kind === "memo") }
       ];
       groups.forEach(g => {
         if (!g.list.length) return;
@@ -1673,6 +1723,38 @@
         });
         strip.appendChild(row);
       });
+
+      // 보관 줄: 평소엔 개수만, 누르면 보관한 탭이 펼쳐집니다 (누르면 꺼내기, × 는 완전히 지우기)
+      const archived = boards.filter(b => b.archived);
+      if (archived.length) {
+        const row = document.createElement("div");
+        row.className = "strip-group arch";
+        const label = document.createElement("button");
+        label.className = "strip-label strip-toggle";
+        label.textContent = "📦 보관 " + archived.length + "개 " + (ARCH_ROW_OPEN ? "▾" : "▸");
+        label.title = "누르면 보관한 탭을 보이거나 숨깁니다";
+        label.addEventListener("click", () => { ARCH_ROW_OPEN = !ARCH_ROW_OPEN; drawLayout(); });
+        row.appendChild(label);
+        if (ARCH_ROW_OPEN) archived.forEach(b => {
+          const chip = document.createElement("span");
+          chip.className = "tab-chip arch-chip";
+          chip.dataset.id = b.id;
+          chip.title = "누르면 다시 꺼냅니다" + (b.archivedAt ? " (" + b.archivedAt + " 보관)" : "");
+          const t = document.createElement("span");
+          t.className = "t";
+          t.textContent = (b.kind === "memo" ? "📝 " : "📋 ") + (b.title || "제목 없음");
+          chip.appendChild(t);
+          chip.addEventListener("click", () => unarchiveBoard(b.id));
+          const x = document.createElement("button");
+          x.className = "chip-x";
+          x.textContent = "×";
+          x.title = "완전히 지우기";
+          x.addEventListener("click", (e) => { e.stopPropagation(); removeBoard(b); });
+          chip.appendChild(x);
+          row.appendChild(chip);
+        });
+        strip.appendChild(row);
+      }
       updateStripVar();
     }
 
@@ -1681,11 +1763,12 @@
       layout.innerHTML = "";
 
       const boards = loadBoards();
+      const active = boards.filter(b => !b.archived);
       if (renameId) openBoard(renameId);           // 새로 만든 탭은 바로 펼쳐 보입니다
-      const ids = openIds(boards);
+      const ids = openIds(active);
       drawStrip(boards, ids);
 
-      const shown = stripOrder(boards).filter(b => ids.includes(b.id));
+      const shown = stripOrder(active).filter(b => ids.includes(b.id));
       shown.forEach(board => {
         const el = buildCard(board, layout);
         if (board.kind === "memo") createMemo(board, el);
@@ -1698,7 +1781,7 @@
       if (!shown.length) {
         const p = document.createElement("div");
         p.className = "layout-empty";
-        p.textContent = boards.length ? "위에서 탭 이름을 누르면 여기에 펼쳐집니다." : "아직 탭이 없습니다. 위 '+ 새 탭'을 눌러보세요.";
+        p.textContent = active.length ? "위에서 탭 이름을 누르면 여기에 펼쳐집니다." : "아직 탭이 없습니다. 위 '+ 새 탭'을 눌러보세요.";
         layout.appendChild(p);
       }
       fitLayout();
