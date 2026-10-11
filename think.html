@@ -639,7 +639,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 20:35";
+    const BUILD = "2026-10-11 20:45";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1521,7 +1521,6 @@
       if (memo) {
         memoBody = document.createElement("textarea");
         memoBody.className = "memo-body";
-        memoBody.placeholder = "여기에 자유롭게 적으세요";
         body.appendChild(memoBody);
       } else {
       list = document.createElement("div");
@@ -2181,7 +2180,6 @@
             const ta = document.createElement("textarea");
             ta.className = "note-body";
             ta.value = note.body || "";
-            ta.placeholder = "여기에 생각을 적어 나가세요";
 
             // 글자를 끌어 선택할 때는 항목이 끌려가지 않게
             ta.addEventListener("mousedown", () => { item.draggable = false; });
