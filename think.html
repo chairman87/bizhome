@@ -659,7 +659,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-12 09:40";
+    const BUILD = "2026-10-12 10:10";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -762,12 +762,24 @@
       delete c.open; delete c.ts;
       return JSON.stringify(c);
     }
+    // 서버(또는 합친 결과)에서 본 가장 새 ts. 기기 시계가 느려도 이보다 뒤로 찍어서
+    // "내가 본 것 뒤에 고친 것"이 합칠 때 반드시 이기게 합니다 (노트북·데스크탑 시계 차이 대비)
+    let MAX_SEEN_TS = 0;
+    function noteSeenTs(doc) {
+      try {
+        Object.keys(doc || {}).forEach(k => {
+          const l = parseList(doc[k]);
+          if (l) l.forEach(x => { if (x.ts && x.ts > MAX_SEEN_TS) MAX_SEEN_TS = x.ts; });
+        });
+      } catch (e) {}
+    }
     function stampChanges(prevStr, nextStr) {
       const list = parseList(nextStr);
       if (!list) return nextStr;
       const before = {};
       (parseList(prevStr) || []).forEach(x => { before[x.id] = noteSig(x); });
-      const now = Date.now();
+      const now = Math.max(Date.now(), MAX_SEEN_TS + 1);
+      MAX_SEEN_TS = now;
       let changed = false;
       list.forEach(x => {
         if (before[x.id] !== noteSig(x)) { x.ts = now; changed = true; }
@@ -883,6 +895,7 @@
       const { data, error } = await sb.from(DOC_TABLE).select("value, updated_at").eq("id", docId()).maybeSingle();
       if (error) return false;
       if (!data) { serverStamp = null; return true; }
+      noteSeenTs(data.value || {});
       STATE = mergeDocs(STATE, data.value || {});
       serverStamp = data.updated_at;
       cacheNow(localDirty);
@@ -1138,6 +1151,7 @@
 
       serverStamp = data ? data.updated_at : null;
       const serverData = (data && data.value) ? data.value : {};
+      noteSeenTs(serverData);
       // 박봉수: 아직 옮긴 내용이 없으면 예전 내용 가져오기 상자를 보여줍니다
       if (me.id === OLD_OWNER_MEMBER && !(serverData && serverData.boards)) {
         document.getElementById("oldImport").hidden = false;
@@ -1145,6 +1159,7 @@
       const cache = readCache();
       if (cache && cache.dirty && cache.data) {
         // 지난번에 저장하지 못하고 남아 있던 내용이 있으면 서버 것과 합쳐 살립니다
+        noteSeenTs(cache.data);
         STATE = mergeDocs(cache.data, serverData);
         appReady = true;
         localDirty = true;
