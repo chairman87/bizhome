@@ -639,7 +639,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 20:25";
+    const BUILD = "2026-10-11 20:35";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1829,7 +1829,7 @@
     }
     // 폭이 바뀌면(회전 등) 펼쳐 둔 글 칸의 높이도 새 폭에 맞춰 다시 잽니다
     function regrowAll() {
-      document.querySelectorAll("textarea.note-body, textarea.note-decision").forEach(ta => {
+      document.querySelectorAll("textarea.note-body").forEach(ta => {
         ta.style.height = "auto";
         ta.style.height = (ta.scrollHeight + 2) + "px";
       });
@@ -2072,15 +2072,6 @@
           tt.textContent = note.title || (note.head ? "구분" : "제목 없음");
           head.appendChild(tt);
 
-          // 접혀 있어도 결정이 적혀 있으면 제목 옆에 '결정' 표시 (회의 때 한눈에)
-          if (!note.head && !note.open && (note.decision || "").trim()) {
-            const dd = document.createElement("span");
-            dd.className = "note-decided";
-            dd.textContent = "결정";
-            dd.title = (note.decision || "").trim().slice(0, 200);
-            head.appendChild(dd);
-          }
-
           // 이름 고치기 (두 번 눌렀을 때, 또는 새로 만든 직후)
           function startRename() {
             const ti = document.createElement("input");
@@ -2225,50 +2216,6 @@
 
             item.appendChild(ta);
             setTimeout(grow, 0);
-
-            // ── 결정 칸 (생각의 결론. 회의에서 정한 것을 여기에) ──
-            const dwrap = document.createElement("div");
-            dwrap.className = "note-decision-wrap";
-            const dlabel = document.createElement("span");
-            dlabel.className = "note-decision-label";
-            dlabel.textContent = "결정";
-            dwrap.appendChild(dlabel);
-
-            const dta = document.createElement("textarea");
-            dta.className = "note-decision";
-            dta.value = note.decision || "";
-            dta.placeholder = "결정한 것을 적어두세요 (아직이면 비워 둠)";
-            dta.rows = 1;
-            dta.addEventListener("mousedown", () => { item.draggable = false; });
-            dta.addEventListener("mouseup", () => { item.draggable = true; });
-
-            const dgrow = () => {
-              dta.style.height = "auto";
-              dta.style.height = (dta.scrollHeight + 2) + "px";
-            };
-            let decTimer = null;
-            const saveDecision = () => {
-              const all = load();
-              const n = all.find(x => x.id === note.id);
-              if (!n) return;
-              if ((n.decision || "") === dta.value) return;
-              n.decision = dta.value;
-              save(all);
-            };
-            dta.addEventListener("input", () => {
-              dgrow();
-              clearTimeout(decTimer);
-              decTimer = setTimeout(saveDecision, 600);
-            });
-            dta.addEventListener("blur", () => { clearTimeout(decTimer); saveDecision(); });
-            dta.addEventListener("keydown", (e) => {
-              if (e.isComposing) return;
-              if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); lastDoneBody = note.id; window.__lastDoneBoard = B.key; dta.blur(); }
-            });
-
-            dwrap.appendChild(dta);
-            item.appendChild(dwrap);
-            setTimeout(dgrow, 0);
 
             // 제목에서 엔터를 쳐서 넘어온 항목이면 생각 칸에 커서를 놓습니다
             if (focusBodyNext === note.id) {
