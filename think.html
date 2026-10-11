@@ -340,7 +340,7 @@
       display: flex; align-items: baseline; justify-content: space-between;
       margin-bottom: 18px;
     }
-    .card-head h1 { margin: 0; }
+    .card-head h1 { margin: 0; flex: 1 1 auto; min-width: 0; text-align: left; }   /* 제목은 왼쪽 정렬 */
     .card-head.tight { margin-bottom: 8px; }
 
     /* 클릭해서 고치는 제목 */
@@ -594,7 +594,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 17:40";
+    const BUILD = "2026-10-11 18:05";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
