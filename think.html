@@ -555,9 +555,26 @@
     }
     .gate-box button { width: 100%; margin-top: 6px; }
     .gate-msg { margin-top: 12px; font-size: 12px; color: #c96442; line-height: 1.6; }
-    .gate-forgot { margin-top: 14px; font-size: 12px; text-align: right; }
-    .gate-forgot a { color: #bbb; text-decoration: none; }
-    .gate-forgot a:hover { color: #c96442; text-decoration: underline; }
+    /* 로그인: 이름 고르기 (비즈홈과 같은 모양) */
+    .names { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px; }
+    .name-btn {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      font-size: 14px; font-weight: 500; color: #333; text-align: left;
+      background: #fff; border: 1px solid #e2ddd4; border-radius: 12px; cursor: pointer; transition: all .12s;
+    }
+    .name-btn:hover { border-color: #c96442; background: #fdf6f2; }
+    .name-btn.on { border-color: #c96442; background: #fbeee7; box-shadow: 0 0 0 3px #f3d9cc; }
+    .name-btn .av {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 13px; font-weight: bold;
+    }
+    .name-btn small { margin-left: auto; font-size: 11px; font-weight: normal; color: #aaa; }
+    .gate-loading { font-size: 13px; color: #bbb; }
+    .gate-box .pwrow { display: flex; gap: 6px; }
+    .gate-box .pwrow input { flex: 1; width: auto; margin: 0; }
+    .gate-box .pwrow button { width: auto; margin: 0; padding: 0 18px; white-space: nowrap; }
+    .whoami { font-size: 12px; color: #999; }
 
     /* ── 위쪽 줄 안의 버튼들 ── */
     .topbar-right { display: flex; align-items: center; gap: 12px; }
@@ -582,29 +599,17 @@
   </style>
 </head>
 <body>
-  <!-- 로그인 화면: 내 계정으로 들어와야만 내용이 보입니다 -->
+  <!-- 로그인 화면: 비즈홈과 같은 방식 (이름 고르고 비밀번호) -->
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">chairman87@gmail.com 계정. 비밀번호만 넣으면 됩니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
-      <!-- 나만 쓰는 화면이라 이메일은 고정해 두고 칸은 숨깁니다 -->
-      <input type="email" id="gateEmail" value="chairman87@gmail.com" autocomplete="username" hidden>
-      <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
-      <button id="gateBtn">들어가기</button>
+      <div class="hint">비즈홈과 같은 이름·비밀번호로 들어갑니다. 사람마다 자기 내용만 보입니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
+      <div class="names" id="gateNames"><span class="gate-loading">팀원 목록을 불러오는 중…</span></div>
+      <div class="pwrow" id="gatePwRow" hidden>
+        <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
+        <button id="gateBtn">들어가기</button>
+      </div>
       <div class="gate-msg" id="gateMsg"></div>
-      <div class="gate-forgot"><a href="#" id="forgotLink">비밀번호를 잊었어요 (재설정 메일 받기)</a></div>
-    </div>
-  </div>
-
-  <!-- 재설정 메일의 링크로 들어왔을 때만 보이는 새 비밀번호 창 -->
-  <div class="gate" id="resetGate" hidden>
-    <div class="gate-box">
-      <h1>새 비밀번호</h1>
-      <div class="hint">재설정 메일로 들어왔습니다. 새 비밀번호를 정해주세요.</div>
-      <input type="password" id="newPw" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password">
-      <input type="password" id="newPw2" placeholder="한 번 더" autocomplete="new-password">
-      <button id="resetBtn">저장하고 들어가기</button>
-      <div class="gate-msg" id="resetMsg"></div>
     </div>
   </div>
 
@@ -618,6 +623,7 @@
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
     <div class="topbar-right">
+      <span id="whoami" class="whoami"></span>
       <div id="storeStatus" class="store-status" hidden></div>
       <button class="logout" id="logout">로그아웃</button>
     </div>
@@ -625,6 +631,20 @@
 
   <div id="tabStrip" class="tab-strip" hidden></div>
   <div class="layout" id="layout"></div>
+
+  <!-- 박봉수 전용: 2026-10-11 이전 혼자 쓰던 때의 내용(think_docs)을 한 번 가져옵니다 -->
+  <div id="oldImport" class="import-box" hidden>
+    <b>예전 파고들기 내용 가져오기</b>
+    <div style="margin-top:6px; font-size:13px; color:#888; line-height:1.6">
+      혼자 쓰던 때(2026-10-11 이전) 적은 내용은 예전 저장소에 있습니다. 예전 로그인 비밀번호(이메일 계정)를 넣으면 지금 자리로 복사합니다. 한 번만 하면 됩니다.
+    </div>
+    <div class="pwrow" style="margin-top:12px; display:flex; gap:6px">
+      <input type="password" id="oldPw" placeholder="예전 로그인 비밀번호" autocomplete="off" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-family:inherit">
+      <button id="oldImportBtn" class="add-board">가져오기</button>
+      <button id="oldImportSkip" class="add-board" title="나중에 다시 보이게 하려면 새로고침">닫기</button>
+    </div>
+    <div id="oldImportMsg" style="margin-top:10px; font-size:13px; color:#c96442;"></div>
+  </div>
 
   <div id="importBox" class="import-box" hidden>
     <h2>쓰던 내용 가져오기</h2>
@@ -639,7 +659,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 20:45";
+    const BUILD = "2026-10-12 09:40";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -665,19 +685,25 @@
     // 적은 내용은 이 브라우저가 아니라 Supabase(think_docs 표)에 저장됩니다.
     // 그래서 노트북·휴대폰 어디서 열어도 이어서 쓸 수 있습니다.
     //
-    // 보안: 표에 '본인만' 규칙(RLS)이 걸려 있어, 이 페이지 주소와 공개키를
-    // 아는 사람이라도 로그인하지 않으면 한 줄도 읽지 못합니다.
+    // 로그인: 비즈홈과 같은 방식입니다 (2026-10-11 부터). 팀원 표(members)에서 이름을 고르고
+    // 비즈홈 비밀번호를 맞히면 들어갑니다. 사람마다 자기 줄(owner = members.id)만 읽고 씁니다.
+    // 저장은 비즈홈의 settings 표(팀 공용, id 글·value JSON·updated_at)에 "think:<사람id>" 줄로 둡니다.
+    // 예전 think_docs 표(2026-10-11 이전, 본인만 읽는 잠금)는 그대로 두고, 박봉수 예전 내용은 앱 안 '가져오기'로 한 번 옮깁니다.
     const SUPABASE_URL = "https://nflznotjmdqvqtjkzsec.supabase.co";
     const SUPABASE_KEY = "sb_publishable_grDEdL-mRivtPAta6qNVTw_Di-opchT";
-    const CACHE_KEY = "think_cache";      // 저장이 실패했을 때를 대비한 이 기기의 임시 보관
-    const HIST_KEY  = "think_hist_at";    // 마지막으로 지난 내용을 남긴 때
+    const CACHE_KEY = "think_cache";      // 저장이 실패했을 때를 대비한 이 기기의 임시 보관 (사람마다 따로)
+    const HIST_KEY  = "think_hist_at";    // 마지막으로 지난 내용을 남긴 때 (사람마다 따로)
+    const LOGIN_KEY = "think_me";         // 이 기기에서 마지막으로 들어온 사람 (다음부터 안 묻기)
+    const DEFAULT_PW = "1234";            // 비즈홈의 초기 비밀번호
+    const OLD_OWNER_MEMBER = "e55bb2cb-1deb-4c0b-bec3-6ef68008f7cc";   // 박봉수 (예전 혼자 쓰던 때의 임시 보관본을 이어받기용)
+    const DOC_TABLE = "settings";
+    function docId()  { return "think:" + me.id; }
+    function histId() { return "think_hist:" + me.id + ":" + Date.now(); }
+    const OLD_AUTH_EMAIL = "chairman87@gmail.com";                         // 예전(혼자 쓰던 때) 로그인 계정
+    const OLD_OWNER      = "4b15d43a-e12d-4354-b8d6-da709be59dd1";         // 예전 think_docs 의 주인 번호
+    function cacheKey() { return CACHE_KEY + "_" + (me ? me.id : "x"); }
+    function histKey()  { return HIST_KEY  + "_" + (me ? me.id : "x"); }
 
-    // 재설정 메일의 링크로 들어왔는지 (주소 뒤에 type=recovery 가 붙어 옴). 라이브러리가 주소를 지우기 전에 먼저 봐 둡니다
-    const IS_RECOVERY = /type=recovery/.test(location.hash) || /type=recovery/.test(location.search);
-    const URL_AUTH_ERROR = (() => {
-      const m = (location.hash + location.search).match(/error_description=([^&]+)/);
-      return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "";
-    })();
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     document.getElementById("buildStamp").textContent = BUILD;
 
@@ -691,7 +717,7 @@
     let firstEditAt = 0;      // 연달아 치기 시작한 때. 계속 치는 중이어도 5초에 한 번은 보냅니다
     let pushing = false;      // 지금 서버로 보내는 중인지
     let needRedraw = false;   // 글을 치는 중이라 화면 다시 그리기를 미뤄 둔 상태
-    let accessToken = null;   // 창을 닫는 순간에 쓰는 로그인 이용권
+    let accessToken = SUPABASE_KEY;   // 창을 닫는 순간 보낼 때 쓰는 열쇠 (공개키 그대로)
 
     // 앱 안에서는 이 셋으로만 읽고 씁니다
     function storeGet(key) {
@@ -793,7 +819,7 @@
     function cacheNow(dirty) {
       try {
         lastCacheAt = Date.now();
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: STATE, dirty: !!dirty, at: lastCacheAt }));
+        localStorage.setItem(cacheKey(), JSON.stringify({ data: STATE, dirty: !!dirty, at: lastCacheAt }));
       } catch (e) {}
     }
     // 저장이 끝난 뒤 '보낼 것 없음'으로 바꿀 때: 그 사이 다른 창이 적어 둔 것이 있으면 건드리지 않습니다
@@ -802,7 +828,7 @@
       if (!c || c.at === lastCacheAt) cacheNow(false);
     }
     function readCache() {
-      try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { return null; }
+      try { return JSON.parse(localStorage.getItem(cacheKey())); } catch (e) { return null; }
     }
 
     // 서버로 보내기. 서버가 그 사이(다른 창·다른 기기에서) 바뀌었으면 덮어쓰지 않고
@@ -820,13 +846,13 @@
           const stamp = new Date().toISOString();
           let res;
           if (serverStamp) {
-            res = await sb.from("think_docs")
-              .update({ data: STATE, updated_at: stamp })
-              .eq("owner", me.id).eq("updated_at", serverStamp)
+            res = await sb.from(DOC_TABLE)
+              .update({ value: STATE, updated_at: stamp, updated_by: me.name })
+              .eq("id", docId()).eq("updated_at", serverStamp)
               .select("updated_at");
           } else {
-            res = await sb.from("think_docs")
-              .upsert({ owner: me.id, data: STATE, updated_at: stamp }, { onConflict: "owner" })
+            res = await sb.from(DOC_TABLE)
+              .upsert({ id: docId(), value: STATE, updated_at: stamp, updated_by: me.name }, { onConflict: "id" })
               .select("updated_at");
           }
           if (res.error) throw res.error;
@@ -854,10 +880,10 @@
 
     // 서버 것을 받아 지금 내용과 합칩니다
     async function pullAndMerge() {
-      const { data, error } = await sb.from("think_docs").select("data, updated_at").eq("owner", me.id).maybeSingle();
+      const { data, error } = await sb.from(DOC_TABLE).select("value, updated_at").eq("id", docId()).maybeSingle();
       if (error) return false;
       if (!data) { serverStamp = null; return true; }
-      STATE = mergeDocs(STATE, data.data || {});
+      STATE = mergeDocs(STATE, data.value || {});
       serverStamp = data.updated_at;
       cacheNow(localDirty);
       redrawSoon();
@@ -880,7 +906,7 @@
       if (!appReady || !me || pushing) return;
       if (localDirty) { pushToServer(); return; }
       try {
-        const { data } = await sb.from("think_docs").select("updated_at").eq("owner", me.id).maybeSingle();
+        const { data } = await sb.from(DOC_TABLE).select("updated_at").eq("id", docId()).maybeSingle();
         if (data && data.updated_at !== serverStamp) await pullAndMerge();
       } catch (e) {}
     }
@@ -895,11 +921,11 @@
 
     // 10분에 한 번, 지금 내용을 따로 남겨 둡니다 (실수로 지웠을 때 되돌리기용)
     async function saveHistory() {
-      const last = Number(localStorage.getItem(HIST_KEY) || 0);
+      const last = Number(localStorage.getItem(histKey()) || 0);
       if (Date.now() - last < 600000) return;
-      localStorage.setItem(HIST_KEY, String(Date.now()));
+      localStorage.setItem(histKey(), String(Date.now()));
       try {
-        await sb.from("think_history").insert({ id: crypto.randomUUID(), owner: me.id, data: STATE });
+        await sb.from(DOC_TABLE).insert({ id: histId(), value: STATE, updated_by: me.name });
       } catch (e) {}
     }
 
@@ -907,9 +933,9 @@
     function flushOnClose() {
       if (!localDirty || !me || !accessToken) return;
       clearTimeout(saveTimer);
-      const body = JSON.stringify({ data: STATE, updated_at: new Date().toISOString() });
+      const body = JSON.stringify({ value: STATE, updated_at: new Date().toISOString(), updated_by: me.name });
       if (body.length > 60000) { pushToServer(); return; }     // keepalive 는 64KB 까지만 됩니다
-      let url = SUPABASE_URL + "/rest/v1/think_docs?owner=eq." + me.id;
+      let url = SUPABASE_URL + "/rest/v1/" + DOC_TABLE + "?id=eq." + encodeURIComponent(docId());
       if (serverStamp) url += "&updated_at=eq." + encodeURIComponent(serverStamp);
       try {
         fetch(url, {
@@ -951,18 +977,9 @@
       } catch (e) { return false; }
     }
 
-    // 앱이 어디까지 갔는지 서버에 자취를 남깁니다 (화면 안에서 나는 문제를 밖에서 보기 위해)
-    async function dbg(stepName, info) {
-      try {
-        const { data } = await sb.auth.getSession();
-        const uid = data && data.session ? data.session.user.id : null;
-        if (!uid) return;
-        await sb.from("think_debug").insert({
-          id: crypto.randomUUID(), owner: uid,
-          step: String(stepName).slice(0, 200),
-          info: String(info === undefined ? "" : info).slice(0, 800)
-        });
-      } catch (e) {}
+    // 앱이 어디까지 갔는지 브라우저 콘솔(F12)에 남깁니다
+    function dbg(stepName, info) {
+      try { console.log("[파고들기] " + stepName, info === undefined ? "" : info); } catch (e) {}
     }
     // 어디까지 갔는지 화면에 그대로 적습니다. 문제가 생기면 이 줄만 보면 압니다.
     function step(t) {
@@ -984,29 +1001,73 @@
       dbg("unhandledrejection", r && r.message ? r.message : String(r));
     });
 
+    // ── 로그인 (비즈홈과 같은 방식) ──
+    let MEMBERS = [];        // 비즈홈 팀원 목록
+    let loginPick = null;    // 로그인 화면에서 고른 사람
+
+    async function loadMembers() {
+      const { data, error } = await sb.from("members")
+        .select("id,name,color,title,sort_order").order("sort_order");
+      if (error) throw error;
+      return data || [];
+    }
+
+    function renderNames() {
+      const box = document.getElementById("gateNames");
+      box.innerHTML = "";
+      MEMBERS.forEach(m => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "name-btn" + (loginPick && loginPick.id === m.id ? " on" : "");
+        const av = document.createElement("span");
+        av.className = "av";
+        av.style.background = m.color || "#999";
+        av.textContent = (m.name || "?").charAt(0);
+        b.appendChild(av);
+        b.appendChild(document.createTextNode(m.name || "이름 없음"));
+        if (m.title) { const t = document.createElement("small"); t.textContent = m.title; b.appendChild(t); }
+        b.addEventListener("click", () => {
+          loginPick = m;
+          renderNames();
+          document.getElementById("gatePwRow").hidden = false;
+          const pw = document.getElementById("gatePw");
+          pw.value = "";
+          pw.focus();
+          fail("");
+        });
+        box.appendChild(b);
+      });
+    }
+
+    async function initGate() {
+      try {
+        MEMBERS = await loadMembers();
+        renderNames();
+        if (!MEMBERS.length) fail("비즈홈에 팀원이 아직 없습니다. 비즈홈에서 먼저 등록하세요.");
+      } catch (e) {
+        fail("팀원 목록을 불러오지 못했습니다: " + (e && e.message ? e.message : e));
+      }
+    }
+
     async function signIn() {
-      const email = document.getElementById("gateEmail").value.trim();
       const pw = document.getElementById("gatePw").value;
       const btn = document.getElementById("gateBtn");
-      if (!email || !pw) { fail("이메일과 비밀번호를 적어주세요."); return; }
+      if (!loginPick) { fail("먼저 이름을 고르세요."); return; }
+      if (!pw) { fail("비밀번호를 적어주세요."); return; }
 
       btn.disabled = true;
       btn.textContent = "들어가는 중…";
       try {
-        step("① 서버에 로그인 요청 중…");
-        const { data, error } = await sb.auth.signInWithPassword({ email: email, password: pw });
+        step("① 비밀번호 확인 중…");
+        // 비밀번호는 지금 서버 값으로 확인합니다 (비즈홈에서 방금 바꿨을 수 있으니)
+        const { data, error } = await sb.from("members").select("password").eq("id", loginPick.id).maybeSingle();
+        if (error) { fail("② 확인 실패: " + error.message); return; }
+        if (!data) { fail("② 비즈홈 팀원 목록에서 이 이름을 찾지 못했습니다."); return; }
+        if (pw !== (data.password || DEFAULT_PW)) { fail("② 비밀번호가 맞지 않습니다. 비즈홈 비밀번호와 같습니다."); return; }
 
-        if (error) {
-          const m = (error.message || "").toLowerCase();
-          if (m.includes("invalid login")) fail("② 비밀번호가 맞지 않습니다. (서버 응답: " + error.message + ")");
-          else if (m.includes("not confirmed")) fail("② 메일 인증이 안 된 계정입니다.");
-          else fail("② 로그인 거절: " + error.message + " / status=" + (error.status || "?"));
-          return;
-        }
-        if (!data || !data.session) { fail("② 이용권(세션)을 받지 못했습니다."); return; }
-
-        step("③ 로그인 성공. 내용 불러오는 중…");
-        await start(data.session.user);
+        try { localStorage.setItem(LOGIN_KEY, loginPick.id); } catch (e) {}
+        step("③ 확인됨. 내용 불러오는 중…");
+        await start({ id: loginPick.id, name: loginPick.name });
 
         if (!document.getElementById("gate").hidden) {
           fail("④ 내용은 불러왔는데 화면이 열리지 않았습니다. 이 문구를 알려주세요.");
@@ -1023,42 +1084,51 @@
 
     document.getElementById("gateBtn").addEventListener("click", signIn);
     document.getElementById("gatePw").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
-    document.getElementById("logout").addEventListener("click", async () => {
-      await sb.auth.signOut();
+    document.getElementById("logout").addEventListener("click", () => {
+      try { localStorage.removeItem(LOGIN_KEY); } catch (e) {}
       location.reload();
     });
 
     // ── 내용 불러오기 ─────────────────────────
     async function start(known) {
-      // 로그인한 사람 확인.
-      // 예전에는 서버에 사용자 정보를 다시 물어봤는데(getUser), 그 응답이 비면
-      // 아무 표시 없이 멈춰서 "로그인이 안 된다"로 보였다.
-      // 이제는 방금 받은 이용권(세션)을 그대로 쓰고, 없으면 이유를 화면에 띄운다.
+      // 로그인한 사람 확인: 방금 로그인했으면 그 사람, 아니면 이 기기에 기억해 둔 사람
       let user = known || null;
       if (!user) {
-        const { data } = await sb.auth.getSession();
-        user = (data && data.session) ? data.session.user : null;
+        let savedId = null;
+        try { savedId = localStorage.getItem(LOGIN_KEY); } catch (e) {}
+        if (savedId) {
+          if (!MEMBERS.length) { try { MEMBERS = await loadMembers(); } catch (e) {} }
+          const m = MEMBERS.find(x => x.id === savedId);
+          if (m) user = { id: m.id, name: m.name };
+          else { try { localStorage.removeItem(LOGIN_KEY); } catch (e) {} }   // 팀원에서 빠진 사람
+        }
       }
       if (!user) {
         document.getElementById("gate").hidden = false;
-        document.getElementById("gateMsg").textContent =
-          "로그인 정보를 확인하지 못했습니다. 한 번 더 눌러 주세요.";
         return;
       }
       me = user;
 
+      // 혼자 쓰던 때(2026-10-11 이전)의 임시 보관본은 박봉수 것으로 이어받습니다
+      if (me.id === OLD_OWNER_MEMBER) {
+        try {
+          const old = localStorage.getItem("think_cache");
+          if (old && !localStorage.getItem(cacheKey())) localStorage.setItem(cacheKey(), old);
+          localStorage.removeItem("think_cache");
+          const oldHist = localStorage.getItem("think_hist_at");
+          if (oldHist && !localStorage.getItem(histKey())) localStorage.setItem(histKey(), oldHist);
+          localStorage.removeItem("think_hist_at");
+        } catch (e) {}
+      }
+
       document.getElementById("gate").hidden = true;
       document.getElementById("topbar").hidden = false;
+      document.getElementById("whoami").textContent = me.name;
 
-      dbg("A. 로그인확인 통과", me.email);
+      dbg("A. 로그인확인 통과", me.name);
       if (typeof step === "function") step("④ 내용 불러오는 중…");
-      try {
-        const ses = await sb.auth.getSession();
-        accessToken = (ses.data && ses.data.session) ? ses.data.session.access_token : null;
-      } catch (e) {}
-      sb.auth.onAuthStateChange((ev, session) => { if (session && session.access_token) accessToken = session.access_token; });
 
-      const { data, error } = await sb.from("think_docs").select("data, updated_at").eq("owner", me.id).maybeSingle();
+      const { data, error } = await sb.from(DOC_TABLE).select("value, updated_at").eq("id", docId()).maybeSingle();
       if (error) {
         document.getElementById("gate").hidden = false;
         document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + error.message;
@@ -1067,7 +1137,11 @@
       }
 
       serverStamp = data ? data.updated_at : null;
-      const serverData = (data && data.data) ? data.data : {};
+      const serverData = (data && data.value) ? data.value : {};
+      // 박봉수: 아직 옮긴 내용이 없으면 예전 내용 가져오기 상자를 보여줍니다
+      if (me.id === OLD_OWNER_MEMBER && !(serverData && serverData.boards)) {
+        document.getElementById("oldImport").hidden = false;
+      }
       const cache = readCache();
       if (cache && cache.dirty && cache.data) {
         // 지난번에 저장하지 못하고 남아 있던 내용이 있으면 서버 것과 합쳐 살립니다
@@ -1080,7 +1154,7 @@
       }
 
       dbg("C. 내용 받음", "항목 " + Object.keys(STATE).length + "개");
-      if (!Object.keys(STATE).length) {
+      if (!Object.keys(STATE).length && me.id === OLD_OWNER_MEMBER) {   // TODO-APP 파일 가져오기는 박봉수에게만 해당
         document.getElementById("importBox").hidden = false;
       }
 
@@ -1606,13 +1680,13 @@
     // ── 위쪽 탭 띠 ──
     // 탭이 많아져도 화면이 망가지지 않게, 펼쳐 둔 탭(최대 MAX_OPEN 개)만 카드로 보입니다.
     // 어느 탭을 펼쳐 뒀는지는 이 기기에만 기억합니다(컴퓨터·휴대폰이 각자 다르게).
-    const OPEN_KEY = "think_open";
+    const OPEN_KEY = "think_open";   // + "_" + 사람 id
     const MAX_OPEN = 3;
     function loadOpen() {
-      try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); return Array.isArray(v) ? v : null; }
+      try { const v = JSON.parse(localStorage.getItem(OPEN_KEY + "_" + (me ? me.id : "x"))); return Array.isArray(v) ? v : null; }
       catch (e) { return null; }
     }
-    function saveOpen(ids) { try { localStorage.setItem(OPEN_KEY, JSON.stringify(ids)); } catch (e) {} }
+    function saveOpen(ids) { try { localStorage.setItem(OPEN_KEY + "_" + (me ? me.id : "x"), JSON.stringify(ids)); } catch (e) {} }
     // 펼쳐 둔 탭 id 목록 (펼친 순서). 처음이면 앞에서 MAX_OPEN 개
     function openIds(boards) {
       let ids = loadOpen();
@@ -2416,68 +2490,46 @@
     }
 
 
-    // ── 시작 ──────────────────────────────────
-    // 이미 로그인해 둔 기기면 로그인 화면 없이 바로 들어갑니다
-    // 이미 로그인해 둔 기기면 로그인 화면 없이 바로 들어갑니다.
-    // 여는 도중 문제가 생기면 조용히 멈추지 않고 이유를 보여줍니다.
-    // ── 비밀번호 재설정 ──
-    // 1) 로그인 창의 '비밀번호를 잊었어요' → 재설정 메일 보내기 (링크는 이 화면으로 돌아옴)
-    const RESET_TO = location.origin + location.pathname;
-    document.getElementById("forgotLink").addEventListener("click", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("gateEmail").value.trim();
-      if (!email) { fail("먼저 위 칸에 이메일을 적어주세요."); return; }
-      step("재설정 메일을 보내는 중…");
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: RESET_TO });
-      if (error) { fail("메일을 못 보냈습니다: " + error.message); return; }
-      step("메일을 보냈습니다. " + email + " 받은편지함(스팸함도)에서 링크를 눌러주세요.");
+    // ── 예전 내용 가져오기 (박봉수 전용, 한 번) ──
+    document.getElementById("oldImportSkip").addEventListener("click", () => { document.getElementById("oldImport").hidden = true; });
+    document.getElementById("oldImportBtn").addEventListener("click", async () => {
+      const msg = document.getElementById("oldImportMsg");
+      const pw = document.getElementById("oldPw").value;
+      if (!pw) { msg.textContent = "예전 로그인 비밀번호를 넣어주세요."; return; }
+      msg.style.color = "#888"; msg.textContent = "예전 저장소에 들어가는 중…";
+      try {
+        const { error: e1 } = await sb.auth.signInWithPassword({ email: OLD_AUTH_EMAIL, password: pw });
+        if (e1) { msg.style.color = "#c96442"; msg.textContent = "비밀번호가 맞지 않습니다: " + e1.message; return; }
+        const { data, error: e2 } = await sb.from("think_docs").select("data").eq("owner", OLD_OWNER).maybeSingle();
+        await sb.auth.signOut();
+        if (e2) { msg.style.color = "#c96442"; msg.textContent = "읽기 실패: " + e2.message; return; }
+        if (!data || !data.data) { msg.style.color = "#c96442"; msg.textContent = "예전 저장소에 내용이 없습니다."; return; }
+        STATE = mergeDocs(STATE, data.data);
+        drawLayout();
+        markEdited();
+        await pushToServer();
+        document.getElementById("oldImport").hidden = true;
+        document.getElementById("importBox").hidden = true;
+        dbg("예전 내용 가져옴", "항목 " + Object.keys(STATE).length + "개");
+      } catch (e) {
+        msg.style.color = "#c96442"; msg.textContent = "오류: " + (e && e.message ? e.message : e);
+      }
     });
 
-    // 2) 메일 링크로 들어오면 새 비밀번호 창을 띄우고, 저장하면 바로 들어갑니다
-    function resetMsg(t, bad) {
-      const el = document.getElementById("resetMsg");
-      el.style.color = bad ? "#c96442" : "#888";
-      el.textContent = t;
-    }
-    async function saveNewPassword() {
-      const p1 = document.getElementById("newPw").value;
-      const p2 = document.getElementById("newPw2").value;
-      if (p1.length < 6) { resetMsg("6자 이상으로 정해주세요.", true); return; }
-      if (p1 !== p2) { resetMsg("두 칸이 서로 다릅니다.", true); return; }
-      const btn = document.getElementById("resetBtn");
-      btn.disabled = true;
-      resetMsg("저장하는 중…");
-      const { data: s } = await sb.auth.getSession();
-      if (!s || !s.session) {
-        resetMsg("링크가 만료됐거나 잘못됐습니다. 로그인 화면에서 재설정 메일을 다시 받아주세요.", true);
-        btn.disabled = false; return;
-      }
-      const { error } = await sb.auth.updateUser({ password: p1 });
-      if (error) { resetMsg("저장 실패: " + error.message, true); btn.disabled = false; return; }
-      history.replaceState(null, "", location.pathname);
-      document.getElementById("resetGate").hidden = true;
-      await start(s.session.user);
-    }
-    document.getElementById("resetBtn").addEventListener("click", saveNewPassword);
-    document.getElementById("newPw2").addEventListener("keydown", (e) => { if (e.key === "Enter") saveNewPassword(); });
-
     // ── 시작 ──
-    if (IS_RECOVERY) {
-      document.getElementById("gate").hidden = true;
-      document.getElementById("resetGate").hidden = false;
-      setTimeout(() => document.getElementById("newPw").focus(), 0);
-    } else if (URL_AUTH_ERROR) {
-      // 링크가 만료된 채 들어온 경우 등
-      history.replaceState(null, "", location.pathname);
-      fail("링크를 쓸 수 없습니다: " + URL_AUTH_ERROR + " — 재설정 메일을 다시 받아주세요.");
-    } else {
-      sb.auth.getSession()
-        .then(({ data }) => { if (data && data.session) return start(); })
-        .catch(e => {
+    // 이 기기에서 들어온 적이 있으면 바로 열고, 아니면 이름 고르는 화면을 띄웁니다
+    (async () => {
+      let savedId = null;
+      try { savedId = localStorage.getItem(LOGIN_KEY); } catch (e) {}
+      if (savedId) {
+        try { await start(); }
+        catch (e) {
           document.getElementById("gate").hidden = false;
-          document.getElementById("gateMsg").textContent = "화면을 여는 중 오류: " + (e && e.message ? e.message : e);
-        });
-    }
+          fail("화면을 여는 중 오류: " + (e && e.message ? e.message : e));
+        }
+      }
+      if (!me) await initGate();
+    })();
   </script>
 </body>
 </html>
