@@ -520,8 +520,9 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">내 계정으로만 열립니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
-      <input type="email" id="gateEmail" placeholder="이메일" autocomplete="username">
+      <div class="hint">chairman87@gmail.com 계정. 비밀번호만 넣으면 됩니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
+      <!-- 나만 쓰는 화면이라 이메일은 고정해 두고 칸은 숨깁니다 -->
+      <input type="email" id="gateEmail" value="chairman87@gmail.com" autocomplete="username" hidden>
       <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
       <button id="gateBtn">들어가기</button>
       <div class="gate-msg" id="gateMsg"></div>
@@ -567,7 +568,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 16:10";
+    const BUILD = "2026-10-11 16:40";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
