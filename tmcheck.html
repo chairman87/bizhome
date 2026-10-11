@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표 점검</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610112041">
-<script src="common.js?v=202610112041"></script>
+<link rel="stylesheet" href="common.css?v=202610112140">
+<script src="common.js?v=202610112140"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -210,18 +210,25 @@ function opinionHtml(r){
   const lv = l => l === '높음' ? '🔴' : l === '주의' ? '🟠' : '⚪';
   return `<div class="op"><h4>📝 AI 변리사 검토 의견 ${o.confidence ? `<span class="conf">확신 ${esc(o.confidence)}</span>` : ''}</h4>
     ${o.conclusion ? `<div class="concl">${esc(o.conclusion)}</div>` : ''}
-    <div class="kv">${kv('요부(핵심)', o.yobu)}${kv('칭호(발음)', o.chingho)}${kv('외관(모양)', o.oegwan)}${kv('관념(뜻)', o.gwannyeom)}${kv('지정상품', o.goods)}</div>
+    <div class="kv">${kv('요부(핵심)', o.yobu)}${kv('다른 요부 가설', o.yobu_alt)}${kv('칭호(발음)', o.chingho)}${kv('외관(모양)', o.oegwan)}${kv('관념(뜻)', o.gwannyeom)}${kv('지정상품', o.goods)}</div>
     ${(o.risk_basis || []).length ? `<div><b style="font-size:13px">지금 실제로 소송을 걸 수 있는 등록상표권자</b> <span class="hint">(등록 상태만 · 우리가 질 가능성)</span><table class="rc">${o.risk_basis.map(x => `<tr class="${x.lose_chance === '높음' ? 'hit' : ''}"><td class="i">${esc(x.name)}</td><td>${esc(x.owner || '')}</td><td class="h">${esc(x.lose_chance || '')}</td><td>${esc(x.why || '')}</td></tr>`).join('')}</table></div>` : ''}
     ${(o.conflicts || []).length ? `<div><b style="font-size:13px">부딪히는 선행상표 (등록 가능성 쪽 걸림돌)</b><ul>${o.conflicts.map(c => `<li>${lv(c.level)} <b>${esc(c.name)}</b>${c.status ? ` (${esc(c.status)})` : ''} — ${esc(c.why || '')}</li>`).join('')}</ul></div>` : ''}
     ${(o.refusal_check || []).length ? `<details class="more" ${o.refusal_check.some(x => x.hit) ? 'open' : ''}><summary>거절 사유 점검표 (상표법 33조·34조) — 해당 ${o.refusal_check.filter(x => x.hit).length}건</summary><table class="rc">${o.refusal_check.map(x => `<tr class="${x.hit ? 'hit' : ''}"><td class="i">${esc(x.item)}</td><td class="h">${x.hit ? '해당' : '아님'}</td><td>${esc(x.note || '')}</td></tr>`).join('')}</table></details>` : ''}
+    ${(o.precedents || []).length ? `<div><b style="font-size:13px">인용한 심판 사례</b><table class="rc">${o.precedents.map(x => `<tr><td class="i">${esc(x.case || '')}</td><td>${esc(x.mark || '')}</td><td style="white-space:nowrap">${esc(x.kind || '')} → ${esc(x.result || '')}</td><td>${esc(x.meaning || '')}</td></tr>`).join('')}</table></div>` : ''}
     ${(o.advice || []).length ? `<div><b style="font-size:13px">권고</b><ul>${o.advice.map(a => `<li>💡 ${esc(a)}</li>`).join('')}</ul></div>` : ''}
   </div>`;
+}
+/* 심판 사례(특허심판원·법원) — 우리 이름·요부·닮은 선행상표가 걸린 사건 요약 */
+function trialsHtml(r){
+  const ts = r.trials || []; if (!ts.length) return `<details class="more"><summary>심판 사례 — 관련 사건 없음</summary><div class="hint">우리 이름·요부·닮은 선행상표로 특허심판원 사건을 찾았지만 없었습니다. <a href="${esc(r.trials_link || '#')}" target="_blank" rel="noopener">키프리스 심판 검색 ↗</a></div></details>`;
+  const res = x => x.result ? `<span class="lv ${/성립/.test(x.result) ? '동일' : /기각/.test(x.result) ? '조금' : '다름'}">${esc(x.result)}</span>` : '<span class="hint">결과 없음</span>';
+  return `<details class="more" open><summary>심판 사례 ${ts.length}건 — 거절결정불복은 '청구성립'=거절 뒤집힘, '기각'=거절 유지</summary><div style="overflow-x:auto"><table class="tm"><thead><tr><th>사건</th><th>상표</th><th>류</th><th>종류</th><th>결과</th><th>심결일</th><th>왜 찾았나</th></tr></thead><tbody>${ts.map(x => `<tr><td class="q">${esc(x.case)}</td><td class="nm">${esc(x.mark)}</td><td>${esc((x.cls || []).join('·'))}</td><td style="white-space:nowrap">${esc(x.kind)}</td><td>${res(x)}</td><td class="q">${esc(x.decided || '')}</td><td class="hint" style="font-size:11px">${esc(x.why || '')}</td></tr>`).join('')}</tbody></table></div><div class="hint">심결문 본문은 키프리스에서 사건을 열어야 보입니다. <a href="${esc(r.trials_link || '#')}" target="_blank" rel="noopener">키프리스 심판 검색 ↗</a></div></details>`;
 }
 /* AI 조사 계획(어떤 변형까지 찾아봤나) */
 function planHtml(r){
   const p = r.plan; if (!p) return '';
   const row = (k, arr) => (arr && arr.length) ? `<div class="row"><b>${k}</b>${arr.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : '';
-  return `<details class="more"><summary>조사 범위 — 요부·발음 변형·영문·관념까지 찾아본 이름들</summary><div class="plan" style="margin-top:6px">${row('요부 후보', p.yobu)}${row('식별력 약한 부분', p.weak_parts)}${row('발음 변형', p.phonetic)}${row('영문 표기', p.english)}${row('뜻이 같은 이름', p.concept)}${row('지정상품 낱말', p.goods_words)}${p.class_notes ? `<div class="srcnote">${esc(p.class_notes)}</div>` : ''}${(p.suspects || []).length ? `<div class="srcnote">미리 의심한 거절 사유: ${esc(p.suspects.join(' / '))}</div>` : ''}</div></details>`;
+  return `<details class="more"><summary>조사 범위 — 요부·발음 변형·영문·관념까지 찾아본 이름들</summary><div class="plan" style="margin-top:6px">${row('요부 후보', p.yobu)}${(p.yobu_candidates || []).length ? `<div class="row"><b>요부 가설</b>${p.yobu_candidates.map(c => `<span title="${esc(c.why || '')}">${esc(c.core)} — ${esc(c.why || '')}</span>`).join('')}</div>` : ''}${row('식별력 약한 부분', p.weak_parts)}${row('발음 변형', p.phonetic)}${row('영문 표기', p.english)}${row('뜻이 같은 이름', p.concept)}${row('지정상품 낱말', p.goods_words)}${p.class_notes ? `<div class="srcnote">${esc(p.class_notes)}</div>` : ''}${(p.suspects || []).length ? `<div class="srcnote">미리 의심한 거절 사유: ${esc(p.suspects.join(' / '))}</div>` : ''}</div></details>`;
 }
 
 /* 결과 보기 창 */
@@ -263,6 +270,7 @@ function openView(id){
       ${weak.length ? `<details class="more"><summary>같은 류지만 지정상품 유사군이 다른 상표 ${weak.length}건 (약한 충돌)</summary>${tmTable(weak)}</details>` : ''}
       ${other.length ? `<details class="more"><summary>다른 류의 닮은 상표 ${other.length}건 보기</summary>${tmTable(other)}</details>` : ''}
       ${planHtml(r)}
+      ${trialsHtml(r)}
       ${ctx.length ? `<details class="more"><summary>같은 류·지정상품에 있는 그 밖의 상표 ${ctx.length}건 (경쟁 상황 참고)</summary>${tmTable(ctx)}</details>` : ''}
       <details class="more"><summary>어떤 검색식을 돌렸나 (${(k.queries || []).length}개)</summary><div class="chips">${(k.queries || []).map(x => `<span title="${esc(x.error || '')}">${esc(x.expr)} → ${x.total == null ? '오류' : x.total + '건'}</span>`).join('')}</div>${k.token_total > 300 ? `<div class="hint">※ 이름 그대로 검색하면 ${fmtNum(k.token_total)}건이 나옵니다. 키프리스는 낱말 단위로 맞추므로 흔한 글자 조합은 많이 잡힙니다.</div>` : ''}</details></div>
     <div><div class="sec">네이버 가격비교 (이미 파는 상품) <span class="n">${(shop.items || []).length}건</span><a href="${esc(shop.more || '#')}" target="_blank" rel="noopener">네이버 쇼핑에서 직접 보기 ↗</a></div>
