@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표 점검</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610111803">
-<script src="common.js?v=202610111803"></script>
+<link rel="stylesheet" href="common.css?v=202610111922">
+<script src="common.js?v=202610111922"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -73,6 +73,25 @@
   .disc{font-size:12px;color:var(--fg3);border-top:1px dashed var(--line);padding-top:8px;line-height:1.6}
   .err{font-size:12px;color:#b91c1c}
   .q{font-size:11px;color:var(--fg3);white-space:nowrap}
+
+  .op{border:1px solid #c7d2fe;background:#eef2ff;border-radius:var(--radius);padding:12px 14px;display:grid;gap:8px}
+  .op h4{margin:0;font-size:14px;color:#3730a3;display:flex;gap:8px;align-items:center}
+  .op .conf{font-size:11px;border-radius:999px;padding:1px 8px;background:#e0e7ff;color:#3730a3;font-weight:600}
+  .op .kv{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;font-size:13px;line-height:1.6}
+  .op .kv b{color:#4338ca;font-weight:600}
+  .op .concl{font-size:14px;line-height:1.7;background:var(--bg);border-radius:6px;padding:8px 10px}
+  .op ul{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+  table.rc{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.rc td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.rc td.i{white-space:nowrap;font-weight:600;color:var(--fg2)}
+  table.rc tr.hit td{background:#fff1f2}
+  table.rc td.h{white-space:nowrap;font-weight:700}
+  table.rc tr.hit td.h{color:#b91c1c}
+  .plan{display:grid;gap:4px;font-size:12.5px}
+  .plan .row{display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+  .plan .row b{font-weight:600;color:var(--fg2);white-space:nowrap;font-size:12px}
+  .plan .row span{background:var(--bg2);border-radius:999px;padding:1px 8px}
+  .srcnote{font-size:11px;color:var(--fg3)}
 </style>
 </head>
 <body>
@@ -140,7 +159,7 @@ function cardHtml(t){
   return `<div class="card" data-id="${t.id}"><div class="main">
       <div class="nm">${esc(t.name)}${t.alias ? `<span class="al">${esc(t.alias)}</span>` : ''} ${isNew(t) ? '<span class="new">NEW</span>' : ''} ${stHtml(t)}</div>
       <div class="meta"><span>${clsText(t.classes)}${clsList(t.classes).length ? ` · ${clsList(t.classes).map(n => NICE[n] || '').filter(Boolean).join(' / ')}` : ''}</span><span>${esc(t.requested_by || '')}${t.via === 'telegram' ? ' (텔레그램)' : ''}</span><span>${fmtDateTime(t.created_at).slice(5)}</span>${t.goods ? `<span>지정상품: ${esc(t.goods)}</span>` : ''}</div>
-      ${done && top ? `<div class="sum">${top.level === '높음' ? '🔴' : top.level === '주의' ? '🟠' : '⚪'} ${esc(top.text)}</div>` : t.status === '실패' ? `<div class="sum err">${esc(t.error || '')}</div>` : t.memo ? `<div class="sum">${esc(t.memo)}</div>` : ''}
+      ${done && r.opinion && r.opinion.conclusion ? `<div class="sum">📝 ${esc(String(r.opinion.conclusion).slice(0, 180))}${String(r.opinion.conclusion).length > 180 ? '…' : ''}</div>` : done && top ? `<div class="sum">${top.level === '높음' ? '🔴' : top.level === '주의' ? '🟠' : '⚪'} ${esc(top.text)}</div>` : t.status === '실패' ? `<div class="sum err">${esc(t.error || '')}</div>` : t.memo ? `<div class="sum">${esc(t.memo)}</div>` : ''}
     </div>
     ${done ? `<div class="side"><div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${t.score}</div><div class="g">${gl}</div></div><div class="sc ${rc}"><div class="l">침해 위험</div><div class="v">${t.risk}</div><div class="g">${rl}</div></div></div>` : ''}
   </div>`;
@@ -184,6 +203,26 @@ function openNew(prefill){
   };
 }
 
+/* AI 변리사 의견서 */
+function opinionHtml(r){
+  const o = r.opinion; if (!o) return '';
+  const kv = (k, v) => v ? `<b>${k}</b><span>${esc(v)}</span>` : '';
+  const lv = l => l === '높음' ? '🔴' : l === '주의' ? '🟠' : '⚪';
+  return `<div class="op"><h4>📝 AI 변리사 검토 의견 ${o.confidence ? `<span class="conf">확신 ${esc(o.confidence)}</span>` : ''}</h4>
+    ${o.conclusion ? `<div class="concl">${esc(o.conclusion)}</div>` : ''}
+    <div class="kv">${kv('요부(핵심)', o.yobu)}${kv('칭호(발음)', o.chingho)}${kv('외관(모양)', o.oegwan)}${kv('관념(뜻)', o.gwannyeom)}${kv('지정상품', o.goods)}</div>
+    ${(o.conflicts || []).length ? `<div><b style="font-size:13px">부딪히는 선행상표</b><ul>${o.conflicts.map(c => `<li>${lv(c.level)} <b>${esc(c.name)}</b>${c.status ? ` (${esc(c.status)})` : ''} — ${esc(c.why || '')}</li>`).join('')}</ul></div>` : ''}
+    ${(o.refusal_check || []).length ? `<details class="more" ${o.refusal_check.some(x => x.hit) ? 'open' : ''}><summary>거절 사유 점검표 (상표법 33조·34조) — 해당 ${o.refusal_check.filter(x => x.hit).length}건</summary><table class="rc">${o.refusal_check.map(x => `<tr class="${x.hit ? 'hit' : ''}"><td class="i">${esc(x.item)}</td><td class="h">${x.hit ? '해당' : '아님'}</td><td>${esc(x.note || '')}</td></tr>`).join('')}</table></details>` : ''}
+    ${(o.advice || []).length ? `<div><b style="font-size:13px">권고</b><ul>${o.advice.map(a => `<li>💡 ${esc(a)}</li>`).join('')}</ul></div>` : ''}
+  </div>`;
+}
+/* AI 조사 계획(어떤 변형까지 찾아봤나) */
+function planHtml(r){
+  const p = r.plan; if (!p) return '';
+  const row = (k, arr) => (arr && arr.length) ? `<div class="row"><b>${k}</b>${arr.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : '';
+  return `<details class="more"><summary>조사 범위 — 요부·발음 변형·영문·관념까지 찾아본 이름들</summary><div class="plan" style="margin-top:6px">${row('요부 후보', p.yobu)}${row('식별력 약한 부분', p.weak_parts)}${row('발음 변형', p.phonetic)}${row('영문 표기', p.english)}${row('뜻이 같은 이름', p.concept)}${row('지정상품 낱말', p.goods_words)}${p.class_notes ? `<div class="srcnote">${esc(p.class_notes)}</div>` : ''}${(p.suspects || []).length ? `<div class="srcnote">미리 의심한 거절 사유: ${esc(p.suspects.join(' / '))}</div>` : ''}</div></details>`;
+}
+
 /* 결과 보기 창 */
 function openView(id){
   const t = T().find(x => x.id === id); if (!t) return;
@@ -201,11 +240,11 @@ function openView(id){
     bind(); return;
   }
   const [gc, gl] = grade(r.score), [rc, rl] = rgrade(r.risk);
-  const k = r.kipris || {}, same = k.same_class || [], other = k.other_class || [], ctx = k.goods_context || [];
+  const k = r.kipris || {}, same = k.same_class || [], other = k.other_class || [], ctx = k.goods_context || [], weak = k.weak_class || [];
   const nv = r.naver || {}, g = r.google || {}, shop = nv.shop || {};
   const own = s => /피에이치뷰티|식이해법|hbdam|lemonery|serimax|흑생마|레모너리|서리맥스|phbeauty/i.test(s || '');
-  const tmRow = h => `<tr class="${h.live ? '' : 'dead'} ${h.ours ? 'ours' : ''}"><td class="nm">${esc(h.name)}${h.ours ? ' <span class="hint">(우리)</span>' : ''}</td><td><span class="lv ${lvCls(h.sim)}">${lvText(h.sim)} ${Math.round(h.sim * 100)}%</span></td><td>${esc((h.cls || []).join('·'))}류</td><td><span class="tmst ${['등록', '출원', '공고'].includes(h.status) ? h.status : 'x'}">${esc(h.status)}</span></td><td>${esc(h.applicant || '')}</td><td class="q">${esc(h.app_date || '')}</td><td class="hint" style="font-size:11px">${esc((h.goods || []).slice(0, 3).join(', '))}</td></tr>`;
-  const tmTable = rows => `<div style="overflow-x:auto"><table class="tm"><thead><tr><th>상표</th><th>닮은 정도</th><th>류</th><th>상태</th><th>출원인</th><th>출원일</th><th>지정상품(일부)</th></tr></thead><tbody>${rows.map(tmRow).join('')}</tbody></table></div>`;
+  const tmRow = h => `<tr class="${h.live ? '' : 'dead'} ${h.ours ? 'ours' : ''}"><td class="nm">${esc(h.name)}${h.ours ? ' <span class="hint">(우리)</span>' : ''}</td><td><span class="lv ${lvCls(h.sim)}">${lvText(h.sim)} ${Math.round(h.sim * 100)}%</span></td><td>${esc((h.cls || []).join('·'))}류</td><td><span class="tmst ${['등록', '출원', '공고'].includes(h.status) ? h.status : 'x'}">${esc(h.status)}</span></td><td>${esc(h.applicant || '')}</td><td class="q">${esc(h.app_date || '')}</td><td class="q" title="지정상품 유사군코드">${esc((h.sc || []).slice(0, 3).join(' '))}</td><td class="hint" style="font-size:11px">${esc((h.goods || []).slice(0, 3).join(', '))}</td></tr>`;
+  const tmTable = rows => `<div style="overflow-x:auto"><table class="tm"><thead><tr><th>상표</th><th>닮은 정도</th><th>류</th><th>상태</th><th>출원인</th><th>출원일</th><th>유사군</th><th>지정상품(일부)</th></tr></thead><tbody>${rows.map(tmRow).join('')}</tbody></table></div>`;
   const webList = (rows, nm) => rows.length ? `<div class="web">${rows.map(x => `<div class="it ${!own(x.host + x.title + x.desc) && (x.title || '').replace(/\s/g, '').includes(nm) ? 'o' : ''}"><a href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a><span class="h">${esc(x.host || '')}</span><span class="d" title="${esc(x.desc || '')}">${esc(x.desc || '')}</span></div>`).join('')}</div>` : '<div class="hint">결과 없음</div>';
   const nm = String(t.name).replace(/\s/g, '');
   const blog = (nv.blog || []).filter(b => !(nv.web || []).some(w => w.url === b.url));
@@ -213,13 +252,16 @@ function openView(id){
     <div class="scores">
       <div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${r.score}<span style="font-size:14px">점</span></div><div class="g">${gl}</div></div>
       <div class="sc ${rc}"><div class="l">다른 상표 침해 위험</div><div class="v">${r.risk}<span style="font-size:14px">점</span></div><div class="g">${rl}</div></div>
-      <div class="hint" style="align-self:center;line-height:1.6">${clsList(t.classes).map(n => `${n}류 ${NICE[n] || ''}`).join('<br>') || '전체 류 기준'}<br>요청 ${esc(t.requested_by || '')} · 점검 ${fmtDateTime(t.finished_at || t.updated_at)} · ${r.took_sec || ''}초</div>
+      <div class="hint" style="align-self:center;line-height:1.6">${clsList(t.classes).map(n => `${n}류 ${NICE[n] || ''}`).join('<br>') || '전체 류 기준'}${(r.sc || []).length ? `<br>지정상품 유사군(추정): ${r.sc.join(', ')}` : ''}<br>요청 ${esc(t.requested_by || '')} · 점검 ${fmtDateTime(t.finished_at || t.updated_at)} · ${r.took_sec || ''}초<br>${r.opinion ? '점수 = AI 변리사 검토 기준' : '점수 = 자동 규칙 기준 (AI 검토 없음)'}${(r.ai_errors || []).length ? ` · <span class="err">AI 검토 못 함: ${esc(r.ai_errors.join(' / '))}</span>` : ''}</div>
     </div>
-    <div><div class="sec">걱정되는 점</div>${(r.concerns || []).map(c => `<div class="con ${c.level}"><b>${c.level === '높음' ? '🔴 높음' : c.level === '주의' ? '🟠 주의' : '⚪ 참고'}</b>${esc(c.text)}</div>`).join('')}
+    ${opinionHtml(r)}
+    <div><div class="sec">자동 점검에서 걸린 점 <span class="n">규칙으로 찾은 것</span></div>${(r.concerns || []).map(c => `<div class="con ${c.level}"><b>${c.level === '높음' ? '🔴 높음' : c.level === '주의' ? '🟠 주의' : '⚪ 참고'}</b>${esc(c.text)}</div>`).join('')}
       ${(r.notes || []).length ? `<div class="hint" style="line-height:1.6">${r.notes.map(n => '· ' + esc(n)).join('<br>')}</div>` : ''}</div>
     <div><div class="sec">키프리스 — 같은 류의 닮은 상표 <span class="n">${same.length}건 (닮은 정도 50% 이상)</span><a href="${esc(k.link || '#')}" target="_blank" rel="noopener">키프리스 열기 ↗</a></div>
       ${same.length ? tmTable(same) : '<div class="hint">같은 류에서 닮은 상표가 검색되지 않았습니다.</div>'}
+      ${weak.length ? `<details class="more"><summary>같은 류지만 지정상품 유사군이 다른 상표 ${weak.length}건 (약한 충돌)</summary>${tmTable(weak)}</details>` : ''}
       ${other.length ? `<details class="more"><summary>다른 류의 닮은 상표 ${other.length}건 보기</summary>${tmTable(other)}</details>` : ''}
+      ${planHtml(r)}
       ${ctx.length ? `<details class="more"><summary>같은 류·지정상품에 있는 그 밖의 상표 ${ctx.length}건 (경쟁 상황 참고)</summary>${tmTable(ctx)}</details>` : ''}
       <details class="more"><summary>어떤 검색식을 돌렸나 (${(k.queries || []).length}개)</summary><div class="chips">${(k.queries || []).map(x => `<span title="${esc(x.error || '')}">${esc(x.expr)} → ${x.total == null ? '오류' : x.total + '건'}</span>`).join('')}</div>${k.token_total > 300 ? `<div class="hint">※ 이름 그대로 검색하면 ${fmtNum(k.token_total)}건이 나옵니다. 키프리스는 낱말 단위로 맞추므로 흔한 글자 조합은 많이 잡힙니다.</div>` : ''}</details></div>
     <div><div class="sec">네이버 가격비교 (이미 파는 상품) <span class="n">${(shop.items || []).length}건</span><a href="${esc(shop.more || '#')}" target="_blank" rel="noopener">네이버 쇼핑에서 직접 보기 ↗</a></div>
@@ -227,7 +269,7 @@ function openView(id){
       ${(shop.malls || []).length ? `<div class="hint" style="margin-top:4px">판매처: ${shop.malls.map(m => own(m) ? `<b>${esc(m)}(우리)</b>` : esc(m)).join(', ')}</div>` : ''}</div>
     <div><div class="sec">네이버 웹·블로그 <span class="n">${(nv.web || []).length + blog.length}건</span><a href="${esc(nv.link || '#')}" target="_blank" rel="noopener">네이버에서 보기 ↗</a></div>${webList([...(nv.web || []), ...blog], nm)}${(nv.errors || []).length ? `<div class="err">${nv.errors.map(esc).join(' / ')}</div>` : ''}</div>
     <div><div class="sec">구글 <span class="n">${g.stats ? esc(g.stats) : ''}</span><a href="${esc(r.google_link || '#')}" target="_blank" rel="noopener">구글에서 보기 ↗</a></div>${g.error ? `<div class="err">${esc(g.error)}</div>` : webList(g.items || [], nm)}</div>
-    <div class="disc">빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 점수는 "같은 류에 같거나 닮은 상표가 살아 있는가", "이름이 흔한 낱말인가", "남이 이미 쓰는가"를 규칙으로 더하고 뺀 참고 값입니다. 도형(로고)·발음이 다른 영문 표기·지정상품 유사군까지 본 것은 아니므로, 출원 전에는 변리사 검토를 받으세요.</div>
+    <div class="disc">빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 조사는 키프리스에서 이름 그대로·글자 하나 바꾼 것·붙여 쓴 것·발음 변형·영문·뜻이 같은 이름을 류와 지정상품 유사군 조건으로 찾고, 인터넷에서 이미 쓰는 곳을 봅니다. 점수는 AI 변리사 검토(요부·칭호·외관·관념·지정상품·거절사유 점검)가 있으면 그 기준, 없으면 자동 규칙 기준입니다. 도형(로고) 상표와 심사관 내부 자료는 못 보므로 출원 전에는 변리사 확인을 받으세요.</div>
   </div>${foot}`, { wide: true, cls: 'xl' });
   bind();
 }
