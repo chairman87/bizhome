@@ -247,10 +247,16 @@
     .topbar-left { display: flex; align-items: center; gap: 8px; position: relative; }
 
     /* ── 위쪽 탭 띠: 모든 탭 이름이 늘어서고, 누른 탭만 아래에 펼쳐집니다 ── */
-    .tab-strip {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-      margin: 0 0 12px;
+    .tab-strip { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+    .strip-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .strip-label {
+      flex-shrink: 0; min-width: 58px; font-size: 12px; font-weight: bold; color: #b5a494;
+      user-select: none;
     }
+    .strip-group.memo .tab-chip.on { background: #6b8e5a; border-color: #6b8e5a; }   /* 메모장형은 초록 */
+    .strip-group.memo .tab-chip.on:hover { background: #5a7a4a; }
+    .strip-group.memo .tab-chip:hover { border-color: #6b8e5a; color: #6b8e5a; }
+    .strip-group.memo .tab-chip.on:hover { color: #fff; }
     .tab-chip {
       display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
       padding: 5px 12px; font-size: 13px; font-family: inherit;
@@ -617,7 +623,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 18:40";
+    const BUILD = "2026-10-11 19:00";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1597,64 +1603,76 @@
       document.body.style.setProperty("--strip", (strip.hidden ? 0 : strip.offsetHeight + 12) + "px");
     }
 
-    let CHIP_DRAG = null;   // 끌고 있는 띠 항목의 탭 id
+    // 띠와 카드에 보이는 순서: 주제형 먼저, 메모장형 다음 (각각은 탭 목록 순서대로)
+    function stripOrder(boards) {
+      return boards.filter(b => b.kind !== "memo").concat(boards.filter(b => b.kind === "memo"));
+    }
+
+    let CHIP_DRAG = null;   // 끌고 있는 띠 항목의 탭 (id 와 종류)
     function drawStrip(boards, ids) {
       const strip = document.getElementById("tabStrip");
       strip.innerHTML = "";
       strip.hidden = false;
 
-      boards.forEach(b => {
-        const on = ids.includes(b.id);
-        const chip = document.createElement("button");
-        chip.className = "tab-chip" + (on ? " on" : "");
-        chip.dataset.id = b.id;
-        chip.title = on ? "누르면 접기" : "누르면 펼치기 (한 번에 " + MAX_OPEN + "개까지)";
-        const ic = document.createElement("span");
-        ic.textContent = b.kind === "memo" ? "📝" : "📋";
-        const t = document.createElement("span");
-        t.className = "t";
-        t.textContent = b.title || "제목 없음";
-        chip.appendChild(ic);
-        chip.appendChild(t);
-        chip.addEventListener("click", () => toggleBoard(b.id));
+      const groups = [
+        { kind: "topic", label: "📋 주제", list: boards.filter(b => b.kind !== "memo") },
+        { kind: "memo",  label: "📝 메모", list: boards.filter(b => b.kind === "memo") }
+      ];
+      groups.forEach(g => {
+        if (!g.list.length) return;
+        const row = document.createElement("div");
+        row.className = "strip-group " + g.kind;
+        const label = document.createElement("span");
+        label.className = "strip-label";
+        label.textContent = g.label;
+        row.appendChild(label);
 
-        // 끌어서 탭 순서 바꾸기
-        chip.draggable = true;
-        chip.addEventListener("dragstart", (e) => {
-          CHIP_DRAG = b.id;
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", "");
-          chip.classList.add("dragging");
+        g.list.forEach(b => {
+          const on = ids.includes(b.id);
+          const chip = document.createElement("button");
+          chip.className = "tab-chip" + (on ? " on" : "");
+          chip.dataset.id = b.id;
+          chip.title = on ? "누르면 접기" : "누르면 펼치기 (한 번에 " + MAX_OPEN + "개까지) · 끌어서 순서 바꾸기";
+          const t = document.createElement("span");
+          t.className = "t";
+          t.textContent = b.title || "제목 없음";
+          chip.appendChild(t);
+          chip.addEventListener("click", () => toggleBoard(b.id));
+
+          // 끌어서 순서 바꾸기 (같은 줄 안에서만)
+          chip.draggable = true;
+          chip.addEventListener("dragstart", (e) => {
+            CHIP_DRAG = { id: b.id, kind: g.kind };
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", "");
+            chip.classList.add("dragging");
+          });
+          chip.addEventListener("dragend", () => {
+            CHIP_DRAG = null;
+            strip.querySelectorAll(".dragging, .drop-before, .drop-after")
+              .forEach(c => c.classList.remove("dragging", "drop-before", "drop-after"));
+          });
+          chip.addEventListener("dragover", (e) => {
+            if (!CHIP_DRAG || CHIP_DRAG.id === b.id || CHIP_DRAG.kind !== g.kind) return;
+            e.preventDefault();
+            const r = chip.getBoundingClientRect();
+            const after = (e.clientX - r.left) > r.width / 2;
+            chip.classList.toggle("drop-after", after);
+            chip.classList.toggle("drop-before", !after);
+          });
+          chip.addEventListener("dragleave", () => chip.classList.remove("drop-before", "drop-after"));
+          chip.addEventListener("drop", (e) => {
+            if (!CHIP_DRAG || CHIP_DRAG.kind !== g.kind) return;
+            e.preventDefault();
+            const after = chip.classList.contains("drop-after");
+            chip.classList.remove("drop-before", "drop-after");
+            const src = CHIP_DRAG.id; CHIP_DRAG = null;
+            moveBoard(src, b.id, after);
+          });
+          row.appendChild(chip);
         });
-        chip.addEventListener("dragend", () => {
-          CHIP_DRAG = null;
-          strip.querySelectorAll(".dragging, .drop-before, .drop-after")
-            .forEach(c => c.classList.remove("dragging", "drop-before", "drop-after"));
-        });
-        chip.addEventListener("dragover", (e) => {
-          if (!CHIP_DRAG || CHIP_DRAG === b.id) return;
-          e.preventDefault();
-          const r = chip.getBoundingClientRect();
-          const after = (e.clientX - r.left) > r.width / 2;
-          chip.classList.toggle("drop-after", after);
-          chip.classList.toggle("drop-before", !after);
-        });
-        chip.addEventListener("dragleave", () => chip.classList.remove("drop-before", "drop-after"));
-        chip.addEventListener("drop", (e) => {
-          if (!CHIP_DRAG) return;
-          e.preventDefault();
-          const after = chip.classList.contains("drop-after");
-          chip.classList.remove("drop-before", "drop-after");
-          const src = CHIP_DRAG; CHIP_DRAG = null;
-          moveBoard(src, b.id, after);
-        });
-        strip.appendChild(chip);
+        strip.appendChild(row);
       });
-
-      const hint = document.createElement("span");
-      hint.className = "strip-hint";
-      hint.textContent = "누르면 펼치고 다시 누르면 접습니다 · 한 번에 " + MAX_OPEN + "개 · 끌어서 순서 바꾸기";
-      strip.appendChild(hint);
       updateStripVar();
     }
 
@@ -1667,7 +1685,7 @@
       const ids = openIds(boards);
       drawStrip(boards, ids);
 
-      const shown = boards.filter(b => ids.includes(b.id));
+      const shown = stripOrder(boards).filter(b => ids.includes(b.id));
       shown.forEach(board => {
         const el = buildCard(board, layout);
         if (board.kind === "memo") createMemo(board, el);
