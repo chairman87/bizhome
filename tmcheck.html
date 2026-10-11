@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상표 점검</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610111803">
+<script src="common.js?v=202610111803"></script>
+<style>
+  .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
+  .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:1px}
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .chip-f{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 13px;font-size:13px;cursor:pointer;color:var(--fg2)}
+  .chip-f.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;font-weight:600}
+  .card{display:flex;gap:14px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;cursor:pointer}
+  .card:hover{background:var(--bg2)}
+  .card .main{flex:1;min-width:0}
+  .card .nm{font-size:16px;font-weight:700}
+  .card .nm .al{font-weight:400;color:var(--fg3);font-size:13px;margin-left:6px}
+  .card .meta{font-size:12px;color:var(--fg3);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap}
+  .card .sum{font-size:13px;color:var(--fg2);margin-top:6px;line-height:1.5}
+  .card .side{flex:none;display:flex;gap:8px;align-items:center}
+  .sc{min-width:86px;text-align:center;border-radius:10px;padding:6px 8px}
+  .sc .l{font-size:11px;opacity:.85}
+  .sc .v{font-size:20px;font-weight:800;line-height:1.1}
+  .sc .g{font-size:11px;font-weight:600}
+  .sc.hi{background:#dcfce7;color:#166534}.sc.mid{background:#fef3c7;color:#92400e}.sc.lo{background:#fee2e2;color:#991b1b}
+  .sc.r-hi{background:#fee2e2;color:#991b1b}.sc.r-mid{background:#fef3c7;color:#92400e}.sc.r-lo{background:#dcfce7;color:#166534}
+  .st{font-size:11px;border-radius:4px;padding:2px 8px;font-weight:600;white-space:nowrap}
+  .st.w{background:#fffbea;color:#92400e;border:1px solid #e0c25a}.st.p{background:#dbeafe;color:#1e40af}.st.d{background:#e5e7eb;color:#374151}.st.f{background:#fee2e2;color:#b91c1c}
+  .new{font-size:11px;background:#dc2626;color:#fff;border-radius:999px;padding:1px 7px;font-weight:700}
+  .cls{display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:8px}
+  .cls label{display:flex;gap:5px;align-items:flex-start;font-size:12px;width:calc(50% - 3px);line-height:1.35;cursor:pointer}
+  .cls label.on{font-weight:600;color:#1d4ed8}
+  @media(max-width:640px){.cls label{width:100%}}
+  .quick{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+  .quick button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer}
+  .quick button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+  .f2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.f2{grid-template-columns:1fr}}
+  .view{display:grid;gap:14px}
+  .scores{display:flex;gap:10px;flex-wrap:wrap}
+  .scores .sc{min-width:150px;padding:10px 12px}
+  .scores .sc .v{font-size:28px}
+  .con{border-left:4px solid var(--line2);background:var(--bg2);border-radius:6px;padding:8px 12px;font-size:13px;line-height:1.6;margin-bottom:6px}
+  .con.높음{border-color:#dc2626;background:#fff5f5}.con.주의{border-color:#f59e0b;background:#fffbeb}.con.참고{border-color:#94a3b8}
+  .con b{margin-right:6px}
+  .sec{font-size:13px;font-weight:700;color:var(--fg2);margin-top:4px;border-bottom:1px solid var(--line);padding-bottom:4px;display:flex;align-items:center;gap:8px}
+  .sec .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .sec a{font-size:12px;font-weight:400;margin-left:auto}
+  table.tm{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.tm th{background:var(--bg2);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;font-weight:600;color:var(--fg2)}
+  table.tm td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.tm td.nm{font-weight:600}
+  table.tm tr.dead td{opacity:.55}
+  table.tm tr.ours td{background:#f0fdf4}
+  .lv{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap;font-weight:600}
+  .lv.동일{background:#fee2e2;color:#991b1b}.lv.매우{background:#ffedd5;color:#9a3412}.lv.닮음{background:#fef3c7;color:#92400e}.lv.조금{background:#f1f5f9;color:#475569}.lv.다름{background:#f1f5f9;color:#94a3b8}
+  .tmst{font-size:11px;border-radius:999px;padding:1px 7px;font-weight:700;white-space:nowrap}
+  .tmst.등록{background:#dcfce7;color:#166534}.tmst.출원{background:#dbeafe;color:#1e40af}.tmst.공고{background:#ede9fe;color:#5b21b6}.tmst.x{background:#f1f5f9;color:#64748b}
+  .web{display:grid;gap:4px;font-size:13px}
+  .web .it{display:flex;gap:8px;align-items:baseline;min-width:0}
+  .web .it a{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+  .web .it .h{font-size:11px;color:var(--fg3);white-space:nowrap}
+  .web .it .d{font-size:12px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .web .it.o a{color:#b91c1c}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chips span{font-size:12px;background:var(--bg2);border-radius:999px;padding:2px 9px}
+  .chips span.hit{background:#fee2e2;color:#991b1b}
+  details.more summary{cursor:pointer;font-size:12px;color:var(--fg3);margin-top:4px}
+  .disc{font-size:12px;color:var(--fg3);border-top:1px dashed var(--line);padding-top:8px;line-height:1.6}
+  .err{font-size:12px;color:#b91c1c}
+  .q{font-size:11px;color:var(--fg3);white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   상표 점검 — 새 이름(상표)을 몇 류에 낼지 적어 요청하면, 대표 PC 의 로봇(클로드코드\TM-CHECK\watcher.py)이
+   키프리스(특허청 상표 검색)·네이버·구글을 읽어 등록 가능성·침해 위험 점수와 "걱정되는 점"을 적어 준다 (1~3분).
+   · 이 화면은 tm_checks 에 요청 한 줄을 넣고 결과를 보여 주기만 한다. 조회는 전부 대표 PC 에서.
+   · 텔레그램 봇(@kph_sales_bot)에 "상표 29류 흑비담" 이라고 적어도 같은 요청이 들어온다.
+   · 점수는 규칙으로 계산한 참고 값이다(변리사 의견이 아님). 칸 설명은 sql-tm-checks.sql 참고
+================================================================ */
+const NICE = {1:'화학제품',2:'페인트·염료',3:'화장품·세제·치약',4:'연료·양초',5:'약제·건강기능식품·영양보충제',6:'금속재료',7:'기계',8:'수공구',9:'전자기기·소프트웨어',10:'의료기기',
+  11:'조명·가열·위생설비',12:'차량',13:'화기·폭약',14:'귀금속·시계',15:'악기',16:'종이·문구·인쇄물',17:'고무·플라스틱',18:'가방·가죽제품',19:'비금속 건축재료',20:'가구',
+  21:'주방용품·유리',22:'로프·텐트',23:'실',24:'직물·침구',25:'의류·신발·모자',26:'레이스·단추',27:'카펫·벽지',28:'완구·운동용품',29:'가공식품·건강보조식품(진액·즙 등)',30:'차·커피·과자·조미료',
+  31:'농산물·사료',32:'음료·맥주',33:'주류',34:'담배',35:'광고·도소매업·온라인판매',36:'금융·보험·부동산',37:'건설·수리',38:'통신',39:'운송·여행',40:'재료가공',
+  41:'교육·오락·스포츠',42:'IT·과학기술 서비스',43:'음식점·숙박',44:'의료·미용·건강관리 서비스',45:'법률·보안·개인서비스'};
+const QUICK = [[29,'29 건강보조식품(흑염소 진액 등)'],[5,'5 건강기능식품·영양제'],[3,'3 화장품'],[30,'30 차·과자'],[32,'32 음료'],[35,'35 온라인 판매·광고'],[44,'44 미용·건강관리 서비스']];
+let view = 'all';      // all / mine
+let q = '';
+
+const T = () => (DATA.tm_checks || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const watchOn = () => { const w = (DATA.tm_check_sync || []).find(r => r.id === 'watch'); return !!(w && Date.now() - new Date(w.synced_at) < 3 * 60000); };
+const clsList = s => String(s || '').split(/[^0-9]+/).filter(Boolean).map(Number).filter(n => n >= 1 && n <= 45);
+const clsText = s => { const l = clsList(s); return l.length ? l.map(n => `${n}류`).join('·') : '류 미지정'; };
+const grade = s => s >= 70 ? ['hi', '높음'] : s >= 45 ? ['mid', '보통'] : ['lo', '낮음'];
+const rgrade = r => r >= 60 ? ['r-hi', '높음'] : r >= 35 ? ['r-mid', '보통'] : ['r-lo', '낮음'];
+const stHtml = t => t.status === '완료' ? '' : t.status === '진행중' ? '<span class="st p">⏳ 점검 중…</span>' : t.status === '실패' ? `<span class="st f" title="${esc(t.error || '')}">실패</span>` : '<span class="st w">대기</span>';
+const isNew = t => t.status === '완료' && !t.seen && t.requested_by === me;
+const lvCls = s => s >= 0.999 ? '동일' : s >= 0.8 ? '매우' : s >= 0.65 ? '닮음' : s >= 0.5 ? '조금' : '다름';
+const lvText = s => s >= 0.999 ? '동일' : s >= 0.8 ? '매우 닮음' : s >= 0.65 ? '닮음' : s >= 0.5 ? '조금 닮음' : '다름';
+
+function normalize(table, d){ return { ...d, seen: !!d.seen, result: d.result && typeof d.result === 'object' ? d.result : null }; }
+
+function render(){
+  const mine = T().filter(t => t.requested_by === me);
+  const tabs = [{ key: 'all', label: '전체', badge: T().filter(isNew).length || '' }, { key: 'mine', label: '내 요청', badge: mine.filter(isNew).length || '' }];
+  const ql = q.trim().toLowerCase();
+  const list = (view === 'mine' ? mine : T()).filter(t => !ql || [t.name, t.alias, t.classes, t.requested_by, t.goods, t.memo].some(v => (v || '').toLowerCase().includes(ql)));
+  $('#app').innerHTML = headerHtml({ icon: '🔎', title: '상표 점검', tabs, active: view, newLabel: '상표 점검 요청' }) + `<main class="wrap" style="max-width:1000px">
+    ${!DATA.tm_checks ? `<div class="empty">상표 점검 저장 표가 아직 없습니다.${isAdmin() ? ' sql-tm-checks.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
+    ${syncHtml()}
+    <div class="actions"><input type="search" id="fq" placeholder="상표명·요청자 검색" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:7px 10px;min-width:220px"><span class="count">${list.length}건</span></div>
+    ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${ql ? '검색 결과가 없습니다.' : '아직 점검 요청이 없습니다. 오른쪽 위 <b>+ 상표 점검 요청</b>을 누르세요.'}</div>`}`}
+  </main>`;
+  bindHeader(k => { view = k; render(); }, openNew, m => `요청 ${T().filter(t => t.requested_by === m.name).length}건`);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  document.querySelectorAll('.card[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
+}
+
+function syncHtml(){
+  const on = watchOn();
+  return `<div class="info ${on ? '' : 'old'}">${on ? '<span class="dot" style="background:#16a34a"></span><b>로봇 켜짐</b> · 요청하면 대표 PC 가 바로 키프리스·네이버·구글을 읽습니다 (1~3분).' : '<span class="dot" style="background:#dc2626"></span><b>로봇 꺼짐</b> · 요청은 저장되고, 대표 PC 의 로봇이 켜지면 처리됩니다.'}
+    &nbsp;텔레그램 봇에 <b>상표 29류 흑비담</b> 처럼 적어도 됩니다. 점수는 규칙으로 계산한 참고 값이며 변리사 의견이 아닙니다.</div>`;
+}
+
+function cardHtml(t){
+  const r = t.result;
+  const done = t.status === '완료' && r;
+  const [gc, gl] = grade(t.score || 0), [rc, rl] = rgrade(t.risk || 0);
+  const top = done ? (r.concerns || [])[0] : null;
+  return `<div class="card" data-id="${t.id}"><div class="main">
+      <div class="nm">${esc(t.name)}${t.alias ? `<span class="al">${esc(t.alias)}</span>` : ''} ${isNew(t) ? '<span class="new">NEW</span>' : ''} ${stHtml(t)}</div>
+      <div class="meta"><span>${clsText(t.classes)}${clsList(t.classes).length ? ` · ${clsList(t.classes).map(n => NICE[n] || '').filter(Boolean).join(' / ')}` : ''}</span><span>${esc(t.requested_by || '')}${t.via === 'telegram' ? ' (텔레그램)' : ''}</span><span>${fmtDateTime(t.created_at).slice(5)}</span>${t.goods ? `<span>지정상품: ${esc(t.goods)}</span>` : ''}</div>
+      ${done && top ? `<div class="sum">${top.level === '높음' ? '🔴' : top.level === '주의' ? '🟠' : '⚪'} ${esc(top.text)}</div>` : t.status === '실패' ? `<div class="sum err">${esc(t.error || '')}</div>` : t.memo ? `<div class="sum">${esc(t.memo)}</div>` : ''}
+    </div>
+    ${done ? `<div class="side"><div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${t.score}</div><div class="g">${gl}</div></div><div class="sc ${rc}"><div class="l">침해 위험</div><div class="v">${t.risk}</div><div class="g">${rl}</div></div></div>` : ''}
+  </div>`;
+}
+
+/* 요청 창 */
+function openNew(prefill){
+  const d = prefill || { name: '', alias: '', classes: '', goods: '', memo: '' };
+  let picked = new Set(clsList(d.classes));
+  openModal(`${modalHead('상표 점검 요청')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>상표명 (한글) *</label><input id="nName" value="${esc(d.name)}" placeholder="예: 흑비담" maxlength="60"></div>
+        <div class="f"><label>영문·다른 표기 (있으면)</label><input id="nAlias" value="${esc(d.alias || '')}" placeholder="예: HEUKBIDAM" maxlength="60"></div>
+      </div>
+      <div class="f"><label>상품류 (여러 개 가능) — 자주 쓰는 것</label>
+        <div class="quick">${QUICK.map(([n, l]) => `<button type="button" data-q="${n}" class="${picked.has(n) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+        <details ${picked.size && [...picked].some(n => !QUICK.some(x => x[0] === n)) ? 'open' : ''}><summary class="hint" style="cursor:pointer">45개 류 전체 보기</summary>
+        <div class="cls" style="margin-top:6px">${Object.keys(NICE).map(n => `<label class="${picked.has(+n) ? 'on' : ''}"><input type="checkbox" data-c="${n}" ${picked.has(+n) ? 'checked' : ''}> <span>${n}류 · ${esc(NICE[n])}</span></label>`).join('')}</div></details>
+        <div class="hint" id="nPicked" style="margin-top:4px"></div></div>
+      <div class="f"><label>지정상품·용도 (선택, 쉼표로 여러 개)</label><input id="nGoods" value="${esc(d.goods || '')}" placeholder="예: 흑염소 진액, 비타민 스틱"></div>
+      <div class="f"><label>메모 (선택)</label><input id="nMemo" value="${esc(d.memo || '')}" placeholder="예: 신제품 후보 이름 3개 중 하나"></div>
+      <div class="hint">요청하면 대표 PC 의 로봇이 키프리스(특허청 상표 검색)에서 같은 이름·닮은 이름을 찾고, 네이버·구글에서 이미 쓰는 곳이 있는지 봅니다. 류를 비우면 전체 류 기준으로 봅니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="nSave">점검 요청</button></div>`);
+  const sync = () => {
+    document.querySelectorAll('[data-q]').forEach(b => b.classList.toggle('on', picked.has(+b.dataset.q)));
+    document.querySelectorAll('[data-c]').forEach(c => { c.checked = picked.has(+c.dataset.c); c.closest('label').classList.toggle('on', c.checked); });
+    $('#nPicked').textContent = picked.size ? '고른 류: ' + [...picked].sort((a, b) => a - b).map(n => `${n}류(${NICE[n]})`).join(', ') : '류를 고르지 않으면 전체 류 기준으로 봅니다.';
+  };
+  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const n = +b.dataset.q; picked.has(n) ? picked.delete(n) : picked.add(n); sync(); });
+  document.querySelectorAll('[data-c]').forEach(c => c.onchange = () => { const n = +c.dataset.c; c.checked ? picked.add(n) : picked.delete(n); sync(); });
+  sync(); $('#nName').focus();
+  $('#nSave').onclick = async () => {
+    const name = $('#nName').value.trim();
+    if (!name) { $('#nName').focus(); toast('상표명을 입력하세요', true); return; }
+    const row = { id: uid(), name, alias: $('#nAlias').value.trim() || null, classes: [...picked].sort((a, b) => a - b).join(',') || null, goods: $('#nGoods').value.trim() || null,
+      memo: $('#nMemo').value.trim() || null, requested_by: me, via: 'web', status: '대기', seen: false, created_at: nowIso() };
+    closeModal(); await saveRow('tm_checks', row);
+    toast(watchOn() ? '요청했습니다 · 1~3분 안에 결과가 나옵니다 (텔레그램으로도 갑니다)' : '요청을 저장했습니다 · 대표 PC 의 로봇이 켜지면 처리됩니다');
+  };
+}
+
+/* 결과 보기 창 */
+function openView(id){
+  const t = T().find(x => x.id === id); if (!t) return;
+  if (t.status === '완료' && !t.seen && t.requested_by === me) saveRow('tm_checks', { ...t, seen: true });
+  const r = t.result;
+  const head = `${modalHead(`🔎 ${esc(t.name)}${t.alias ? ` <span class="hint">${esc(t.alias)}</span>` : ''} <span class="hint" style="font-weight:400">${clsText(t.classes)}</span>`)}`;
+  const foot = `<div class="mf">${(t.requested_by === me || isAdmin()) ? '<button class="btn danger left" id="vDel">삭제</button>' : ''}<button class="btn" id="vAgain">같은 조건으로 다시 점검</button><button class="btn" data-close>닫기</button></div>`;
+  const bind = () => {
+    $('#vAgain').onclick = () => { closeModal(); openNew({ name: t.name, alias: t.alias, classes: t.classes, goods: t.goods, memo: t.memo }); };
+    const del = $('#vDel'); if (del) del.onclick = async () => { if (!confirm(`"${t.name}" 점검 기록을 삭제할까요?`)) return; closeModal(); await removeRow('tm_checks', t.id); toast('삭제했습니다'); };
+  };
+  if (!r) {
+    openModal(`${head}<div class="mb view"><div class="info ${t.status === '실패' ? 'old' : ''}">${t.status === '실패' ? `❌ 점검 실패: ${esc(t.error || '')}` : t.status === '진행중' ? '⏳ 대표 PC 가 지금 키프리스·네이버·구글을 읽고 있습니다. 끝나면 이 창이 저절로 바뀝니다.' : watchOn() ? '⏳ 곧 시작합니다.' : '대기 중 · 대표 PC 의 로봇이 켜지면 처리됩니다.'}</div>
+      <div class="kv hint">요청: ${esc(t.requested_by || '')} · ${fmtDateTime(t.created_at)}${t.goods ? ` · 지정상품 ${esc(t.goods)}` : ''}${t.memo ? ` · ${esc(t.memo)}` : ''}</div></div>${foot}`, { wide: true });
+    bind(); return;
+  }
+  const [gc, gl] = grade(r.score), [rc, rl] = rgrade(r.risk);
+  const k = r.kipris || {}, same = k.same_class || [], other = k.other_class || [], ctx = k.goods_context || [];
+  const nv = r.naver || {}, g = r.google || {}, shop = nv.shop || {};
+  const own = s => /피에이치뷰티|식이해법|hbdam|lemonery|serimax|흑생마|레모너리|서리맥스|phbeauty/i.test(s || '');
+  const tmRow = h => `<tr class="${h.live ? '' : 'dead'} ${h.ours ? 'ours' : ''}"><td class="nm">${esc(h.name)}${h.ours ? ' <span class="hint">(우리)</span>' : ''}</td><td><span class="lv ${lvCls(h.sim)}">${lvText(h.sim)} ${Math.round(h.sim * 100)}%</span></td><td>${esc((h.cls || []).join('·'))}류</td><td><span class="tmst ${['등록', '출원', '공고'].includes(h.status) ? h.status : 'x'}">${esc(h.status)}</span></td><td>${esc(h.applicant || '')}</td><td class="q">${esc(h.app_date || '')}</td><td class="hint" style="font-size:11px">${esc((h.goods || []).slice(0, 3).join(', '))}</td></tr>`;
+  const tmTable = rows => `<div style="overflow-x:auto"><table class="tm"><thead><tr><th>상표</th><th>닮은 정도</th><th>류</th><th>상태</th><th>출원인</th><th>출원일</th><th>지정상품(일부)</th></tr></thead><tbody>${rows.map(tmRow).join('')}</tbody></table></div>`;
+  const webList = (rows, nm) => rows.length ? `<div class="web">${rows.map(x => `<div class="it ${!own(x.host + x.title + x.desc) && (x.title || '').replace(/\s/g, '').includes(nm) ? 'o' : ''}"><a href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a><span class="h">${esc(x.host || '')}</span><span class="d" title="${esc(x.desc || '')}">${esc(x.desc || '')}</span></div>`).join('')}</div>` : '<div class="hint">결과 없음</div>';
+  const nm = String(t.name).replace(/\s/g, '');
+  const blog = (nv.blog || []).filter(b => !(nv.web || []).some(w => w.url === b.url));
+  openModal(`${head}<div class="mb view">
+    <div class="scores">
+      <div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${r.score}<span style="font-size:14px">점</span></div><div class="g">${gl}</div></div>
+      <div class="sc ${rc}"><div class="l">다른 상표 침해 위험</div><div class="v">${r.risk}<span style="font-size:14px">점</span></div><div class="g">${rl}</div></div>
+      <div class="hint" style="align-self:center;line-height:1.6">${clsList(t.classes).map(n => `${n}류 ${NICE[n] || ''}`).join('<br>') || '전체 류 기준'}<br>요청 ${esc(t.requested_by || '')} · 점검 ${fmtDateTime(t.finished_at || t.updated_at)} · ${r.took_sec || ''}초</div>
+    </div>
+    <div><div class="sec">걱정되는 점</div>${(r.concerns || []).map(c => `<div class="con ${c.level}"><b>${c.level === '높음' ? '🔴 높음' : c.level === '주의' ? '🟠 주의' : '⚪ 참고'}</b>${esc(c.text)}</div>`).join('')}
+      ${(r.notes || []).length ? `<div class="hint" style="line-height:1.6">${r.notes.map(n => '· ' + esc(n)).join('<br>')}</div>` : ''}</div>
+    <div><div class="sec">키프리스 — 같은 류의 닮은 상표 <span class="n">${same.length}건 (닮은 정도 50% 이상)</span><a href="${esc(k.link || '#')}" target="_blank" rel="noopener">키프리스 열기 ↗</a></div>
+      ${same.length ? tmTable(same) : '<div class="hint">같은 류에서 닮은 상표가 검색되지 않았습니다.</div>'}
+      ${other.length ? `<details class="more"><summary>다른 류의 닮은 상표 ${other.length}건 보기</summary>${tmTable(other)}</details>` : ''}
+      ${ctx.length ? `<details class="more"><summary>같은 류·지정상품에 있는 그 밖의 상표 ${ctx.length}건 (경쟁 상황 참고)</summary>${tmTable(ctx)}</details>` : ''}
+      <details class="more"><summary>어떤 검색식을 돌렸나 (${(k.queries || []).length}개)</summary><div class="chips">${(k.queries || []).map(x => `<span title="${esc(x.error || '')}">${esc(x.expr)} → ${x.total == null ? '오류' : x.total + '건'}</span>`).join('')}</div>${k.token_total > 300 ? `<div class="hint">※ 이름 그대로 검색하면 ${fmtNum(k.token_total)}건이 나옵니다. 키프리스는 낱말 단위로 맞추므로 흔한 글자 조합은 많이 잡힙니다.</div>` : ''}</details></div>
+    <div><div class="sec">네이버 가격비교 (이미 파는 상품) <span class="n">${(shop.items || []).length}건</span><a href="${esc(shop.more || '#')}" target="_blank" rel="noopener">네이버 쇼핑에서 직접 보기 ↗</a></div>
+      ${(shop.items || []).length ? `<div class="chips">${shop.items.map(x => `<span class="${x.replace(/\s/g, '').includes(nm) ? 'hit' : ''}">${esc(x)}</span>`).join('')}</div>` : '<div class="hint">통합검색의 가격비교 묶음에 상품이 없습니다 (쇼핑 검색 자체는 자동 조회가 막혀 있어 직접 확인이 필요합니다).</div>'}
+      ${(shop.malls || []).length ? `<div class="hint" style="margin-top:4px">판매처: ${shop.malls.map(m => own(m) ? `<b>${esc(m)}(우리)</b>` : esc(m)).join(', ')}</div>` : ''}</div>
+    <div><div class="sec">네이버 웹·블로그 <span class="n">${(nv.web || []).length + blog.length}건</span><a href="${esc(nv.link || '#')}" target="_blank" rel="noopener">네이버에서 보기 ↗</a></div>${webList([...(nv.web || []), ...blog], nm)}${(nv.errors || []).length ? `<div class="err">${nv.errors.map(esc).join(' / ')}</div>` : ''}</div>
+    <div><div class="sec">구글 <span class="n">${g.stats ? esc(g.stats) : ''}</span><a href="${esc(r.google_link || '#')}" target="_blank" rel="noopener">구글에서 보기 ↗</a></div>${g.error ? `<div class="err">${esc(g.error)}</div>` : webList(g.items || [], nm)}</div>
+    <div class="disc">빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 점수는 "같은 류에 같거나 닮은 상표가 살아 있는가", "이름이 흔한 낱말인가", "남이 이미 쓰는가"를 규칙으로 더하고 뺀 참고 값입니다. 도형(로고)·발음이 다른 영문 표기·지정상품 유사군까지 본 것은 아니므로, 출원 전에는 변리사 검토를 받으세요.</div>
+  </div>${foot}`, { wide: true, cls: 'xl' });
+  bind();
+}
+
+/* 주소에 ?id= 가 있으면(텔레그램 링크) 그 결과를 바로 연다 */
+let openedFromLink = false;
+const _render = render;
+render = function(){ _render(); const id = new URLSearchParams(location.search).get('id'); if (id && !openedFromLink && DATA.tm_checks && T().some(t => t.id === id)) { openedFromLink = true; openView(id); } };
+
+boot({ icon: '🔎', title: '상표 점검', tables: ['tm_checks', 'tm_check_sync'], render, normalize });
+</script>
+</body>
+</html>
