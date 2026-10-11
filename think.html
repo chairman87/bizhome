@@ -115,7 +115,7 @@
     /* 제목 줄. 누르면 접혔다 펴집니다 */
     .note-head {
       display: flex; align-items: center; gap: 8px;
-      padding: 12px 0; cursor: pointer;
+      padding: 8px 0; cursor: pointer;
     }
     .note-head:hover { background: #faf8f4; }
     .note-arrow { flex-shrink: 0; width: 12px; font-size: 10px; color: #ccc; }
@@ -164,7 +164,7 @@
     .notes-empty { padding: 14px 0; font-size: 13px; color: #ccc; }
     /* 크게 쓰는 탭(board-big)의 주제는 크고 뚜렷하게 */
     .board-big .note-item { border-bottom: 1px solid #e8e4dc; }
-    .board-big .note-head { padding: 15px 0; gap: 10px; }
+    .board-big .note-head { padding: 8px 0; gap: 10px; }
     .board-big .note-arrow { width: 14px; font-size: 11px; color: #c9b8a8; }
     .board-big .note-title-text {
       font-size: 14px; font-weight: 500; color: #2f2f2f; line-height: 1.5;
@@ -636,7 +636,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 20:00";
+    const BUILD = "2026-10-11 20:10";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
