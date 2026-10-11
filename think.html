@@ -167,9 +167,9 @@
     .board-big .note-head { padding: 15px 0; gap: 10px; }
     .board-big .note-arrow { width: 14px; font-size: 11px; color: #c9b8a8; }
     .board-big .note-title-text {
-      font-size: 17px; font-weight: 600; color: #2f2f2f; line-height: 1.5;
+      font-size: 14px; font-weight: 500; color: #2f2f2f; line-height: 1.5;
     }
-    .board-big .note-title-input { font-size: 17px; font-weight: 600; color: #2f2f2f; }
+    .board-big .note-title-input { font-size: 14px; font-weight: 500; color: #2f2f2f; }
     /* 지금 펼쳐서 파고 있는 주제는 색으로 한 번 더 구분 */
     .board-big .note-item:has(.note-body) .note-title-text { color: #c96442; }
     .board-big .note-item:has(.note-body) .note-arrow { color: #c96442; }
@@ -321,7 +321,7 @@
     @media (hover: none) and (pointer: coarse) {
       .gate-box input, .note-title-input, .note-body,
       .board-big .note-body, .board-big .note-title-input { font-size: 14px; }
-      .board-big .note-title-input { font-size: 17px; }
+      .board-big .note-title-input { font-size: 14px; }
       .card-head h1 { font-size: 19px; }
       .topbar .store-status { max-width: 40vw; }
     }
@@ -636,7 +636,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 19:45";
+    const BUILD = "2026-10-11 20:00";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
