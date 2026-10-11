@@ -504,14 +504,17 @@
     li.done .days { opacity: 0.3; }
 
     /* 완료 보관함 · 휴지통 공통 머리글 */
-    .section-head {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-top: 28px; padding-top: 20px; border-top: 1px solid #eee;
-      cursor: pointer; user-select: none;
+    /* 카드 맨 아래 한 줄: 📦 보관함 (n) · 🗑 휴지통 (n) · 비우기 (오른쪽 정렬) */
+    .card-foot {
+      flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; gap: 14px;
+      margin-top: 6px; padding-top: 10px; border-top: 1px solid #eee;
     }
-    .section-head h2 { margin: 0; font-size: 15px; color: #888; font-weight: normal; }
+    .section-head { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .section-head h2 { margin: 0; font-size: 12px; color: #aaa; font-weight: normal; }
+    .section-head:hover h2 { color: #c96442; }
+    .section-head.open h2 { color: #6b8e5a; }
     .clear-btn {
-      background: none; color: #bbb; font-size: 13px; padding: 4px 8px;
+      background: none; color: #bbb; font-size: 12px; padding: 2px 6px;
     }
     .clear-btn:hover { background: none; color: #c96442; }
 
@@ -636,7 +639,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 20:10";
+    const BUILD = "2026-10-11 20:25";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1492,7 +1495,7 @@
 
       const memo = board.kind === "memo";
       let addBtn = null, addHeadBtn = null, list = null, memoBody = null;
-      let archHead = null, archTitle = null, archList = null, trashHead = null, trashTitle = null, trashClear = null, trashList = null;
+      let archHead = null, archTitle = null, archList = null, trashHead = null, trashTitle = null, trashClear = null, trashList = null, foot = null;
 
       if (!memo) {
         addBtn = document.createElement("button");
@@ -1525,34 +1528,42 @@
       body.appendChild(list);
 
       // 보관함: 생각이 끝난 주제를 내려두는 곳 (휴지통과는 별개입니다)
+      // 펼쳤을 때의 목록은 주제들 아래(스크롤 영역 안)에 나옵니다
+      archList = document.createElement("div");
+      archList.style.display = "none";
+      body.appendChild(archList);
+
+      trashList = document.createElement("div");
+      trashList.style.display = "none";
+      body.appendChild(trashList);
+
+      // 여닫는 글자들은 카드 맨 아래 오른쪽에 한 줄로
+      foot = document.createElement("div");
+      foot.className = "card-foot";
+
       archHead = document.createElement("div");
       archHead.className = "section-head";
       archTitle = document.createElement("h2");
       archTitle.textContent = "📦 보관함 (0)";
       archHead.appendChild(archTitle);
-      body.appendChild(archHead);
-
-      archList = document.createElement("div");
-      archList.style.display = "none";
-      body.appendChild(archList);
+      foot.appendChild(archHead);
 
       trashHead = document.createElement("div");
       trashHead.className = "section-head";
       trashTitle = document.createElement("h2");
       trashTitle.textContent = "🗑 휴지통 (0)";
       trashHead.appendChild(trashTitle);
+      foot.appendChild(trashHead);
+
       trashClear = document.createElement("button");
       trashClear.className = "clear-btn";
       trashClear.textContent = "비우기";
-      trashHead.appendChild(trashClear);
-      body.appendChild(trashHead);
-
-      trashList = document.createElement("div");
-      trashList.style.display = "none";
-      body.appendChild(trashList);
+      trashClear.title = "휴지통 비우기";
+      foot.appendChild(trashClear);
       }   // (주제형 끝)
 
       card.appendChild(body);
+      if (foot) card.appendChild(foot);
 
       // 오른쪽 끝을 잡고 끌면 넓이가 바뀝니다
       const grip = document.createElement("div");
@@ -2439,12 +2450,16 @@
 
       el.archHead.addEventListener("click", () => {
         archOpen = !archOpen;
+        el.archHead.classList.toggle("open", archOpen);
         drawArch();
+        if (archOpen) setTimeout(() => el.archList.scrollIntoView({ block: "nearest" }), 0);
       });
 
       el.trashHead.addEventListener("click", () => {
         trashOpen = !trashOpen;
+        el.trashHead.classList.toggle("open", trashOpen);
         drawTrash();
+        if (trashOpen) setTimeout(() => el.trashList.scrollIntoView({ block: "nearest" }), 0);
       });
 
       el.trashClear.addEventListener("click", (e) => {
