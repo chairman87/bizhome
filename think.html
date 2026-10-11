@@ -24,8 +24,8 @@
       box-shadow: 0 4px 24px rgba(0,0,0,0.08);
 
       /* 내용이 적어도 카드는 줄어들지 않는 고정 높이 */
-      height: calc(100vh - 76px);
-      height: calc(100dvh - 76px);  /* 아이패드·휴대폰: 주소창을 뺀 실제 보이는 높이 */
+      height: calc(100vh - 76px - var(--strip, 0px));
+      height: calc(100dvh - 76px - var(--strip, 0px));  /* 아이패드·휴대폰: 주소창을 뺀 실제 보이는 높이. --strip 은 위쪽 탭 띠 높이 */
       min-height: 560px;
       display: flex;
       flex-direction: column;
@@ -245,6 +245,28 @@
     }
     .add-board:hover { background: #c96442; color: #fff; }
     .topbar-left { display: flex; align-items: center; gap: 8px; position: relative; }
+
+    /* ── 위쪽 탭 띠: 모든 탭 이름이 늘어서고, 누른 탭만 아래에 펼쳐집니다 ── */
+    .tab-strip {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      margin: 0 0 12px;
+    }
+    .tab-chip {
+      display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
+      padding: 5px 12px; font-size: 13px; font-family: inherit;
+      background: #fff; color: #666; border: 1px solid #e2ddd4; border-radius: 999px;
+      cursor: pointer; user-select: none;
+    }
+    .tab-chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tab-chip:hover { border-color: #c96442; color: #c96442; }
+    .tab-chip.on { background: #c96442; border-color: #c96442; color: #fff; }
+    .tab-chip.on:hover { background: #b5563a; color: #fff; }
+    .tab-chip.dragging { opacity: 0.4; }
+    .tab-chip.drop-before { box-shadow: -3px 0 0 #c96442; }
+    .tab-chip.drop-after  { box-shadow:  3px 0 0 #c96442; }
+    .tab-strip .strip-hint { margin-left: 6px; font-size: 11px; color: #bbb; }
+    .layout-empty { padding: 60px 0; text-align: center; font-size: 14px; color: #bbb; }
+    body.swipe .tab-strip { padding: 0 12px; }
 
     /* '+ 새 탭'을 누르면 뜨는 고르기 메뉴 (주제형 / 메모장형) */
     .tab-menu {
@@ -579,6 +601,7 @@
     </div>
   </div>
 
+  <div id="tabStrip" class="tab-strip" hidden></div>
   <div class="layout" id="layout"></div>
 
   <div id="importBox" class="import-box" hidden>
@@ -594,7 +617,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 18:05";
+    const BUILD = "2026-10-11 18:40";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1302,6 +1325,7 @@
       if (!confirm(msg)) return;
 
       saveBoards(loadBoards().filter(b => b.id !== board.id));
+      closeBoard(board.id);
       storeDel(board.key);
       storeDel(board.trashKey);
       storeSet("_touch", String(Date.now()));   // 지운 것도 파일에 반영되도록 한 번 흔들어 줌
@@ -1339,6 +1363,8 @@
       if (!b) return;
       b.title = title.trim() || "제목 없음";
       saveBoards(list);
+      const chip = document.querySelector('.tab-chip[data-id="' + id + '"] .t');
+      if (chip) chip.textContent = b.title;
     }
 
     // 탭 하나의 화면을 만들어 붙입니다
@@ -1539,12 +1565,110 @@
     }
 
     // 탭 전체를 다시 그림. renameId 를 주면 그 탭 제목에 커서를 놓습니다
+    // ── 위쪽 탭 띠 ──
+    // 탭이 많아져도 화면이 망가지지 않게, 펼쳐 둔 탭(최대 MAX_OPEN 개)만 카드로 보입니다.
+    // 어느 탭을 펼쳐 뒀는지는 이 기기에만 기억합니다(컴퓨터·휴대폰이 각자 다르게).
+    const OPEN_KEY = "think_open";
+    const MAX_OPEN = 3;
+    function loadOpen() {
+      try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); return Array.isArray(v) ? v : null; }
+      catch (e) { return null; }
+    }
+    function saveOpen(ids) { try { localStorage.setItem(OPEN_KEY, JSON.stringify(ids)); } catch (e) {} }
+    // 펼쳐 둔 탭 id 목록 (펼친 순서). 처음이면 앞에서 MAX_OPEN 개
+    function openIds(boards) {
+      let ids = loadOpen();
+      if (!ids) ids = boards.slice(0, MAX_OPEN).map(b => b.id);
+      return ids.filter(id => boards.some(b => b.id === id));
+    }
+    function openBoard(id) {
+      const ids = openIds(loadBoards()).filter(x => x !== id);
+      ids.push(id);
+      while (ids.length > MAX_OPEN) ids.shift();   // 넘치면 가장 먼저 펼친 것부터 접힘
+      saveOpen(ids);
+    }
+    function closeBoard(id) { saveOpen(openIds(loadBoards()).filter(x => x !== id)); }
+    function toggleBoard(id) {
+      if (openIds(loadBoards()).includes(id)) closeBoard(id); else openBoard(id);
+      drawLayout();
+    }
+    function updateStripVar() {
+      const strip = document.getElementById("tabStrip");
+      document.body.style.setProperty("--strip", (strip.hidden ? 0 : strip.offsetHeight + 12) + "px");
+    }
+
+    let CHIP_DRAG = null;   // 끌고 있는 띠 항목의 탭 id
+    function drawStrip(boards, ids) {
+      const strip = document.getElementById("tabStrip");
+      strip.innerHTML = "";
+      strip.hidden = false;
+
+      boards.forEach(b => {
+        const on = ids.includes(b.id);
+        const chip = document.createElement("button");
+        chip.className = "tab-chip" + (on ? " on" : "");
+        chip.dataset.id = b.id;
+        chip.title = on ? "누르면 접기" : "누르면 펼치기 (한 번에 " + MAX_OPEN + "개까지)";
+        const ic = document.createElement("span");
+        ic.textContent = b.kind === "memo" ? "📝" : "📋";
+        const t = document.createElement("span");
+        t.className = "t";
+        t.textContent = b.title || "제목 없음";
+        chip.appendChild(ic);
+        chip.appendChild(t);
+        chip.addEventListener("click", () => toggleBoard(b.id));
+
+        // 끌어서 탭 순서 바꾸기
+        chip.draggable = true;
+        chip.addEventListener("dragstart", (e) => {
+          CHIP_DRAG = b.id;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", "");
+          chip.classList.add("dragging");
+        });
+        chip.addEventListener("dragend", () => {
+          CHIP_DRAG = null;
+          strip.querySelectorAll(".dragging, .drop-before, .drop-after")
+            .forEach(c => c.classList.remove("dragging", "drop-before", "drop-after"));
+        });
+        chip.addEventListener("dragover", (e) => {
+          if (!CHIP_DRAG || CHIP_DRAG === b.id) return;
+          e.preventDefault();
+          const r = chip.getBoundingClientRect();
+          const after = (e.clientX - r.left) > r.width / 2;
+          chip.classList.toggle("drop-after", after);
+          chip.classList.toggle("drop-before", !after);
+        });
+        chip.addEventListener("dragleave", () => chip.classList.remove("drop-before", "drop-after"));
+        chip.addEventListener("drop", (e) => {
+          if (!CHIP_DRAG) return;
+          e.preventDefault();
+          const after = chip.classList.contains("drop-after");
+          chip.classList.remove("drop-before", "drop-after");
+          const src = CHIP_DRAG; CHIP_DRAG = null;
+          moveBoard(src, b.id, after);
+        });
+        strip.appendChild(chip);
+      });
+
+      const hint = document.createElement("span");
+      hint.className = "strip-hint";
+      hint.textContent = "누르면 펼치고 다시 누르면 접습니다 · 한 번에 " + MAX_OPEN + "개 · 끌어서 순서 바꾸기";
+      strip.appendChild(hint);
+      updateStripVar();
+    }
+
     function drawLayout(renameId) {
       const layout = document.getElementById("layout");
       layout.innerHTML = "";
 
       const boards = loadBoards();
-      boards.forEach(board => {
+      if (renameId) openBoard(renameId);           // 새로 만든 탭은 바로 펼쳐 보입니다
+      const ids = openIds(boards);
+      drawStrip(boards, ids);
+
+      const shown = boards.filter(b => ids.includes(b.id));
+      shown.forEach(board => {
         const el = buildCard(board, layout);
         if (board.kind === "memo") createMemo(board, el);
         else createBoard(board, el);
@@ -1553,6 +1677,12 @@
           document.getSelection().selectAllChildren(el.h1);
         }
       });
+      if (!shown.length) {
+        const p = document.createElement("div");
+        p.className = "layout-empty";
+        p.textContent = boards.length ? "위에서 탭 이름을 누르면 여기에 펼쳐집니다." : "아직 탭이 없습니다. 위 '+ 새 탭'을 눌러보세요.";
+        layout.appendChild(p);
+      }
       fitLayout();
     }
 
@@ -1595,7 +1725,7 @@
     let fitTimer = null;
     window.addEventListener("resize", () => {
       clearTimeout(fitTimer);
-      fitTimer = setTimeout(() => { fitLayout(); regrowAll(); }, 80);
+      fitTimer = setTimeout(() => { updateStripVar(); fitLayout(); regrowAll(); }, 80);
     });
 
     function flashMark(mark) {
