@@ -244,7 +244,29 @@
       background: #fff; color: #c96442; border: 1px solid #e2ddd4;
     }
     .add-board:hover { background: #c96442; color: #fff; }
-    .topbar-left { display: flex; align-items: center; gap: 8px; }
+    .topbar-left { display: flex; align-items: center; gap: 8px; position: relative; }
+
+    /* '+ 새 탭'을 누르면 뜨는 고르기 메뉴 (주제형 / 메모장형) */
+    .tab-menu {
+      position: absolute; top: 34px; left: 0; z-index: 50; min-width: 270px;
+      padding: 6px; background: #fff; border: 1px solid #e2ddd4; border-radius: 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    }
+    .tab-menu button {
+      display: block; width: 100%; text-align: left; padding: 10px 12px;
+      background: none; border: none; border-radius: 8px; font-size: 13px; color: #444; cursor: pointer;
+    }
+    .tab-menu button:hover { background: #faf5f0; color: #c96442; }
+    .tab-menu small { display: block; margin-top: 2px; font-size: 11px; color: #aaa; }
+
+    /* 메모장형 탭: 제목 아래가 통째로 글 칸 */
+    .memo-body {
+      width: 100%; box-sizing: border-box; min-height: 100%; margin: 0; padding: 12px 14px;
+      font-family: inherit; font-size: 14px; line-height: 1.9; color: #333;
+      background: #fdfcfa; border: 1px solid #eee; border-radius: 8px;
+      resize: none; overflow: hidden;
+    }
+    .memo-body:focus { outline: none; background: #fff; border-color: #ddd; }
 
     /* 탭을 나란히 놓는 틀. 넓이를 직접 정하므로 넘치면 옆으로 넘겨서 봅니다 */
     .layout {
@@ -545,6 +567,10 @@
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
       <button id="addBoard" class="add-board">+ 새 탭</button>
+      <div id="tabMenu" class="tab-menu" hidden>
+        <button data-kind="topic">📋 주제형<small>고민을 하나씩 주제로 적고, 생각과 결정을 남깁니다</small></button>
+        <button data-kind="memo">📝 메모장형<small>제목만 적고, 아래는 자유롭게 적는 메모장</small></button>
+      </div>
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
     <div class="topbar-right">
@@ -568,7 +594,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-11 16:40";
+    const BUILD = "2026-10-11 17:40";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1020,7 +1046,17 @@
         dbg("D. 탭 목록 준비", storeGet("boards") || "(없음)");
         drawLayout();
         dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
-        document.getElementById("addBoard").addEventListener("click", addBoard);
+        const tabMenu = document.getElementById("tabMenu");
+        document.getElementById("addBoard").addEventListener("click", (e) => {
+          e.stopPropagation();
+          tabMenu.hidden = !tabMenu.hidden;
+        });
+        tabMenu.querySelectorAll("button").forEach(b => b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          tabMenu.hidden = true;
+          addBoard(b.dataset.kind);
+        }));
+        document.addEventListener("click", () => { tabMenu.hidden = true; });
       } catch (e) {
         const m = (e && e.message) ? e.message : String(e);
         dbg("D~E. 화면 그리기 실패", m + " | " + (e && e.stack ? e.stack.slice(0, 500) : ""));
@@ -1106,6 +1142,17 @@
 
       const boards = loadBoards();
       boards.forEach((board) => {
+        if (board.kind === "memo") {
+          L.push("================================================");
+          L.push("■ " + (board.title || "제목 없음") + "  (메모장)");
+          L.push("================================================");
+          L.push("");
+          const text = ((readList(board.key)[0] || {}).body || "").replace(/\r\n/g, "\n").trim();
+          if (text) text.split("\n").forEach((line) => L.push(line));
+          else L.push("(내용 없음)");
+          L.push(""); L.push("");
+          return;
+        }
         const list = readList(board.key);
         const arch = readList(board.key + "_archive");
         L.push("================================================");
@@ -1234,13 +1281,15 @@
       storeSet("headsSeeded", "1");
     }
 
-    function addBoard() {
+    // kind: "topic"(주제형, 기본) 또는 "memo"(메모장형)
+    function addBoard(kind) {
       const list = loadBoards();
       const id = newId();
       list.push({
-        id: id, title: "새 탭",
+        id: id, title: kind === "memo" ? "새 메모" : "새 탭",
         key: "board_" + id, trashKey: "board_" + id + "_trash",
-        width: DEFAULT_W, compact: false
+        width: DEFAULT_W, compact: false,
+        kind: kind === "memo" ? "memo" : "topic"
       });
       saveBoards(list);
       drawLayout(id);        // 새 탭의 제목을 바로 고칠 수 있게
@@ -1248,7 +1297,7 @@
 
     function removeBoard(board) {
       const msg = "'" + board.title + "' 탭을 지울까요?\n" +
-                  "안에 적은 주제가 모두 함께 사라집니다. 되돌릴 수 없습니다.\n" +
+                  (board.kind === "memo" ? "적은 메모가 함께 사라집니다. 되돌릴 수 없습니다.\n" : "안에 적은 주제가 모두 함께 사라집니다. 되돌릴 수 없습니다.\n") +
                   "(한 시간마다 남는 백업 파일에는 남아 있습니다)";
       if (!confirm(msg)) return;
 
@@ -1387,54 +1436,67 @@
 
       top.appendChild(headRow);
 
-      const addBtn = document.createElement("button");
-      addBtn.className = "notes-add";
-      addBtn.textContent = "+ 새 주제";
-      top.appendChild(addBtn);
+      const memo = board.kind === "memo";
+      let addBtn = null, addHeadBtn = null, list = null, memoBody = null;
+      let archHead = null, archTitle = null, archList = null, trashHead = null, trashTitle = null, trashClear = null, trashList = null;
 
-      const addHeadRow = document.createElement("div");
-      addHeadRow.className = "add-head-row";
-      const addHeadBtn = document.createElement("button");
-      addHeadBtn.className = "add-head";
-      addHeadBtn.textContent = "+ 구분";
-      addHeadBtn.title = "'공격'·'수비' 같은 구분 줄을 넣습니다. 끌어서 옮기고, 그 아래로 주제를 끌어다 둡니다";
-      addHeadRow.appendChild(addHeadBtn);
-      top.appendChild(addHeadRow);
+      if (!memo) {
+        addBtn = document.createElement("button");
+        addBtn.className = "notes-add";
+        addBtn.textContent = "+ 새 주제";
+        top.appendChild(addBtn);
+
+        const addHeadRow = document.createElement("div");
+        addHeadRow.className = "add-head-row";
+        addHeadBtn = document.createElement("button");
+        addHeadBtn.className = "add-head";
+        addHeadBtn.textContent = "+ 구분";
+        addHeadBtn.title = "'공격'·'수비' 같은 구분 줄을 넣습니다. 끌어서 옮기고, 그 아래로 주제를 끌어다 둡니다";
+        addHeadRow.appendChild(addHeadBtn);
+        top.appendChild(addHeadRow);
+      }
 
       card.appendChild(top);
 
       const body = document.createElement("div");
       body.className = "card-body";
 
-      const list = document.createElement("div");
+      if (memo) {
+        memoBody = document.createElement("textarea");
+        memoBody.className = "memo-body";
+        memoBody.placeholder = "여기에 자유롭게 적으세요";
+        body.appendChild(memoBody);
+      } else {
+      list = document.createElement("div");
       body.appendChild(list);
 
       // 보관함: 생각이 끝난 주제를 내려두는 곳 (휴지통과는 별개입니다)
-      const archHead = document.createElement("div");
+      archHead = document.createElement("div");
       archHead.className = "section-head";
-      const archTitle = document.createElement("h2");
+      archTitle = document.createElement("h2");
       archTitle.textContent = "📦 보관함 (0)";
       archHead.appendChild(archTitle);
       body.appendChild(archHead);
 
-      const archList = document.createElement("div");
+      archList = document.createElement("div");
       archList.style.display = "none";
       body.appendChild(archList);
 
-      const trashHead = document.createElement("div");
+      trashHead = document.createElement("div");
       trashHead.className = "section-head";
-      const trashTitle = document.createElement("h2");
+      trashTitle = document.createElement("h2");
       trashTitle.textContent = "🗑 휴지통 (0)";
       trashHead.appendChild(trashTitle);
-      const trashClear = document.createElement("button");
+      trashClear = document.createElement("button");
       trashClear.className = "clear-btn";
       trashClear.textContent = "비우기";
       trashHead.appendChild(trashClear);
       body.appendChild(trashHead);
 
-      const trashList = document.createElement("div");
+      trashList = document.createElement("div");
       trashList.style.display = "none";
       body.appendChild(trashList);
+      }   // (주제형 끝)
 
       card.appendChild(body);
 
@@ -1470,7 +1532,7 @@
 
       layout.appendChild(card);
 
-      return { card: card, body: body, h1: h1, mark: mark, addBtn: addBtn, addHeadBtn: addHeadBtn, list: list,
+      return { card: card, body: body, h1: h1, mark: mark, addBtn: addBtn, addHeadBtn: addHeadBtn, list: list, memoBody: memoBody,
                archHead: archHead, archTitle: archTitle, archList: archList,
                trashHead: trashHead, trashTitle: trashTitle, trashClear: trashClear,
                trashList: trashList };
@@ -1484,7 +1546,8 @@
       const boards = loadBoards();
       boards.forEach(board => {
         const el = buildCard(board, layout);
-        createBoard(board, el);
+        if (board.kind === "memo") createMemo(board, el);
+        else createBoard(board, el);
         if (board.id === renameId) {
           el.h1.focus();
           document.getSelection().selectAllChildren(el.h1);
@@ -1549,6 +1612,38 @@
     // 끌기 상태는 탭 전체가 함께 씁니다. 그래야 다른 탭 위에 놓았을 때 어디서 왔는지 압니다.
     let DRAG = null;            // { key: 출발 탭의 저장 자리, idx: 그 탭에서의 자리 번호 }
     const BOARD_API = {};       // 저장 자리(key) → 그 탭의 load/save/draw
+
+    // ── 메모장형 탭: 제목 아래가 통째로 글 칸 ──
+    // 저장은 주제형과 같은 자리(B.key)에 항목 하나짜리 목록으로 둡니다. (엇갈린 저장 합치기가 항목 단위라서)
+    function createMemo(B, el) {
+      const ta = el.memoBody;
+      const load = () => { try { return JSON.parse(storeGet(B.key)) || []; } catch (e) { return []; } };
+      const item = load()[0];
+      ta.value = (item && item.body) || "";
+
+      const grow = () => {
+        ta.style.height = "auto";
+        ta.style.height = Math.max(ta.scrollHeight + 2, el.body.clientHeight - 4) + "px";
+      };
+      let timer = null;
+      const save = () => {
+        const all = load();
+        const cur = all[0] || { id: "memo" };
+        if ((cur.body || "") === ta.value) return;
+        cur.body = ta.value;
+        storeSet(B.key, JSON.stringify([cur]));
+        flashMark(el.mark);
+      };
+      ta.addEventListener("input", () => { grow(); clearTimeout(timer); timer = setTimeout(save, 600); });
+      ta.addEventListener("blur", () => { clearTimeout(timer); save(); });
+      setTimeout(grow, 0);
+
+      // 다른 창에서 고친 내용이 오면 다시 그릴 때 불러옵니다
+      BOARD_API[B.key] = { load: load, save: (l) => storeSet(B.key, JSON.stringify(l)), draw: () => {
+        const it = load()[0];
+        if (document.activeElement !== ta) { ta.value = (it && it.body) || ""; grow(); }
+      } };
+    }
 
     function createBoard(B, el) {
       let trashOpen = false;
