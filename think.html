@@ -274,19 +274,6 @@
     .layout-empty { padding: 60px 0; text-align: center; font-size: 14px; color: #bbb; }
     body.swipe .tab-strip { padding: 0 12px; }
 
-    /* '+ 새 탭'을 누르면 뜨는 고르기 메뉴 (주제형 / 메모장형) */
-    .tab-menu {
-      position: absolute; top: 34px; left: 0; z-index: 50; min-width: 270px;
-      padding: 6px; background: #fff; border: 1px solid #e2ddd4; border-radius: 10px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.10);
-    }
-    .tab-menu button {
-      display: block; width: 100%; text-align: left; padding: 10px 12px;
-      background: none; border: none; border-radius: 8px; font-size: 13px; color: #444; cursor: pointer;
-    }
-    .tab-menu button:hover { background: #faf5f0; color: #c96442; }
-    .tab-menu small { display: block; margin-top: 2px; font-size: 11px; color: #aaa; }
-
     /* 메모장형 탭: 제목 아래가 통째로 글 칸 */
     .memo-body {
       width: 100%; box-sizing: border-box; min-height: 100%; margin: 0; padding: 12px 14px;
@@ -615,11 +602,8 @@
 
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
-      <button id="addBoard" class="add-board">+ 새 탭</button>
-      <div id="tabMenu" class="tab-menu" hidden>
-        <button data-kind="topic">📋 주제형<small>고민을 하나씩 주제로 적고, 생각과 결정을 남깁니다</small></button>
-        <button data-kind="memo">📝 메모장형<small>제목만 적고, 아래는 자유롭게 적는 메모장</small></button>
-      </div>
+      <button id="addTopic" class="add-board" title="주제형 탭 새로 만들기">+ 주제</button>
+      <button id="addMemo" class="add-board" title="메모장형 탭 새로 만들기">+ 메모장</button>
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
     <div class="topbar-right">
@@ -661,7 +645,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-12 11:20";
+    const BUILD = "2026-10-12 11:35";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1228,17 +1212,8 @@
         dbg("D. 탭 목록 준비", storeGet("boards") || "(없음)");
         drawLayout();
         dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
-        const tabMenu = document.getElementById("tabMenu");
-        document.getElementById("addBoard").addEventListener("click", (e) => {
-          e.stopPropagation();
-          tabMenu.hidden = !tabMenu.hidden;
-        });
-        tabMenu.querySelectorAll("button").forEach(b => b.addEventListener("click", (e) => {
-          e.stopPropagation();
-          tabMenu.hidden = true;
-          addBoard(b.dataset.kind);
-        }));
-        document.addEventListener("click", () => { tabMenu.hidden = true; });
+        document.getElementById("addTopic").addEventListener("click", () => addBoard("topic"));
+        document.getElementById("addMemo").addEventListener("click", () => addBoard("memo"));
       } catch (e) {
         const m = (e && e.message) ? e.message : String(e);
         dbg("D~E. 화면 그리기 실패", m + " | " + (e && e.stack ? e.stack.slice(0, 500) : ""));
