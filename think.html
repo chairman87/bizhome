@@ -590,11 +590,18 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">비즈홈과 같은 이름·비밀번호로 들어갑니다. 사람마다 자기 내용만 보입니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
+      <div class="hint">이름을 고르고 <b>파고들기 전용 PIN</b>으로 들어갑니다. 내용은 PIN 을 아는 본인만 열 수 있습니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
       <div class="names" id="gateNames"><span class="gate-loading">팀원 목록을 불러오는 중…</span></div>
       <div class="pwrow" id="gatePwRow" hidden>
-        <input type="password" id="gatePw" placeholder="비밀번호" autocomplete="current-password">
+        <input type="password" id="gatePw" placeholder="파고들기 PIN" autocomplete="current-password">
         <button id="gateBtn">들어가기</button>
+      </div>
+      <div id="gateNewRow" hidden>
+        <div class="hint" style="margin:4px 0 8px;color:#888">처음입니다. 본인 확인을 위해 <b>비즈홈 비밀번호</b>를 넣고, 앞으로 쓸 <b>파고들기 PIN(6자리 이상)</b>을 정하세요. 비즈홈 비밀번호와 다르게 정하세요.</div>
+        <input type="password" id="gateBiz" placeholder="비즈홈 비밀번호" autocomplete="off">
+        <input type="password" id="gatePin1" placeholder="새 PIN (6자리 이상)" autocomplete="new-password">
+        <input type="password" id="gatePin2" placeholder="새 PIN 한 번 더" autocomplete="new-password">
+        <button id="gateSetBtn">PIN 정하고 들어가기</button>
       </div>
       <div class="gate-msg" id="gateMsg"></div>
     </div>
@@ -629,7 +636,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-12 12:05";
+    const BUILD = "2026-10-12 19:50";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -657,8 +664,10 @@
     //
     // 로그인: 비즈홈과 같은 방식입니다 (2026-10-11 부터). 팀원 표(members)에서 이름을 고르고
     // 비즈홈 비밀번호를 맞히면 들어갑니다. 사람마다 자기 줄(owner = members.id)만 읽고 씁니다.
-    // 저장은 비즈홈의 settings 표(팀 공용, id 글·value JSON·updated_at)에 "think:<사람id>" 줄로 둡니다.
-    // 예전 think_docs 표(2026-10-11 이전, 본인만 읽는 잠금)는 그대로 남겨 두었습니다(사용 안 함).
+    // 저장 (2026-10-12 저녁부터): 아무도 직접 못 읽는 think_store 표. 파고들기 전용 PIN 이 맞으면 서버 함수가
+    // 기기별 출입증(token)을 주고, 읽기·저장은 그 출입증으로 서버 함수(think_load / think_save / think_hist_add)를 부릅니다.
+    // 설정 SQL: sql-think-pin.sql. (그 전에 쓰던 settings 표의 think:<id> 줄은 공개키로 누구나 읽혀서 옮겼습니다)
+    // 예전 think_docs 표(2026-10-11 이전)도 그대로 남아 있습니다(사용 안 함).
     const SUPABASE_URL = "https://nflznotjmdqvqtjkzsec.supabase.co";
     const SUPABASE_KEY = "sb_publishable_grDEdL-mRivtPAta6qNVTw_Di-opchT";
     const CACHE_KEY = "think_cache";      // 저장이 실패했을 때를 대비한 이 기기의 임시 보관 (사람마다 따로)
@@ -666,9 +675,23 @@
     const LOGIN_KEY = "think_me";         // 이 기기에서 마지막으로 들어온 사람 (다음부터 안 묻기)
     const DEFAULT_PW = "1234";            // 비즈홈의 초기 비밀번호
     const OLD_OWNER_MEMBER = "e55bb2cb-1deb-4c0b-bec3-6ef68008f7cc";   // 박봉수 (예전 혼자 쓰던 때의 임시 보관본을 이어받기용)
-    const DOC_TABLE = "settings";
-    function docId()  { return "think:" + me.id; }
-    function histId() { return "think_hist:" + me.id + ":" + Date.now(); }
+    const TOKEN_KEY = "think_token";      // 이 기기의 출입증 (사람마다 따로)
+    function tokenKey() { return TOKEN_KEY + "_" + (me ? me.id : "x"); }
+    function getToken(id) { try { return localStorage.getItem(TOKEN_KEY + "_" + id) || ""; } catch (e) { return ""; } }
+    let TOKEN = "";
+    // 서버 함수 부르기. 출입증이 안 통하면(로그아웃·PIN 변경·초기화) 다시 PIN 을 묻습니다 (적은 것은 임시 보관본에 남아 다시 들어오면 합쳐짐)
+    async function rpc(name, args) {
+      const { data, error } = await sb.rpc(name, args);
+      if (error) throw error;
+      if (data && data.ok === false && data.err === "session") {
+        try { localStorage.removeItem(tokenKey()); } catch (e) {}
+        cacheNow(localDirty);
+        alert("파고들기 출입증이 끝났습니다. PIN 을 다시 넣어 주세요.");
+        location.reload();
+        throw new Error("session");
+      }
+      return data;
+    }
     function cacheKey() { return CACHE_KEY + "_" + (me ? me.id : "x"); }
 
     // ── 메모장 항목 이름표 고치기 ──
@@ -840,21 +863,10 @@
       try {
         let saved = false;
         for (let attempt = 0; attempt < 3 && !saved; attempt++) {
-          const stamp = new Date().toISOString();
-          let res;
-          if (serverStamp) {
-            res = await sb.from(DOC_TABLE)
-              .update({ value: STATE, updated_at: stamp, updated_by: me.name })
-              .eq("id", docId()).eq("updated_at", serverStamp)
-              .select("updated_at");
-          } else {
-            res = await sb.from(DOC_TABLE)
-              .upsert({ id: docId(), value: STATE, updated_at: stamp, updated_by: me.name }, { onConflict: "id" })
-              .select("updated_at");
-          }
-          if (res.error) throw res.error;
-          if (res.data && res.data.length) {
-            serverStamp = res.data[0].updated_at;
+          const res = await rpc("think_save", { p_token: TOKEN, p_value: STATE, p_expect: serverStamp, p_by: me.name });
+          if (!res || res.ok === false) throw new Error((res && res.err) || "저장 실패");
+          if (!res.conflict) {
+            serverStamp = res.updated_at;
             saved = true;
           } else {
             // 그 사이 다른 창이 먼저 저장했음 → 서버 것과 합친 뒤 다시 시도
@@ -877,9 +889,10 @@
 
     // 서버 것을 받아 지금 내용과 합칩니다
     async function pullAndMerge() {
-      const { data, error } = await sb.from(DOC_TABLE).select("value, updated_at").eq("id", docId()).maybeSingle();
-      if (error) return false;
-      if (!data) { serverStamp = null; return true; }
+      let data;
+      try { data = await rpc("think_load", { p_token: TOKEN, p_full: true }); } catch (e) { return false; }
+      if (!data || data.ok === false) return false;
+      if (!data.updated_at) { serverStamp = null; return true; }
       fixMemoIds(data.value);
       noteSeenTs(data.value || {});
       const before = JSON.stringify(STATE);
@@ -917,8 +930,8 @@
       if (!appReady || !me || pushing) return;
       if (localDirty) { pushToServer(); return; }
       try {
-        const { data } = await sb.from(DOC_TABLE).select("updated_at").eq("id", docId()).maybeSingle();
-        if (data && data.updated_at !== serverStamp) await pullAndMerge();
+        const data = await rpc("think_load", { p_token: TOKEN, p_full: false });
+        if (data && data.ok !== false && data.updated_at !== serverStamp) await pullAndMerge();
       } catch (e) {}
     }
     window.addEventListener("focus", refreshIfChanged);
@@ -943,21 +956,20 @@
       if (Date.now() - last < 600000) return;
       localStorage.setItem(histKey(), String(Date.now()));
       try {
-        await sb.from(DOC_TABLE).insert({ id: histId(), value: STATE, updated_by: me.name });
+        await rpc("think_hist_add", { p_token: TOKEN, p_value: STATE });
       } catch (e) {}
     }
 
     // 창을 닫는 순간: 보통 방식은 창이 닫히면서 끊기므로, 닫혀도 끝까지 가는 방식(keepalive)으로 보냅니다
     function flushOnClose() {
-      if (!localDirty || !me || !accessToken) return;
+      if (!localDirty || !me || !accessToken || !TOKEN) return;
       clearTimeout(saveTimer);
-      const body = JSON.stringify({ value: STATE, updated_at: new Date().toISOString(), updated_by: me.name });
+      const body = JSON.stringify({ p_token: TOKEN, p_value: STATE, p_expect: serverStamp, p_by: me.name });
       if (body.length > 60000) { pushToServer(); return; }     // keepalive 는 64KB 까지만 됩니다
-      let url = SUPABASE_URL + "/rest/v1/" + DOC_TABLE + "?id=eq." + encodeURIComponent(docId());
-      if (serverStamp) url += "&updated_at=eq." + encodeURIComponent(serverStamp);
+      const url = SUPABASE_URL + "/rest/v1/rpc/think_save";
       try {
         fetch(url, {
-          method: "PATCH", keepalive: true, body: body,
+          method: "POST", keepalive: true, body: body,
           headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + accessToken,
                      "Content-Type": "application/json", Prefer: "return=minimal" }
         });
@@ -1047,14 +1059,29 @@
         b.appendChild(av);
         b.appendChild(document.createTextNode(m.name || "이름 없음"));
         if (m.title) { const t = document.createElement("small"); t.textContent = m.title; b.appendChild(t); }
-        b.addEventListener("click", () => {
+        b.addEventListener("click", async () => {
           loginPick = m;
           renderNames();
-          document.getElementById("gatePwRow").hidden = false;
-          const pw = document.getElementById("gatePw");
-          pw.value = "";
-          pw.focus();
-          fail("");
+          document.getElementById("gatePwRow").hidden = true;
+          document.getElementById("gateNewRow").hidden = true;
+          step("확인 중…");
+          try {
+            const st = await rpc("think_status", { p_member: m.id });
+            if (loginPick !== m) return;
+            step("");
+            if (st && st.has_pin) {
+              document.getElementById("gatePwRow").hidden = false;
+              const pw = document.getElementById("gatePw");
+              pw.value = "";
+              pw.focus();
+            } else {
+              document.getElementById("gateNewRow").hidden = false;
+              ["gateBiz", "gatePin1", "gatePin2"].forEach(id => { document.getElementById(id).value = ""; });
+              document.getElementById("gateBiz").focus();
+            }
+          } catch (e) {
+            fail("확인하지 못했습니다: " + (e && e.message ? e.message : e));
+          }
         });
         box.appendChild(b);
       });
@@ -1070,31 +1097,62 @@
       }
     }
 
+    function lockedMsg(r) {
+      const t = r && r.until ? new Date(r.until).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) : "";
+      return "여러 번 틀려서 잠시 잠겼습니다." + (t ? " " + t + " 이후에 다시 해 주세요." : " 10분 뒤에 다시 해 주세요.");
+    }
+    // 처음: 비즈홈 비밀번호 확인 + 파고들기 PIN 정하기
+    async function setPin() {
+      const biz = document.getElementById("gateBiz").value, p1 = document.getElementById("gatePin1").value, p2 = document.getElementById("gatePin2").value;
+      const btn = document.getElementById("gateSetBtn");
+      if (!loginPick) { fail("먼저 이름을 고르세요."); return; }
+      if (!biz) { fail("비즈홈 비밀번호를 적어주세요."); return; }
+      if (p1.length < 6) { fail("PIN 은 6자리 이상으로 정해 주세요."); return; }
+      if (p1 !== p2) { fail("새 PIN 두 칸이 서로 다릅니다."); return; }
+      if (p1 === biz) { fail("PIN 은 비즈홈 비밀번호와 다르게 정해 주세요."); return; }
+      btn.disabled = true;
+      try {
+        const r = await rpc("think_set_pin", { p_member: loginPick.id, p_bizpw: biz, p_pin: p1 });
+        if (!r || !r.ok) {
+          const err = r && r.err;
+          fail(err === "bizpw" ? "비즈홈 비밀번호가 맞지 않습니다." : err === "locked" ? lockedMsg(r) : err === "has_pin" ? "이미 PIN 이 정해져 있습니다. 새로고침 후 PIN 으로 들어가세요." : err === "short" ? "PIN 은 6자리 이상입니다." : "PIN 을 정하지 못했습니다: " + err);
+          return;
+        }
+        await enter(r.token);
+      } catch (e) {
+        fail("오류가 났습니다: " + (e && e.message ? e.message : e));
+      } finally { btn.disabled = false; }
+    }
+    async function enter(token) {
+      try { localStorage.setItem(TOKEN_KEY + "_" + loginPick.id, token); } catch (e) {}
+      TOKEN = token;
+      try { localStorage.setItem(LOGIN_KEY, loginPick.id); } catch (e) {}
+      step("확인됨. 내용 불러오는 중…");
+      await start({ id: loginPick.id, name: loginPick.name });
+      if (!document.getElementById("gate").hidden) {
+        fail("내용은 불러왔는데 화면이 열리지 않았습니다. 이 문구를 알려주세요.");
+        return;
+      }
+      if (!storageWorks()) showStoreStatus("nosave");
+    }
+
     async function signIn() {
       const pw = document.getElementById("gatePw").value;
       const btn = document.getElementById("gateBtn");
       if (!loginPick) { fail("먼저 이름을 고르세요."); return; }
-      if (!pw) { fail("비밀번호를 적어주세요."); return; }
+      if (!pw) { fail("PIN 을 적어주세요."); return; }
 
       btn.disabled = true;
       btn.textContent = "들어가는 중…";
       try {
-        step("① 비밀번호 확인 중…");
-        // 비밀번호는 지금 서버 값으로 확인합니다 (비즈홈에서 방금 바꿨을 수 있으니)
-        const { data, error } = await sb.from("members").select("password").eq("id", loginPick.id).maybeSingle();
-        if (error) { fail("② 확인 실패: " + error.message); return; }
-        if (!data) { fail("② 비즈홈 팀원 목록에서 이 이름을 찾지 못했습니다."); return; }
-        if (pw !== (data.password || DEFAULT_PW)) { fail("② 비밀번호가 맞지 않습니다. 비즈홈 비밀번호와 같습니다."); return; }
-
-        try { localStorage.setItem(LOGIN_KEY, loginPick.id); } catch (e) {}
-        step("③ 확인됨. 내용 불러오는 중…");
-        await start({ id: loginPick.id, name: loginPick.name });
-
-        if (!document.getElementById("gate").hidden) {
-          fail("④ 내용은 불러왔는데 화면이 열리지 않았습니다. 이 문구를 알려주세요.");
+        step("① PIN 확인 중…");
+        const r = await rpc("think_login", { p_member: loginPick.id, p_pin: pw });
+        if (!r || !r.ok) {
+          const err = r && r.err;
+          fail(err === "pin" ? "PIN 이 맞지 않습니다." + (r.left ? " (" + r.left + "번 더 틀리면 10분 잠김)" : " 10분 동안 잠겼습니다.") : err === "locked" ? lockedMsg(r) : err === "no_pin" ? "아직 PIN 을 정하지 않았습니다. 새로고침 후 다시 이름을 눌러 주세요." : "들어가지 못했습니다: " + err);
           return;
         }
-        if (!storageWorks()) showStoreStatus("nosave");
+        await enter(r.token);
       } catch (e) {
         fail("오류가 났습니다: " + (e && e.message ? e.message : e));
       } finally {
@@ -1105,8 +1163,12 @@
 
     document.getElementById("gateBtn").addEventListener("click", signIn);
     document.getElementById("gatePw").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
-    document.getElementById("logout").addEventListener("click", () => {
-      try { localStorage.removeItem(LOGIN_KEY); } catch (e) {}
+    document.getElementById("gateSetBtn").addEventListener("click", setPin);
+    document.getElementById("gatePin2").addEventListener("keydown", (e) => { if (e.key === "Enter") setPin(); });
+    document.getElementById("logout").addEventListener("click", async () => {
+      if (localDirty) { try { await pushToServer(); } catch (e) {} }
+      try { await sb.rpc("think_logout", { p_token: TOKEN }); } catch (e) {}
+      try { localStorage.removeItem(tokenKey()); localStorage.removeItem(LOGIN_KEY); } catch (e) {}
       location.reload();
     });
 
@@ -1120,8 +1182,8 @@
         if (savedId) {
           if (!MEMBERS.length) { try { MEMBERS = await loadMembers(); } catch (e) {} }
           const m = MEMBERS.find(x => x.id === savedId);
-          if (m) user = { id: m.id, name: m.name };
-          else { try { localStorage.removeItem(LOGIN_KEY); } catch (e) {} }   // 팀원에서 빠진 사람
+          if (m && getToken(m.id)) user = { id: m.id, name: m.name };   // 이 기기에 출입증이 있어야 바로 들어감
+          else if (!m) { try { localStorage.removeItem(LOGIN_KEY); } catch (e) {} }   // 팀원에서 빠진 사람
         }
       }
       if (!user) {
@@ -1129,6 +1191,7 @@
         return;
       }
       me = user;
+      TOKEN = getToken(me.id);
 
       // 혼자 쓰던 때(2026-10-11 이전)의 임시 보관본은 박봉수 것으로 이어받습니다
       if (me.id === OLD_OWNER_MEMBER) {
@@ -1149,15 +1212,17 @@
       dbg("A. 로그인확인 통과", me.name);
       if (typeof step === "function") step("④ 내용 불러오는 중…");
 
-      const { data, error } = await sb.from(DOC_TABLE).select("value, updated_at").eq("id", docId()).maybeSingle();
+      let data = null, error = null;
+      try { data = await rpc("think_load", { p_token: TOKEN, p_full: true }); if (!data || data.ok === false) error = new Error((data && data.err) || "알 수 없음"); }
+      catch (e) { error = e; }
       if (error) {
         document.getElementById("gate").hidden = false;
-        document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + error.message;
-        dbg("B. 내용 불러오기 실패", error.message);
+        document.getElementById("gateMsg").textContent = "내용을 불러오지 못했습니다: " + (error.message || error);
+        dbg("B. 내용 불러오기 실패", error.message || String(error));
         return;
       }
 
-      serverStamp = data ? data.updated_at : null;
+      serverStamp = data.updated_at || null;
       const serverData = fixMemoIds((data && data.value) ? data.value : {});
       noteSeenTs(serverData);
       const cache = readCache();
