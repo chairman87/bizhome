@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회의록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121551">
-<script src="common.js?v=202610121551"></script>
+<link rel="stylesheet" href="common.css?v=202610121815">
+<script src="common.js?v=202610121815"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -20,6 +20,8 @@
   .mt .sum{font-size:13px;color:var(--fg2);white-space:pre-wrap;max-height:60px;overflow:hidden}
   .mt .meta{font-size:12px;color:var(--fg3);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .mt .side{text-align:right;font-size:12px;color:var(--fg3);white-space:nowrap}
+  .mt.new{border-color:#fca5a5;background:#fff7f7}
+  .newtag{font-size:11px;font-weight:700;color:#fff;background:#ef4444;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
   .cat{font-size:12px;border-radius:4px;padding:1px 7px;white-space:nowrap;background:#f1f5f9;color:#334155;font-weight:600}
   .cat.c0{background:#fef9c3;color:#854d0e}.cat.c1{background:#e0f2fe;color:#075985}.cat.c2{background:#dcfce7;color:#166534}
   .cat.c3{background:#e2e8f0;color:#0f172a}.cat.c4{background:#fce7f3;color:#9d174d}.cat.c5{background:#f3e8ff;color:#6b21a8}
@@ -85,6 +87,25 @@ const monthLabel = m => m ? `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월` : 
 const dow = d => d ? ['일', '월', '화', '수', '목', '금', '토'][new Date(d + 'T00:00:00').getDay()] : '';
 const openActs = mt => (mt.actions || []).filter(a => !a.done).length;
 
+/* 읽음 기록 (common.js 의 mtUnread 기준): 내 줄만 따로 읽음. 회의록을 열면 ids 에 넣어 홈 숫자에서 빠짐 */
+let MR = null;
+const isNew = m => !!MR && mtUnread(m, MR.value);
+async function loadMyReads(){
+  if (!store.client || !me || (MR && MR.who === me)) return;
+  try { const { data } = await store.client.from('settings').select('id,value').eq('id', mtReadId()); MR = { who: me, value: ((data || [])[0] || {}).value || { since: MT_READ_FROM, ids: [] } }; render(); }
+  catch (e) { console.warn('회의록 읽음 기록을 읽지 못했습니다', e); }
+}
+async function saveMyReads(value){
+  MR = { who: me, value };
+  try { await store.upsert('settings', { id: mtReadId(), value, updated_by: me, updated_at: nowIso() }); } catch (e) { toast('읽음 표시 저장 실패: ' + (e.message || e), true); }
+  render();
+}
+function markRead(m){
+  if (!isNew(m)) return;
+  const v = MR.value, ids = (v.ids || []).filter(id => M().some(x => x.id === id && new Date(x.created_at || 0) > new Date(v.since || MT_READ_FROM)));   // 이미 기준 시각 앞으로 지난 것은 정리
+  saveMyReads({ since: v.since || MT_READ_FROM, ids: [...ids, m.id] });
+}
+
 let view = LS.get('mt_view') || 'all';
 let q = '';
 
@@ -92,6 +113,8 @@ function normalize(table, m){ return { ...m, actions: Array.isArray(m.actions) ?
 const VIEWS = () => [{ key: 'all', label: '전체' }, ...CATS.map(c => ({ key: 'c:' + c, label: c })), null, { key: 'todo', label: '남은 할 일', badge: M().reduce((a, m) => a + openActs(m), 0) }];
 
 function render(){
+  if (!MR || MR.who !== me) loadMyReads();
+  const newN = M().filter(isNew).length;
   const list = M().filter(m => (view === 'all' || (view === 'todo' ? openActs(m) > 0 : catsOf(m).includes(view.slice(2))))
     && (!q || [m.title, m.summary, m.details, m.attendees, m.decisions].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))))
     .sort((a, b) => String(b.meeting_date || '').localeCompare(String(a.meeting_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -99,20 +122,21 @@ function render(){
     + `<main class="wrap" style="max-width:1000px">${!DATA.meetings ? `<div class="empty">회의록 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-meetings.sql)을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 회의록 작성</button>
       <input type="search" id="fq" placeholder="검색 (제목, 요약, 내용, 참석자)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:240px">
-      <span class="count">${list.length}건</span></div>
+      <span class="count">${list.length}건</span>${newN ? `<span class="newtag" style="margin-left:4px">새 회의록 ${newN}</span><button class="btn sm" id="readAll">모두 읽음</button>` : ''}</div>
     <div class="hint" style="margin-bottom:8px">회의용 플라우드로 녹음한 회의는 <b>분류 · 제목 · 요약 · 상세 내용</b>이 정리되어 자동으로 올라옵니다(작성자 "플라우드 자동"). 틀린 곳은 <b>수정</b>으로 고치고, 직접 작성해도 됩니다.</div>
     ${list.length ? listHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'todo' ? '남은 할 일이 없습니다.' : '아직 회의록이 없습니다.<br><b>＋ 회의록 작성</b>으로 첫 회의를 남겨 보세요.'}</div>`}`}</main>`;
   bindHeader(k => { view = k; LS.set('mt_view', k); render(); }, null, m => `작성 ${M().filter(x => x.created_by === m.name).length}건`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const ra = $('#readAll'); if (ra) ra.onclick = () => saveMyReads({ since: nowIso(), ids: [] });
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('.mt[data-id]').forEach(el => el.onclick = () => openView(el.dataset.id));
 }
 function listHtml(list){
   const months = [...new Set(list.map(m => monthOf(m.meeting_date)))];
   return months.map(mo => `<div class="month-h">${monthLabel(mo)} <span class="n">${list.filter(m => monthOf(m.meeting_date) === mo).length}건</span></div>
-    ${list.filter(m => monthOf(m.meeting_date) === mo).map(m => `<div class="mt" data-id="${m.id}">
+    ${list.filter(m => monthOf(m.meeting_date) === mo).map(m => `<div class="mt ${isNew(m) ? 'new' : ''}" data-id="${m.id}">
       <div class="d">${m.meeting_date ? fmtDate(m.meeting_date).slice(5) : '-'}<small>${dow(m.meeting_date)}${m.start_time ? ' ' + esc(m.start_time) : ''}</small></div>
-      <div><div class="t">${catChips(m)}${esc(m.title)}</div><div class="sum">${topicText(m.summary || '(요약 없음)')}</div>
+      <div><div class="t">${isNew(m) ? '<span class="newtag">NEW</span>' : ''}${catChips(m)}${esc(m.title)}</div><div class="sum">${topicText(m.summary || '(요약 없음)')}</div>
         <div class="meta">${m.attendees ? `<span>👥 ${esc(m.attendees)}</span>` : ''}${m.files.length ? `<span>📎 ${m.files.length}</span>` : ''}${openActs(m) ? `<span class="todo">할 일 ${openActs(m)}개 남음</span>` : (m.actions.length ? '<span>✓ 할 일 완료</span>' : '')}</div></div>
       <div class="side">${esc(m.created_by || '')}</div></div>`).join('')}`).join('');
 }
@@ -120,6 +144,7 @@ function listHtml(list){
 /* 상세 보기: 위 요약, 아래 상세 */
 function openView(id){
   const m = M().find(x => x.id === id); if (!m) return;
+  markRead(m);
   const pdf = m.files.find(f => /\.pdf$/i.test(f.name || ''));
   const audio = m.files.find(f => /\.(mp3|m4a|wav|ogg)$/i.test(f.name || ''));
   openModal(`${modalHead('회의록')}

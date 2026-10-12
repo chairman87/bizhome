@@ -623,6 +623,12 @@ async function loadProjNews(force){
   })();
   return pnLoading;
 }
+/* ---------- 회의록 새 글 (홈 '회의록' 메뉴의 빨간 숫자 + 회의록 화면의 NEW 표시) ----------
+   읽음 기록은 settings 표에 사람마다 한 줄: id 'meetings_read:<이름>' → value { since, ids:[열어 본 회의록 id] }
+   since 뒤에 남(플라우드 자동 포함)이 올린 회의록 중 ids 에 없는 것 = 안 읽음. 기록이 없는 사람은 MT_READ_FROM(기능을 넣은 때)부터 셈 */
+const MT_READ_FROM = '2026-10-12T09:00:00Z';
+const mtReadId = () => 'meetings_read:' + me;
+const mtUnread = (m, r) => !!m && m.created_by !== me && new Date(m.created_at || 0) > new Date((r && r.since) || MT_READ_FROM) && !((r && r.ids) || []).includes(m.id);
 /* 화면을 그린 뒤 호출: 읽어 온 것이 바뀌었으면 숫자를 다시 그림. 홈(APP.onProjNews)은 소식 판까지 다시 그림 */
 async function refreshProjNews(){
   const page = location.pathname.split('/').pop() || 'index.html';
