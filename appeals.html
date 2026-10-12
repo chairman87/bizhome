@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121543">
-<script src="common.js?v=202610121543"></script>
+<link rel="stylesheet" href="common.css?v=202610121549">
+<script src="common.js?v=202610121549"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -26,6 +26,8 @@
   .last{font-weight:600}
   .cnt{display:inline-block;min-width:20px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;padding:1px 6px;margin-left:4px}
   .ago{font-size:11px;color:var(--fg3)}
+  .rsn{display:grid;gap:4px;border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;font-size:13px}
+  .rsn label{display:flex;gap:6px;align-items:center;cursor:pointer}
   .hist{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .hist .h{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
   .hist .h:last-child{border-bottom:0}
@@ -47,24 +49,27 @@
 <script>
 /* ================================================================
    구글 이의신청내역 관리: 구글 광고에서 거절된 영상과, 언제 이의신청을 넣었는지 기록하는 곳
-   한 줄 = { product(서리맥스/흑생마), ad_id(광고 영상 리스트 연결), title, url, rejected_on(거절일), reason(거절 사유),
-             status(결과), appeals[{id, at(이의신청 일시), by, note}], memo, created_by, created_at, updated_by }
+   한 줄 = { product(서리맥스/흑생마), ad_id(광고 영상 리스트 연결), title, url, rejected_on(거절일), reason(거절 사유, 여러 개면 ' / ' 로 이어 붙임),
+             status(현재 상태), appeals[{id, at(이의신청 일시), by, note}], memo, created_by, created_at, updated_by }
    광고 영상 리스트(ads)에 매일 자동 반영되는 구글 "거부됨" 영상 중 아직 안 적은 것은 위에 띄워 바로 기록할 수 있게 함
 ================================================================ */
 const PRODUCTS = ['서리맥스', '흑생마'];
-const STATUSES = ['거절됨', '검토중', '승인됨', '다시 거절', '포기'];
-const ST_COLOR = { '거절됨': ['#fee2e2', '#b91c1c'], '검토중': ['#fef3c7', '#92400e'], '승인됨': ['#dcfce7', '#166534'], '다시 거절': ['#fce7f3', '#9d174d'], '포기': ['#e5e7eb', '#4b5563'] };
+const STATUSES = ['비승인', '운영제한', '이의신청중', '중복요청'];
+const ST_COLOR = { '비승인': ['#fee2e2', '#b91c1c'], '운영제한': ['#ffedd5', '#9a3412'], '이의신청중': ['#fef3c7', '#92400e'], '중복요청': ['#e5e7eb', '#4b5563'] };
+const TODO_ST = ['비승인', '운영제한'];   // 아직 이의신청 안 한 상태 (탭 빨간 숫자, 이의신청 넣으면 '이의신청중'으로)
 const YT_REQ = 'YouTube 및 디스커버 피드 광고 요건 - ';   // 구글애즈 정책 화면에 나오는 사유 앞부분
 const REASONS = ['일부 제한됨', YT_REQ + '부적절한 콘텐츠', YT_REQ + '부정확하거나 과장된 주장', YT_REQ + '부정적인 영향을 주는 이벤트 및 이미지'];
 const shortReason = s => String(s || '').replace(YT_REQ, '');   // 표에는 앞부분을 빼고 짧게
+const R_SEP = ' / ';
+const reasonsOf = s => String(s || '').split(R_SEP).map(x => x.trim()).filter(Boolean);   // 거절 사유는 여러 개일 수 있음
 const A = () => DATA.google_appeals || [];
 
 let tab = PRODUCTS.includes(LS.get('appeals_tab')) ? LS.get('appeals_tab') : PRODUCTS[0];
 let q = '', stFilter = '';
 
-function normalize(table, r){ return table === 'google_appeals' ? { ...r, appeals: Array.isArray(r.appeals) ? r.appeals : [], status: STATUSES.includes(r.status) ? r.status : '거절됨' } : r; }
+function normalize(table, r){ return table === 'google_appeals' ? { ...r, appeals: Array.isArray(r.appeals) ? r.appeals : [], status: STATUSES.includes(r.status) ? r.status : '비승인' } : r; }
 
-const stTag = s => tag(s, ...(ST_COLOR[s] || ST_COLOR['거절됨']), true);
+const stTag = s => tag(s, ...(ST_COLOR[s] || ST_COLOR['비승인']), true);
 const sortAppeals = list => [...list].sort((a, b) => String(a.at).localeCompare(String(b.at)));
 const lastAppeal = r => sortAppeals(r.appeals).slice(-1)[0];
 /* <input type=datetime-local> 값 ↔ 저장값(ISO) */
@@ -82,7 +87,7 @@ function render(){
   const list = all.filter(r => (!stFilter || r.status === stFilter)
       && (!q || [r.title, r.reason, r.memo, r.url, ...r.appeals.map(x => x.note)].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))))
     .sort((a, b) => String(b.rejected_on || '').localeCompare(String(a.rejected_on || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  const tabs = PRODUCTS.map(p => { const n = A().filter(r => r.product === p && ['거절됨', '다시 거절'].includes(r.status)).length; return { key: p, label: p, badge: n || '', badgeTitle: '아직 이의신청 안 한(또는 다시 거절된) 영상 수' }; });
+  const tabs = PRODUCTS.map(p => { const n = A().filter(r => r.product === p && TODO_ST.includes(r.status)).length; return { key: p, label: p, badge: n || '', badgeTitle: '비승인·운영제한 상태인 영상 수 (아직 이의신청 안 함)' }; });
   const pend = DATA.google_appeals ? pending(tab) : [];
   $('#app').innerHTML = headerHtml({ icon: '🖥️', title: '구글 이의신청내역 관리', tabs, active: tab })
     + `<main class="wrap">
@@ -91,9 +96,9 @@ function render(){
       ${pend.map(a => `<span class="it">${esc(a.title)}<button class="btn sm" data-pend="${a.id}">기록</button></span>`).join('')}</div>` : ''}
     <div class="actions"><button class="btn primary" id="newRec">＋ 거절 영상 기록</button>
       <input type="search" id="fq" placeholder="검색 (영상 이름, 사유, 메모)" value="${esc(q)}">
-      <select id="fs"><option value="">결과 전체</option>${STATUSES.map(s => `<option ${stFilter === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <select id="fs"><option value="">상태 전체</option>${STATUSES.map(s => `<option ${stFilter === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
       <span class="count">${list.length}건${all.length !== list.length ? ` / 전체 ${all.length}건` : ''}</span></div>
-    <div class="tablewrap"><table class="ap"><thead><tr><th>거절일</th><th>영상</th><th>거절 사유</th><th>이의신청 (마지막 일시)</th><th>결과</th><th>메모</th><th></th></tr></thead><tbody>
+    <div class="tablewrap"><table class="ap"><thead><tr><th>거절일</th><th>영상</th><th>거절 사유</th><th>이의신청 (마지막 일시)</th><th>현재 상태</th><th>메모</th><th></th></tr></thead><tbody>
       ${list.map(rowHtml).join('') || `<tr><td colspan="7" class="hint" style="text-align:center;padding:24px">${q || stFilter ? '조건에 맞는 영상이 없습니다.' : `${tab} 거절 영상 기록이 아직 없습니다. 위 <b>＋ 거절 영상 기록</b>을 눌러 적어 보세요.`}</td></tr>`}
     </tbody></table></div>
     <div class="hint" style="margin-top:8px">줄을 누르면 자세히 보고 고칠 수 있습니다. <b>＋ 이의신청</b>을 누르면 지금 시각이 자동으로 들어갑니다(시각은 고칠 수 있음). 같은 영상에 여러 번 넣으면 기록이 차례로 쌓입니다.</div>`}
@@ -111,7 +116,7 @@ function rowHtml(r){
   return `<tr data-id="${r.id}">
     <td class="c">${fmtDate(r.rejected_on) || '-'}</td>
     <td class="ti">${esc(r.title)}${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" title="영상 열기">↗</a>` : ''}</td>
-    <td title="${esc(r.reason || '')}">${esc(shortReason(r.reason))}</td>
+    <td title="${esc(reasonsOf(r.reason).join(', '))}">${reasonsOf(r.reason).map(x => `<div>${esc(shortReason(x))}</div>`).join('')}</td>
     <td class="c">${la ? `<span class="last">${fmtDateTime(la.at)}</span>${r.appeals.length > 1 ? `<span class="cnt" title="이의신청 ${r.appeals.length}번">${r.appeals.length}회</span>` : ''} <span class="ago">${agoText(la.at)}</span>` : '<span class="hint">아직 안 함</span>'}</td>
     <td class="c">${stTag(r.status)}</td>
     <td class="memo">${esc(r.memo || '')}</td>
@@ -135,7 +140,7 @@ function openQuick(id){
     const at = fromLocalInput($('#qAt').value); if (!at) { toast('일시를 넣어 주세요', true); return; }
     const appeals = sortAppeals([...r.appeals, { id: uid(), at, by: me, note: $('#qNote').value.trim() }]);
     closeModal();
-    await saveRow('google_appeals', { ...r, appeals, status: ['거절됨', '다시 거절'].includes(r.status) ? '검토중' : r.status, updated_by: me });
+    await saveRow('google_appeals', { ...r, appeals, status: TODO_ST.includes(r.status) ? '이의신청중' : r.status, updated_by: me });
     toast(`이의신청 ${fmtDateTime(at)} 기록했습니다`);
   };
 }
@@ -143,7 +148,7 @@ function openQuick(id){
 /* 거절 영상 기록·수정 창 (이의신청 기록 목록 포함) */
 function openRec(id, preset = {}){
   const r0 = id ? A().find(x => x.id === id) : null;
-  const r = r0 || { product: tab, title: '', url: '', rejected_on: todayStr(), reason: '', status: '거절됨', memo: '', appeals: [], ...preset };
+  const r = r0 || { product: tab, title: '', url: '', rejected_on: todayStr(), reason: '', status: '비승인', memo: '', appeals: [], ...preset };
   let appeals = sortAppeals(r.appeals);
   const adTitles = p => [...new Set((DATA.ads || []).filter(a => a.product === p && a.google === true).map(a => a.title).filter(Boolean))];   // 구글에 올린 영상만 (광고 영상 리스트의 '구글' 칸이 O 인 것)
   openModal(`${modalHead(r0 ? '거절 영상' : '거절 영상 기록')}
@@ -155,8 +160,8 @@ function openRec(id, preset = {}){
       <div class="f"><label>영상 이름 *</label><input id="rTitle" list="adList" value="${esc(r.title)}" maxlength="200" placeholder="광고 영상 리스트의 영상 이름을 고르거나 직접 입력"><datalist id="adList"></datalist></div>
       <div class="f"><label>영상 주소 (선택)</label><input id="rUrl" value="${esc(r.url || '')}" placeholder="https://youtu.be/..." inputmode="url"></div>
       <div class="f2">
-        <div class="f"><label>거절 사유</label><select id="rReason"><option value="">(고르세요)</option>${[...REASONS, '기타', ...(r.reason && !REASONS.includes(r.reason) && r.reason !== '기타' ? [r.reason] : [])].map(x => `<option value="${esc(x)}" ${r.reason === x ? 'selected' : ''}>${esc(shortReason(x))}</option>`).join('')}</select></div>
-        <div class="f"><label>결과</label><select id="rStatus">${STATUSES.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="f"><label>거절 사유 <span class="hint">(여러 개 고를 수 있음)</span></label><div class="rsn" id="rReason">${[...REASONS, '기타', ...reasonsOf(r.reason).filter(x => !REASONS.includes(x) && x !== '기타')].map(x => `<label><input type="checkbox" value="${esc(x)}" ${reasonsOf(r.reason).includes(x) ? 'checked' : ''}> ${esc(shortReason(x))}</label>`).join('')}</div></div>
+        <div class="f"><label>현재 상태</label><select id="rStatus">${STATUSES.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="f"><label>이의신청 기록</label><div class="hist" id="hist"></div></div>
       <div class="f"><label>메모</label><textarea id="rMemo" placeholder="예: 구글 담당자 답변, 다음에 바꿀 점">${esc(r.memo || '')}</textarea></div>
@@ -171,7 +176,7 @@ function openRec(id, preset = {}){
     $('#hAdd').onclick = () => {
       const at = fromLocalInput($('#hAt').value); if (!at) { toast('일시를 넣어 주세요', true); return; }
       appeals = sortAppeals([...appeals, { id: uid(), at, by: me, note: $('#hNote').value.trim() }]);
-      if (['거절됨', '다시 거절'].includes($('#rStatus').value)) $('#rStatus').value = '검토중';
+      if (TODO_ST.includes($('#rStatus').value)) $('#rStatus').value = '이의신청중';
       drawHist();
     };
     $('#hNote').onkeydown = e => { if (e.key === 'Enter') $('#hAdd').click(); };
@@ -186,7 +191,7 @@ function openRec(id, preset = {}){
     const product = $('#rProd').value;
     const ad = (DATA.ads || []).find(a => a.product === product && a.title === title);
     const row = { id: r0 ? r0.id : uid(), product, ad_id: ad ? ad.id : (r.ad_id && r.title === title ? r.ad_id : null),
-      title, url: url || null, rejected_on: $('#rDate').value || null, reason: $('#rReason').value || null, status: $('#rStatus').value,
+      title, url: url || null, rejected_on: $('#rDate').value || null, reason: [...document.querySelectorAll('#rReason input:checked')].map(i => i.value).join(R_SEP) || null, status: $('#rStatus').value,
       appeals, memo: $('#rMemo').value.trim() || null,
       created_by: r0 ? r0.created_by : me, created_at: r0 ? r0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('google_appeals', row);

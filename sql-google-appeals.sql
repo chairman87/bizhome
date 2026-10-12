@@ -6,8 +6,8 @@ create table if not exists google_appeals (
   title       text not null,                 -- 거절된 영상 이름
   url         text,                          -- 영상 주소 (유튜브 등, 선택)
   rejected_on date,                          -- 구글에서 거절된 날
-  reason      text,                          -- 거절 사유 (건강 및 의약품 ...)
-  status      text default '거절됨',          -- 거절됨 / 검토중 / 승인됨 / 다시 거절 / 포기
+  reason      text,                          -- 거절 사유 (여러 개면 ' / ' 로 이어 붙임)
+  status      text default '거절됨',          -- 현재 상태: 비승인 / 운영제한 / 이의신청중 / 중복요청 (기본값은 화면이 항상 채우므로 안 쓰임)
   appeals     jsonb default '[]',            -- 이의신청 기록 [{id, at(일시), by, note}]
   memo        text,
   created_by  text,
