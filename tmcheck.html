@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표 점검</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610112140">
-<script src="common.js?v=202610112140"></script>
+<link rel="stylesheet" href="common.css?v=202610120912">
+<script src="common.js?v=202610120912"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -102,7 +102,7 @@
 <script>
 /* ================================================================
    상표 점검 — 새 이름(상표)을 몇 류에 낼지 적어 요청하면, 대표 PC 의 로봇(클로드코드\TM-CHECK\watcher.py)이
-   키프리스(특허청 상표 검색)·네이버·구글을 읽어 등록 가능성·침해 위험 점수와 "걱정되는 점"을 적어 준다 (1~3분).
+   키프리스(특허청 상표 검색)·네이버·구글을 읽어 등록 가능성·침해 위험 점수와 "걱정되는 점"을 적어 준다 (5분 정도).
    · 이 화면은 tm_checks 에 요청 한 줄을 넣고 결과를 보여 주기만 한다. 조회는 전부 대표 PC 에서.
    · 텔레그램 봇(@kph_sales_bot)에 "상표 29류 흑비담" 이라고 적어도 같은 요청이 들어온다.
    · 점수는 규칙으로 계산한 참고 값이다(변리사 의견이 아님). 칸 설명은 sql-tm-checks.sql 참고
@@ -147,7 +147,7 @@ function render(){
 
 function syncHtml(){
   const on = watchOn();
-  return `<div class="info ${on ? '' : 'old'}">${on ? '<span class="dot" style="background:#16a34a"></span><b>로봇 켜짐</b> · 요청하면 대표 PC 가 바로 키프리스·네이버·구글을 읽습니다 (1~3분).' : '<span class="dot" style="background:#dc2626"></span><b>로봇 꺼짐</b> · 요청은 저장되고, 대표 PC 의 로봇이 켜지면 처리됩니다.'}
+  return `<div class="info ${on ? '' : 'old'}">${on ? '<span class="dot" style="background:#16a34a"></span><b>로봇 켜짐</b> · 요청하면 대표 PC 가 바로 키프리스·네이버·구글을 읽고 AI 변리사 검토까지 합니다 (5분 정도).' : '<span class="dot" style="background:#dc2626"></span><b>로봇 꺼짐</b> · 요청은 저장되고, 대표 PC 의 로봇이 켜지면 처리됩니다.'}
     &nbsp;텔레그램 봇에 <b>상표 29류 흑비담</b> 처럼 적어도 됩니다. 점수는 규칙으로 계산한 참고 값이며 변리사 의견이 아닙니다.</div>`;
 }
 
@@ -182,7 +182,7 @@ function openNew(prefill){
         <div class="hint" id="nPicked" style="margin-top:4px"></div></div>
       <div class="f"><label>지정상품·용도 (선택, 쉼표로 여러 개)</label><input id="nGoods" value="${esc(d.goods || '')}" placeholder="예: 흑염소 진액, 비타민 스틱"></div>
       <div class="f"><label>메모 (선택)</label><input id="nMemo" value="${esc(d.memo || '')}" placeholder="예: 신제품 후보 이름 3개 중 하나"></div>
-      <div class="hint">요청하면 대표 PC 의 로봇이 키프리스(특허청 상표 검색)에서 같은 이름·닮은 이름을 찾고, 네이버·구글에서 이미 쓰는 곳이 있는지 봅니다. 류를 비우면 전체 류 기준으로 봅니다.</div>
+      <div class="hint">요청하면 대표 PC 의 로봇이 키프리스(특허청 상표 검색)에서 같은 이름·닮은 이름을 찾고, 네이버·구글에서 이미 쓰는 곳이 있는지 본 뒤 AI 변리사 검토 의견을 붙입니다 (5분 정도). 류를 비우면 전체 류 기준으로 봅니다.</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="nSave">점검 요청</button></div>`);
   const sync = () => {
@@ -199,7 +199,7 @@ function openNew(prefill){
     const row = { id: uid(), name, alias: $('#nAlias').value.trim() || null, classes: [...picked].sort((a, b) => a - b).join(',') || null, goods: $('#nGoods').value.trim() || null,
       memo: $('#nMemo').value.trim() || null, requested_by: me, via: 'web', status: '대기', seen: false, created_at: nowIso() };
     closeModal(); await saveRow('tm_checks', row);
-    toast(watchOn() ? '요청했습니다 · 1~3분 안에 결과가 나옵니다 (텔레그램으로도 갑니다)' : '요청을 저장했습니다 · 대표 PC 의 로봇이 켜지면 처리됩니다');
+    toast(watchOn() ? '요청했습니다 · 5분 정도 뒤에 결과가 나옵니다' : '요청을 저장했습니다 · 대표 PC 의 로봇이 켜지면 처리됩니다');
   };
 }
 
