@@ -1,5 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════
---  파고들기 (think.html) — 전용 PIN 으로 잠그기 (2026-10-12)
+--  파고들기 (think.html) — 잠긴 표 + 서버 함수 (2026-10-12)
+--  ※ 같은 날 저녁, 사용자 결정으로 로그인은 전용 PIN 대신 비즈홈 비밀번호로 바꿈(think_login). think_set_pin·think_change_pin 은 남아 있으나 안 씀
 --
 --  왜: 2026-10-12 팀원 모두 쓰게 바꾸면서 내용이 팀 공용 settings 표(think:<사람id>)에 들어갔는데,
 --      그 표는 공개키만 있으면 누구나 읽힙니다. 비즈홈 비밀번호(members.password)도 같은 이유로 지켜지지 않습니다.
@@ -108,19 +109,22 @@ begin
   return jsonb_build_object('ok', true, 'token', think_new_session(p_member));
 end $$;
 
--- PIN 으로 들어가기
+-- 들어가기 (2026-10-12 저녁 변경: PIN 대신 비즈홈 비밀번호로. 사용자 결정)
+--   주의: members.password 는 공개키로 읽히므로 이 잠금은 '일부러 꺼내 보는 사람'까지는 못 막습니다.
 create or replace function think_login(p_member uuid, p_pin text) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare r think_store;
+declare r think_store; pw text;
 begin
+  select password into pw from members where id::text = p_member::text;
+  if not found then return jsonb_build_object('ok', false, 'err', 'nomember'); end if;
+  insert into think_store (member) values (p_member) on conflict (member) do nothing;
   select * into r from think_store where member = p_member for update;
-  if not found or r.pin_hash is null then return jsonb_build_object('ok', false, 'err', 'no_pin'); end if;
   if r.locked_until > now() then return jsonb_build_object('ok', false, 'err', 'locked', 'until', r.locked_until); end if;
-  if r.pin_hash <> crypt(coalesce(p_pin, ''), r.pin_hash) then
+  if coalesce(p_pin, '') <> coalesce(nullif(pw, ''), '1234') then
     update think_store set fails = case when fails + 1 >= 5 then 0 else fails + 1 end,
                            locked_until = case when fails + 1 >= 5 then now() + interval '10 minutes' else locked_until end
      where member = p_member;
-    return jsonb_build_object('ok', false, 'err', 'pin', 'left', greatest(0, 4 - r.fails));
+    return jsonb_build_object('ok', false, 'err', 'pin', 'left', greatest(0, 4 - coalesce(r.fails, 0)));
   end if;
   update think_store set fails = 0, locked_until = null where member = p_member;
   return jsonb_build_object('ok', true, 'token', think_new_session(p_member));

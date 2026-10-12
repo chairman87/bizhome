@@ -590,18 +590,11 @@
   <div class="gate" id="gate">
     <div class="gate-box">
       <h1>파고들기</h1>
-      <div class="hint">이름을 고르고 <b>파고들기 전용 PIN</b>으로 들어갑니다. 내용은 PIN 을 아는 본인만 열 수 있습니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
+      <div class="hint">비즈홈과 같은 이름·비밀번호로 들어갑니다. 사람마다 자기 내용만 보입니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
       <div class="names" id="gateNames"><span class="gate-loading">팀원 목록을 불러오는 중…</span></div>
       <div class="pwrow" id="gatePwRow" hidden>
-        <input type="password" id="gatePw" placeholder="파고들기 PIN" autocomplete="current-password">
+        <input type="password" id="gatePw" placeholder="비즈홈 비밀번호" autocomplete="current-password">
         <button id="gateBtn">들어가기</button>
-      </div>
-      <div id="gateNewRow" hidden>
-        <div class="hint" style="margin:4px 0 8px;color:#888">처음입니다. 본인 확인을 위해 <b>비즈홈 비밀번호</b>를 넣고, 앞으로 쓸 <b>파고들기 PIN(6자리 이상)</b>을 정하세요. 비즈홈 비밀번호와 다르게 정하세요.</div>
-        <input type="password" id="gateBiz" placeholder="비즈홈 비밀번호" autocomplete="off">
-        <input type="password" id="gatePin1" placeholder="새 PIN (6자리 이상)" autocomplete="new-password">
-        <input type="password" id="gatePin2" placeholder="새 PIN 한 번 더" autocomplete="new-password">
-        <button id="gateSetBtn">PIN 정하고 들어가기</button>
       </div>
       <div class="gate-msg" id="gateMsg"></div>
     </div>
@@ -636,7 +629,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-12 19:50";
+    const BUILD = "2026-10-12 20:20";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -664,7 +657,7 @@
     //
     // 로그인: 비즈홈과 같은 방식입니다 (2026-10-11 부터). 팀원 표(members)에서 이름을 고르고
     // 비즈홈 비밀번호를 맞히면 들어갑니다. 사람마다 자기 줄(owner = members.id)만 읽고 씁니다.
-    // 저장 (2026-10-12 저녁부터): 아무도 직접 못 읽는 think_store 표. 파고들기 전용 PIN 이 맞으면 서버 함수가
+    // 저장 (2026-10-12 저녁부터): 아무도 직접 못 읽는 think_store 표. 비즈홈 비밀번호가 맞으면(think_login, 원래 전용 PIN 이었다가 사용자 결정으로 변경) 서버 함수가
     // 기기별 출입증(token)을 주고, 읽기·저장은 그 출입증으로 서버 함수(think_load / think_save / think_hist_add)를 부릅니다.
     // 설정 SQL: sql-think-pin.sql. (그 전에 쓰던 settings 표의 think:<id> 줄은 공개키로 누구나 읽혀서 옮겼습니다)
     // 예전 think_docs 표(2026-10-11 이전)도 그대로 남아 있습니다(사용 안 함).
@@ -679,14 +672,14 @@
     function tokenKey() { return TOKEN_KEY + "_" + (me ? me.id : "x"); }
     function getToken(id) { try { return localStorage.getItem(TOKEN_KEY + "_" + id) || ""; } catch (e) { return ""; } }
     let TOKEN = "";
-    // 서버 함수 부르기. 출입증이 안 통하면(로그아웃·PIN 변경·초기화) 다시 PIN 을 묻습니다 (적은 것은 임시 보관본에 남아 다시 들어오면 합쳐짐)
+    // 서버 함수 부르기. 출입증이 안 통하면(로그아웃·180일 미사용) 다시 비밀번호를 묻습니다 (적은 것은 임시 보관본에 남아 다시 들어오면 합쳐짐)
     async function rpc(name, args) {
       const { data, error } = await sb.rpc(name, args);
       if (error) throw error;
       if (data && data.ok === false && data.err === "session") {
         try { localStorage.removeItem(tokenKey()); } catch (e) {}
         cacheNow(localDirty);
-        alert("파고들기 출입증이 끝났습니다. PIN 을 다시 넣어 주세요.");
+        alert("다시 로그인해 주세요. (비즈홈 비밀번호)");
         location.reload();
         throw new Error("session");
       }
@@ -1059,29 +1052,14 @@
         b.appendChild(av);
         b.appendChild(document.createTextNode(m.name || "이름 없음"));
         if (m.title) { const t = document.createElement("small"); t.textContent = m.title; b.appendChild(t); }
-        b.addEventListener("click", async () => {
+        b.addEventListener("click", () => {
           loginPick = m;
           renderNames();
-          document.getElementById("gatePwRow").hidden = true;
-          document.getElementById("gateNewRow").hidden = true;
-          step("확인 중…");
-          try {
-            const st = await rpc("think_status", { p_member: m.id });
-            if (loginPick !== m) return;
-            step("");
-            if (st && st.has_pin) {
-              document.getElementById("gatePwRow").hidden = false;
-              const pw = document.getElementById("gatePw");
-              pw.value = "";
-              pw.focus();
-            } else {
-              document.getElementById("gateNewRow").hidden = false;
-              ["gateBiz", "gatePin1", "gatePin2"].forEach(id => { document.getElementById(id).value = ""; });
-              document.getElementById("gateBiz").focus();
-            }
-          } catch (e) {
-            fail("확인하지 못했습니다: " + (e && e.message ? e.message : e));
-          }
+          document.getElementById("gatePwRow").hidden = false;
+          const pw = document.getElementById("gatePw");
+          pw.value = "";
+          pw.focus();
+          fail("");
         });
         box.appendChild(b);
       });
@@ -1101,28 +1079,6 @@
       const t = r && r.until ? new Date(r.until).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) : "";
       return "여러 번 틀려서 잠시 잠겼습니다." + (t ? " " + t + " 이후에 다시 해 주세요." : " 10분 뒤에 다시 해 주세요.");
     }
-    // 처음: 비즈홈 비밀번호 확인 + 파고들기 PIN 정하기
-    async function setPin() {
-      const biz = document.getElementById("gateBiz").value, p1 = document.getElementById("gatePin1").value, p2 = document.getElementById("gatePin2").value;
-      const btn = document.getElementById("gateSetBtn");
-      if (!loginPick) { fail("먼저 이름을 고르세요."); return; }
-      if (!biz) { fail("비즈홈 비밀번호를 적어주세요."); return; }
-      if (p1.length < 6) { fail("PIN 은 6자리 이상으로 정해 주세요."); return; }
-      if (p1 !== p2) { fail("새 PIN 두 칸이 서로 다릅니다."); return; }
-      if (p1 === biz) { fail("PIN 은 비즈홈 비밀번호와 다르게 정해 주세요."); return; }
-      btn.disabled = true;
-      try {
-        const r = await rpc("think_set_pin", { p_member: loginPick.id, p_bizpw: biz, p_pin: p1 });
-        if (!r || !r.ok) {
-          const err = r && r.err;
-          fail(err === "bizpw" ? "비즈홈 비밀번호가 맞지 않습니다." : err === "locked" ? lockedMsg(r) : err === "has_pin" ? "이미 PIN 이 정해져 있습니다. 새로고침 후 PIN 으로 들어가세요." : err === "short" ? "PIN 은 6자리 이상입니다." : "PIN 을 정하지 못했습니다: " + err);
-          return;
-        }
-        await enter(r.token);
-      } catch (e) {
-        fail("오류가 났습니다: " + (e && e.message ? e.message : e));
-      } finally { btn.disabled = false; }
-    }
     async function enter(token) {
       try { localStorage.setItem(TOKEN_KEY + "_" + loginPick.id, token); } catch (e) {}
       TOKEN = token;
@@ -1140,16 +1096,16 @@
       const pw = document.getElementById("gatePw").value;
       const btn = document.getElementById("gateBtn");
       if (!loginPick) { fail("먼저 이름을 고르세요."); return; }
-      if (!pw) { fail("PIN 을 적어주세요."); return; }
+      if (!pw) { fail("비밀번호를 적어주세요."); return; }
 
       btn.disabled = true;
       btn.textContent = "들어가는 중…";
       try {
-        step("① PIN 확인 중…");
+        step("① 비밀번호 확인 중…");
         const r = await rpc("think_login", { p_member: loginPick.id, p_pin: pw });
         if (!r || !r.ok) {
           const err = r && r.err;
-          fail(err === "pin" ? "PIN 이 맞지 않습니다." + (r.left ? " (" + r.left + "번 더 틀리면 10분 잠김)" : " 10분 동안 잠겼습니다.") : err === "locked" ? lockedMsg(r) : err === "no_pin" ? "아직 PIN 을 정하지 않았습니다. 새로고침 후 다시 이름을 눌러 주세요." : "들어가지 못했습니다: " + err);
+          fail(err === "pin" ? "비밀번호가 맞지 않습니다. 비즈홈 비밀번호와 같습니다." + (r.left ? " (" + r.left + "번 더 틀리면 10분 잠김)" : " 10분 동안 잠겼습니다.") : err === "locked" ? lockedMsg(r) : err === "nomember" ? "비즈홈 팀원 목록에서 이 이름을 찾지 못했습니다." : "들어가지 못했습니다: " + err);
           return;
         }
         await enter(r.token);
@@ -1163,8 +1119,6 @@
 
     document.getElementById("gateBtn").addEventListener("click", signIn);
     document.getElementById("gatePw").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
-    document.getElementById("gateSetBtn").addEventListener("click", setPin);
-    document.getElementById("gatePin2").addEventListener("keydown", (e) => { if (e.key === "Enter") setPin(); });
     document.getElementById("logout").addEventListener("click", async () => {
       if (localDirty) { try { await pushToServer(); } catch (e) {} }
       try { await sb.rpc("think_logout", { p_token: TOKEN }); } catch (e) {}
