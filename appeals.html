@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121539">
-<script src="common.js?v=202610121539"></script>
+<link rel="stylesheet" href="common.css?v=202610121540">
+<script src="common.js?v=202610121540"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -54,7 +54,9 @@
 const PRODUCTS = ['서리맥스', '흑생마'];
 const STATUSES = ['거절됨', '검토중', '승인됨', '다시 거절', '포기'];
 const ST_COLOR = { '거절됨': ['#fee2e2', '#b91c1c'], '검토중': ['#fef3c7', '#92400e'], '승인됨': ['#dcfce7', '#166534'], '다시 거절': ['#fce7f3', '#9d174d'], '포기': ['#e5e7eb', '#4b5563'] };
-const REASONS = ['건강 및 의약품', '허위 또는 오해의 소지가 있는 주장', '성적인 콘텐츠', '편집 기준·품질', '상표', '부적절한 콘텐츠'];
+const YT_REQ = 'YouTube 및 디스커버 피드 광고 요건 - ';   // 구글애즈 정책 화면에 나오는 사유 앞부분
+const REASONS = ['일부 제한됨', YT_REQ + '부적절한 콘텐츠', YT_REQ + '부정확하거나 과장된 주장', YT_REQ + '부정적인 영향을 주는 이벤트 및 이미지'];
+const shortReason = s => String(s || '').replace(YT_REQ, '');   // 표에는 앞부분을 빼고 짧게
 const A = () => DATA.google_appeals || [];
 
 let tab = PRODUCTS.includes(LS.get('appeals_tab')) ? LS.get('appeals_tab') : PRODUCTS[0];
@@ -109,7 +111,7 @@ function rowHtml(r){
   return `<tr data-id="${r.id}">
     <td class="c">${fmtDate(r.rejected_on) || '-'}</td>
     <td class="ti">${esc(r.title)}${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" title="영상 열기">↗</a>` : ''}</td>
-    <td>${esc(r.reason || '')}</td>
+    <td title="${esc(r.reason || '')}">${esc(shortReason(r.reason))}</td>
     <td class="c">${la ? `<span class="last">${fmtDateTime(la.at)}</span>${r.appeals.length > 1 ? `<span class="cnt" title="이의신청 ${r.appeals.length}번">${r.appeals.length}회</span>` : ''} <span class="ago">${agoText(la.at)}</span>` : '<span class="hint">아직 안 함</span>'}</td>
     <td class="c">${stTag(r.status)}</td>
     <td class="memo">${esc(r.memo || '')}</td>
@@ -153,7 +155,7 @@ function openRec(id, preset = {}){
       <div class="f"><label>영상 이름 *</label><input id="rTitle" list="adList" value="${esc(r.title)}" maxlength="200" placeholder="광고 영상 리스트의 영상 이름을 고르거나 직접 입력"><datalist id="adList"></datalist></div>
       <div class="f"><label>영상 주소 (선택)</label><input id="rUrl" value="${esc(r.url || '')}" placeholder="https://youtu.be/..." inputmode="url"></div>
       <div class="f2">
-        <div class="f"><label>거절 사유</label><input id="rReason" list="reasonList" value="${esc(r.reason || '')}" placeholder="골라 넣거나 직접 입력"><datalist id="reasonList">${REASONS.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+        <div class="f"><label>거절 사유</label><select id="rReason"><option value="">(고르세요)</option>${[...REASONS, '기타', ...(r.reason && !REASONS.includes(r.reason) && r.reason !== '기타' ? [r.reason] : [])].map(x => `<option value="${esc(x)}" ${r.reason === x ? 'selected' : ''}>${esc(shortReason(x))}</option>`).join('')}</select></div>
         <div class="f"><label>결과</label><select id="rStatus">${STATUSES.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="f"><label>이의신청 기록</label><div class="hist" id="hist"></div></div>
@@ -184,7 +186,7 @@ function openRec(id, preset = {}){
     const product = $('#rProd').value;
     const ad = (DATA.ads || []).find(a => a.product === product && a.title === title);
     const row = { id: r0 ? r0.id : uid(), product, ad_id: ad ? ad.id : (r.ad_id && r.title === title ? r.ad_id : null),
-      title, url: url || null, rejected_on: $('#rDate').value || null, reason: $('#rReason').value.trim() || null, status: $('#rStatus').value,
+      title, url: url || null, rejected_on: $('#rDate').value || null, reason: $('#rReason').value || null, status: $('#rStatus').value,
       appeals, memo: $('#rMemo').value.trim() || null,
       created_by: r0 ? r0.created_by : me, created_at: r0 ? r0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('google_appeals', row);
