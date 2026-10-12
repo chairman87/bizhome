@@ -6,8 +6,8 @@
 <title>비매출</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="common.css?v=202610121815">
-<script src="common.js?v=202610121815"></script>
+<link rel="stylesheet" href="common.css?v=202610121824">
+<script src="common.js?v=202610121824"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -71,15 +71,22 @@ const PRESETS = {
   '서리맥스': { name: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 60정)', option: '[공식] 서리맥스 129발효서리태 1박스 (500mg, 60정)' },
   '흑생마':   { name: '[공식] 137 흑생마 1박스 (500mg, 60정)', option: '[공식] 137 흑생마 1박스 (500mg, 60정)' },
 };
+/* 피에이치뷰티가 보내는 레모너리·서리맥스 (2026-10-12): 표에 회사 칸이 없어 제품 값 끝에 (PH) 를 붙여 구분. 화면에는 (PH) 없이 보이고, 엑셀 상품명은 같음 */
+PRESETS['레모너리(PH)'] = PRESETS['레모너리'];
+PRESETS['서리맥스(PH)'] = PRESETS['서리맥스'];
+const baseProd = p => String(p || '').replace(/\(PH\)$/, '');
 const PRODUCTS = Object.keys(PRESETS);
 /* 제품 → 회사 (물류 계정이 회사별로 달라 엑셀도 회사별로 나눔) */
-const COMPANY_OF = { '레모너리': '식이해법연구소', '서리맥스': '식이해법연구소', '흑생마': '(주)피에이치뷰티' };
+const COMPANY_OF = { '레모너리': '식이해법연구소', '서리맥스': '식이해법연구소', '흑생마': '(주)피에이치뷰티', '레모너리(PH)': '(주)피에이치뷰티', '서리맥스(PH)': '(주)피에이치뷰티' };
 const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
 const coOf = s => COMPANY_OF[s.product] || '기타';
 const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b' };
-/* 고를 수 있는 제품: 회사 탭을 골랐으면 그 회사 제품만 (식이해법연구소=레모너리·서리맥스, 피에이치뷰티=흑생마) */
+/* 고를 수 있는 제품: 회사 탭을 골랐으면 그 회사 제품만 (식이해법연구소=레모너리·서리맥스, 피에이치뷰티=흑생마·레모너리·서리맥스) */
 const prodsFor = co => co ? PRODUCTS.filter(p => COMPANY_OF[p] === co) : PRODUCTS;
-const prodOpts = (sel, co) => prodsFor(co).map(p => `<option ${sel === p ? 'selected' : ''}>${p}</option>`).join('');
+const PROD_BASES = [...new Set(PRODUCTS.map(baseProd))];
+/* 보이는 이름: 회사가 정해진 곳에서는 그냥 제품 이름, 회사: 전체 에서는 피에이치뷰티 것에 회사를 붙여 구분 */
+const prodLabel = (p, co) => co || !/\(PH\)$/.test(p) ? baseProd(p) : `${baseProd(p)} (피에이치뷰티)`;
+const prodOpts = (sel, co) => prodsFor(co).map(p => `<option value="${p}" ${sel === p ? 'selected' : ''}>${prodLabel(p, co)}</option>`).join('');
 const CATS = ['파트너스', '고객'];   // 구분 선택지 (그 외는 직접 입력)
 /* 구분 선택 상자: 파트너스 / 고객 / 직접 입력… (직접 입력을 고르면 글자 칸이 나옴) */
 const catSelHtml = (id, val, extra = '') => { const custom = val && !CATS.includes(val); return `<span class="catsel"><select id="${id}Sel" ${extra} ${custom ? 'hidden' : ''}>${CATS.map(c => `<option ${val === c ? 'selected' : ''}>${c}</option>`).join('')}<option value="__new" ${custom ? 'selected' : ''}>직접 입력…</option></select><input id="${id}" value="${esc(val || '')}" placeholder="구분 입력 후 Enter" ${extra} ${custom ? '' : 'hidden'}><button type="button" class="back" id="${id}Back" title="목록에서 고르기" ${custom ? '' : 'hidden'}>▾</button></span>`; };
@@ -95,7 +102,7 @@ const bindCatSel = id => { const sel = $('#' + id + 'Sel'), inp = $('#' + id), b
 const XLS_HEAD = ['쇼핑몰', '쇼핑몰번호', '품목별 주문번호', '배송메시지', '총 주문금액', '총 결제금액', '상품번호', '주문상품명', '주문상품명(옵션포함)', '수량', '판매가', '수령인', '수령인 휴대전화', '수령인 우편번호', '수령인 주소', '수령인 상세 주소', '결제구분', '결제수단', '발주일', '배송국가'];
 const XLS_WIDTH = [13, 10.3, 20.8, 10.3, 11.1, 11.1, 8.6, 50.2, 51.2, 5, 6.8, 13, 15.2, 15, 91.5, 15.8, 8.6, 8.6, 16.2, 8.8];   // 2026-10-02 물류 양식: 20칸(주문번호 칸 없음)
 const S = () => DATA.samples || [];
-const prodCls = p => 'p' + Math.max(0, PRODUCTS.indexOf(p));
+const prodCls = p => 'p' + Math.max(0, PROD_BASES.indexOf(baseProd(p)));
 const fmtPhone = s => { const d = String(s || '').replace(/\D/g, ''); return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : String(s || ''); };
 
 let view = LS.get('smp_view') || 'todo';
@@ -137,7 +144,7 @@ function statsHtml(){
   const all = S(), todo = all.filter(s => !s.sent), m = todayStr().slice(0, 7);
   return `<div class="stats">
     <div class="stat"><div class="l">발송 전</div><div class="v ${todo.length ? 'orange' : ''}">${todo.length}건</div><div class="s">수량 ${todo.reduce((a, s) => a + s.qty, 0)}개 · 추출 안 한 것 ${todo.filter(s => !s.exported_at).length}건</div></div>
-    ${PRODUCTS.map(p => `<div class="stat"><div class="l">${p} (이번 달)</div><div class="v">${all.filter(s => s.product === p && (s.created_at || '').startsWith(m)).reduce((a, s) => a + s.qty, 0)}개</div><div class="s">누적 ${all.filter(s => s.product === p).reduce((a, s) => a + s.qty, 0)}개</div></div>`).join('')}
+    ${PROD_BASES.map(p => `<div class="stat"><div class="l">${p} (이번 달)</div><div class="v">${all.filter(s => baseProd(s.product) === p && (s.created_at || '').startsWith(m)).reduce((a, s) => a + s.qty, 0)}개</div><div class="s">누적 ${all.filter(s => baseProd(s.product) === p).reduce((a, s) => a + s.qty, 0)}개</div></div>`).join('')}
     <div class="stat"><div class="l">회사별 발송 전</div><div class="v" style="font-size:14px">${COMPANIES.map(c => `<span class="co ${CO_CLS[c]}">${c.replace('(주)', '')}</span> ${todo.filter(s => coOf(s) === c).length}건`).join('<br>')}</div><div class="s">엑셀은 회사별로 따로 나옵니다</div></div>
     <div class="stat"><div class="l">발송 완료</div><div class="v">${all.filter(s => s.sent).length}건</div><div class="s">전체 ${all.length}건</div></div>
   </div>`;
