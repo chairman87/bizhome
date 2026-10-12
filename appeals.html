@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121549">
-<script src="common.js?v=202610121549"></script>
+<link rel="stylesheet" href="common.css?v=202610121551">
+<script src="common.js?v=202610121551"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -26,8 +26,6 @@
   .last{font-weight:600}
   .cnt{display:inline-block;min-width:20px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;padding:1px 6px;margin-left:4px}
   .ago{font-size:11px;color:var(--fg3)}
-  .rsn{display:grid;gap:4px;border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;font-size:13px}
-  .rsn label{display:flex;gap:6px;align-items:center;cursor:pointer}
   .hist{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .hist .h{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
   .hist .h:last-child{border-bottom:0}
@@ -38,6 +36,7 @@
   .hist .h .x:hover{color:var(--red)}
   .hist .add{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;background:var(--bg2)}
   .hist .add input{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--bg)}
+  .hist .add select{flex:1;min-width:200px;border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--bg)}
   .hist .add input[type=text]{flex:1;min-width:160px}
 </style>
 </head>
@@ -150,6 +149,7 @@ function openRec(id, preset = {}){
   const r0 = id ? A().find(x => x.id === id) : null;
   const r = r0 || { product: tab, title: '', url: '', rejected_on: todayStr(), reason: '', status: '비승인', memo: '', appeals: [], ...preset };
   let appeals = sortAppeals(r.appeals);
+  let reasons = reasonsOf(r.reason);
   const adTitles = p => [...new Set((DATA.ads || []).filter(a => a.product === p && a.google === true).map(a => a.title).filter(Boolean))];   // 구글에 올린 영상만 (광고 영상 리스트의 '구글' 칸이 O 인 것)
   openModal(`${modalHead(r0 ? '거절 영상' : '거절 영상 기록')}
     <div class="mb">
@@ -158,17 +158,25 @@ function openRec(id, preset = {}){
         <div class="f"><label>거절된 날</label><input type="date" id="rDate" value="${esc(r.rejected_on || '')}"></div>
       </div>
       <div class="f"><label>영상 이름 *</label><input id="rTitle" list="adList" value="${esc(r.title)}" maxlength="200" placeholder="광고 영상 리스트의 영상 이름을 고르거나 직접 입력"><datalist id="adList"></datalist></div>
-      <div class="f"><label>영상 주소 (선택)</label><input id="rUrl" value="${esc(r.url || '')}" placeholder="https://youtu.be/..." inputmode="url"></div>
       <div class="f2">
-        <div class="f"><label>거절 사유 <span class="hint">(여러 개 고를 수 있음)</span></label><div class="rsn" id="rReason">${[...REASONS, '기타', ...reasonsOf(r.reason).filter(x => !REASONS.includes(x) && x !== '기타')].map(x => `<label><input type="checkbox" value="${esc(x)}" ${reasonsOf(r.reason).includes(x) ? 'checked' : ''}> ${esc(shortReason(x))}</label>`).join('')}</div></div>
+        <div class="f"><label>영상 주소 (선택)</label><input id="rUrl" value="${esc(r.url || '')}" placeholder="https://youtu.be/..." inputmode="url"></div>
         <div class="f"><label>현재 상태</label><select id="rStatus">${STATUSES.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
+      <div class="f"><label>거절 사유 <span class="hint">(여러 개면 하나씩 추가)</span></label><div class="hist" id="rsn"></div></div>
       <div class="f"><label>이의신청 기록</label><div class="hist" id="hist"></div></div>
       <div class="f"><label>메모</label><textarea id="rMemo" placeholder="예: 구글 담당자 답변, 다음에 바꿀 점">${esc(r.memo || '')}</textarea></div>
     </div>
     <div class="mf">${r0 && (r0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="rDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="rSave">${r0 ? '저장' : '기록'}</button></div>`, { wide: true });
   const fillAds = () => { $('#adList').innerHTML = adTitles($('#rProd').value).map(t => `<option value="${esc(t)}">`).join(''); };
   fillAds(); $('#rProd').onchange = fillAds;
+  const drawReasons = () => {
+    const left = [...REASONS, '기타'].filter(x => !reasons.includes(x));
+    $('#rsn').innerHTML = reasons.map((x, i) => `<div class="h"><span class="n">${i + 1}</span><span class="nt" title="${esc(x)}">${esc(shortReason(x))}</span><button class="x" data-rr="${i}" title="이 사유 빼기">✕</button></div>`).join('')
+      + (left.length ? `<div class="add"><select id="rPick"><option value="">(사유 고르기)</option>${left.map(x => `<option value="${esc(x)}">${esc(shortReason(x))}</option>`).join('')}</select><button class="btn sm" id="rAdd">＋ 사유 추가</button></div>` : '');
+    document.querySelectorAll('#rsn [data-rr]').forEach(b => b.onclick = () => { reasons.splice(+b.dataset.rr, 1); drawReasons(); });
+    const add = $('#rAdd'); if (add) add.onclick = () => { const v = $('#rPick').value; if (!v) { toast('추가할 사유를 고르세요', true); return; } reasons.push(v); drawReasons(); };
+  };
+  drawReasons();
   const drawHist = () => {
     $('#hist').innerHTML = appeals.map((a, i) => `<div class="h"><span class="n">${i + 1}차</span><span class="at">${fmtDateTime(a.at)}</span><span class="nt">${esc(a.note || '')}</span><span class="hint">${esc(a.by || '')}</span><button class="x" data-rm="${a.id}" title="이 기록 지우기">✕</button></div>`).join('')
       + `<div class="add"><input type="datetime-local" id="hAt" value="${toLocalInput()}"><input type="text" id="hNote" placeholder="메모 (선택)"><button class="btn sm" id="hAdd">＋ 이의신청 추가</button></div>`;
@@ -191,7 +199,7 @@ function openRec(id, preset = {}){
     const product = $('#rProd').value;
     const ad = (DATA.ads || []).find(a => a.product === product && a.title === title);
     const row = { id: r0 ? r0.id : uid(), product, ad_id: ad ? ad.id : (r.ad_id && r.title === title ? r.ad_id : null),
-      title, url: url || null, rejected_on: $('#rDate').value || null, reason: [...document.querySelectorAll('#rReason input:checked')].map(i => i.value).join(R_SEP) || null, status: $('#rStatus').value,
+      title, url: url || null, rejected_on: $('#rDate').value || null, reason: [...reasons, ...($('#rPick') && $('#rPick').value && !reasons.includes($('#rPick').value) ? [$('#rPick').value] : [])].join(R_SEP) || null, status: $('#rStatus').value,
       appeals, memo: $('#rMemo').value.trim() || null,
       created_by: r0 ? r0.created_by : me, created_at: r0 ? r0.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('google_appeals', row);
