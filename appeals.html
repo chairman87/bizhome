@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121536">
-<script src="common.js?v=202610121536"></script>
+<link rel="stylesheet" href="common.css?v=202610121539">
+<script src="common.js?v=202610121539"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -143,7 +143,7 @@ function openRec(id, preset = {}){
   const r0 = id ? A().find(x => x.id === id) : null;
   const r = r0 || { product: tab, title: '', url: '', rejected_on: todayStr(), reason: '', status: '거절됨', memo: '', appeals: [], ...preset };
   let appeals = sortAppeals(r.appeals);
-  const adTitles = p => [...new Set((DATA.ads || []).filter(a => a.product === p).map(a => a.title).filter(Boolean))];
+  const adTitles = p => [...new Set((DATA.ads || []).filter(a => a.product === p && (a.google || a.google_state)).map(a => a.title).filter(Boolean))];   // 구글에 올린 영상만 (광고 영상 리스트의 구글 O, 또는 구글애즈에서 상태가 잡힌 것)
   openModal(`${modalHead(r0 ? '거절 영상' : '거절 영상 기록')}
     <div class="mb">
       <div class="f2">
