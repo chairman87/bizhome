@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구글 이의신청내역 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610121536">
+<script src="common.js?v=202610121536"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .actions input[type=search],.actions select{border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;background:var(--bg)}
+  .actions input[type=search]{min-width:220px}
+  .sug{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+  .sug .hd{font-weight:600;color:#9a3412;margin-bottom:6px}
+  .sug .it{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid #fed7aa;border-radius:999px;padding:3px 4px 3px 10px;margin:3px 4px 3px 0}
+  table.ap{min-width:900px}
+  table.ap th{text-align:center}
+  table.ap td{font-size:13px}
+  table.ap tbody tr{cursor:pointer}
+  table.ap tbody tr:hover td{background:var(--bg2)}
+  td.c{text-align:center;white-space:nowrap}
+  td.ti{font-weight:600;max-width:320px}
+  td.ti a{color:var(--blue);font-weight:400;font-size:12px;margin-left:4px}
+  .last{font-weight:600}
+  .cnt{display:inline-block;min-width:20px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;padding:1px 6px;margin-left:4px}
+  .ago{font-size:11px;color:var(--fg3)}
+  .hist{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .hist .h{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  .hist .h:last-child{border-bottom:0}
+  .hist .h .n{color:var(--fg3);width:28px}
+  .hist .h .at{font-weight:600;white-space:nowrap}
+  .hist .h .nt{flex:1;color:var(--fg2);word-break:break-word}
+  .hist .h .x{border:0;background:none;color:var(--fg3);cursor:pointer;font-size:14px}
+  .hist .h .x:hover{color:var(--red)}
+  .hist .add{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;background:var(--bg2)}
+  .hist .add input{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--bg)}
+  .hist .add input[type=text]{flex:1;min-width:160px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   구글 이의신청내역 관리: 구글 광고에서 거절된 영상과, 언제 이의신청을 넣었는지 기록하는 곳
+   한 줄 = { product(서리맥스/흑생마), ad_id(광고 영상 리스트 연결), title, url, rejected_on(거절일), reason(거절 사유),
+             status(결과), appeals[{id, at(이의신청 일시), by, note}], memo, created_by, created_at, updated_by }
+   광고 영상 리스트(ads)에 매일 자동 반영되는 구글 "거부됨" 영상 중 아직 안 적은 것은 위에 띄워 바로 기록할 수 있게 함
+================================================================ */
+const PRODUCTS = ['서리맥스', '흑생마'];
+const STATUSES = ['거절됨', '검토중', '승인됨', '다시 거절', '포기'];
+const ST_COLOR = { '거절됨': ['#fee2e2', '#b91c1c'], '검토중': ['#fef3c7', '#92400e'], '승인됨': ['#dcfce7', '#166534'], '다시 거절': ['#fce7f3', '#9d174d'], '포기': ['#e5e7eb', '#4b5563'] };
+const REASONS = ['건강 및 의약품', '허위 또는 오해의 소지가 있는 주장', '성적인 콘텐츠', '편집 기준·품질', '상표', '부적절한 콘텐츠'];
+const A = () => DATA.google_appeals || [];
+
+let tab = PRODUCTS.includes(LS.get('appeals_tab')) ? LS.get('appeals_tab') : PRODUCTS[0];
+let q = '', stFilter = '';
+
+function normalize(table, r){ return table === 'google_appeals' ? { ...r, appeals: Array.isArray(r.appeals) ? r.appeals : [], status: STATUSES.includes(r.status) ? r.status : '거절됨' } : r; }
+
+const stTag = s => tag(s, ...(ST_COLOR[s] || ST_COLOR['거절됨']), true);
+const sortAppeals = list => [...list].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+const lastAppeal = r => sortAppeals(r.appeals).slice(-1)[0];
+/* <input type=datetime-local> 값 ↔ 저장값(ISO) */
+const toLocalInput = iso => { const d = iso ? new Date(iso) : new Date(); return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fromLocalInput = v => v ? new Date(v).toISOString() : '';
+function agoText(iso){
+  const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  return days <= 0 ? '오늘' : `${days}일 전`;
+}
+/* 구글에서 거부됨인데 아직 이 화면에 안 적은 영상 (광고 영상 리스트 자동 반영 기준) */
+const pending = p => (DATA.ads || []).filter(a => a.product === p && a.google_state === '거부됨' && !A().some(r => r.ad_id === a.id || (r.product === p && r.title === a.title)));
+
+function render(){
+  const all = A().filter(r => r.product === tab);
+  const list = all.filter(r => (!stFilter || r.status === stFilter)
+      && (!q || [r.title, r.reason, r.memo, r.url, ...r.appeals.map(x => x.note)].some(x => (x || '').toLowerCase().includes(q.toLowerCase()))))
+    .sort((a, b) => String(b.rejected_on || '').localeCompare(String(a.rejected_on || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const tabs = PRODUCTS.map(p => { const n = A().filter(r => r.product === p && ['거절됨', '다시 거절'].includes(r.status)).length; return { key: p, label: p, badge: n || '', badgeTitle: '아직 이의신청 안 한(또는 다시 거절된) 영상 수' }; });
+  const pend = DATA.google_appeals ? pending(tab) : [];
+  $('#app').innerHTML = headerHtml({ icon: '🖥️', title: '구글 이의신청내역 관리', tabs, active: tab })
+    + `<main class="wrap">
+    ${!DATA.google_appeals ? `<div class="empty">이의신청 저장 표가 아직 없습니다.${isAdmin() ? ' sql-google-appeals.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
+    ${pend.length ? `<div class="sug"><div class="hd">⚠ 구글에서 "거부됨"으로 잡힌 ${tab} 영상 중 아직 안 적은 것 ${pend.length}개 <span class="hint">(광고 영상 리스트에 매일 10시 자동 반영되는 상태 기준)</span></div>
+      ${pend.map(a => `<span class="it">${esc(a.title)}<button class="btn sm" data-pend="${a.id}">기록</button></span>`).join('')}</div>` : ''}
+    <div class="actions"><button class="btn primary" id="newRec">＋ 거절 영상 기록</button>
+      <input type="search" id="fq" placeholder="검색 (영상 이름, 사유, 메모)" value="${esc(q)}">
+      <select id="fs"><option value="">결과 전체</option>${STATUSES.map(s => `<option ${stFilter === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <span class="count">${list.length}건${all.length !== list.length ? ` / 전체 ${all.length}건` : ''}</span></div>
+    <div class="tablewrap"><table class="ap"><thead><tr><th>거절일</th><th>영상</th><th>거절 사유</th><th>이의신청 (마지막 일시)</th><th>결과</th><th>메모</th><th></th></tr></thead><tbody>
+      ${list.map(rowHtml).join('') || `<tr><td colspan="7" class="hint" style="text-align:center;padding:24px">${q || stFilter ? '조건에 맞는 영상이 없습니다.' : `${tab} 거절 영상 기록이 아직 없습니다. 위 <b>＋ 거절 영상 기록</b>을 눌러 적어 보세요.`}</td></tr>`}
+    </tbody></table></div>
+    <div class="hint" style="margin-top:8px">줄을 누르면 자세히 보고 고칠 수 있습니다. <b>＋ 이의신청</b>을 누르면 지금 시각이 자동으로 들어갑니다(시각은 고칠 수 있음). 같은 영상에 여러 번 넣으면 기록이 차례로 쌓입니다.</div>`}
+  </main>`;
+  bindHeader(k => { tab = k; LS.set('appeals_tab', k); render(); }, () => openRec(null), m => `기록한 거절 영상 ${A().filter(r => r.created_by === m.name).length}개`);
+  const nb = $('#newRec'); if (nb) nb.onclick = () => openRec(null);
+  const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
+  const fs = $('#fs'); if (fs) fs.onchange = () => { stFilter = fs.value; render(); };
+  document.querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a,button')) return; openRec(tr.dataset.id); });
+  document.querySelectorAll('[data-appeal]').forEach(b => b.onclick = e => { e.stopPropagation(); openQuick(b.dataset.appeal); });
+  document.querySelectorAll('[data-pend]').forEach(b => b.onclick = () => { const a = (DATA.ads || []).find(x => x.id === b.dataset.pend); if (a) openRec(null, { ad_id: a.id, title: a.title }); });
+}
+function rowHtml(r){
+  const la = lastAppeal(r);
+  return `<tr data-id="${r.id}">
+    <td class="c">${fmtDate(r.rejected_on) || '-'}</td>
+    <td class="ti">${esc(r.title)}${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" title="영상 열기">↗</a>` : ''}</td>
+    <td>${esc(r.reason || '')}</td>
+    <td class="c">${la ? `<span class="last">${fmtDateTime(la.at)}</span>${r.appeals.length > 1 ? `<span class="cnt" title="이의신청 ${r.appeals.length}번">${r.appeals.length}회</span>` : ''} <span class="ago">${agoText(la.at)}</span>` : '<span class="hint">아직 안 함</span>'}</td>
+    <td class="c">${stTag(r.status)}</td>
+    <td class="memo">${esc(r.memo || '')}</td>
+    <td class="act"><button class="btn sm" data-appeal="${r.id}">＋ 이의신청</button></td>
+  </tr>`;
+}
+
+/* 빠른 이의신청 기록: 지금 시각이 기본값 */
+function openQuick(id){
+  const r = A().find(x => x.id === id); if (!r) return;
+  openModal(`${modalHead('이의신청 기록')}
+    <div class="mb">
+      <div class="f"><label>영상</label><div><b>${esc(r.title)}</b> <span class="hint">${esc(r.product)}${r.appeals.length ? ` · 이번이 ${r.appeals.length + 1}번째` : ''}</span></div></div>
+      <div class="f"><label>이의신청한 일시 *</label><input type="datetime-local" id="qAt" value="${toLocalInput()}"></div>
+      <div class="f"><label>메모 (선택)</label><input id="qNote" placeholder="예: 의학적 효능 문구 삭제 후 재검토 요청"></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="qSave">기록</button></div>`);
+  $('#qNote').focus();
+  $('#qNote').onkeydown = e => { if (e.key === 'Enter') $('#qSave').click(); };
+  $('#qSave').onclick = async () => {
+    const at = fromLocalInput($('#qAt').value); if (!at) { toast('일시를 넣어 주세요', true); return; }
+    const appeals = sortAppeals([...r.appeals, { id: uid(), at, by: me, note: $('#qNote').value.trim() }]);
+    closeModal();
+    await saveRow('google_appeals', { ...r, appeals, status: ['거절됨', '다시 거절'].includes(r.status) ? '검토중' : r.status, updated_by: me });
+    toast(`이의신청 ${fmtDateTime(at)} 기록했습니다`);
+  };
+}
+
+/* 거절 영상 기록·수정 창 (이의신청 기록 목록 포함) */
+function openRec(id, preset = {}){
+  const r0 = id ? A().find(x => x.id === id) : null;
+  const r = r0 || { product: tab, title: '', url: '', rejected_on: todayStr(), reason: '', status: '거절됨', memo: '', appeals: [], ...preset };
+  let appeals = sortAppeals(r.appeals);
+  const adTitles = p => [...new Set((DATA.ads || []).filter(a => a.product === p).map(a => a.title).filter(Boolean))];
+  openModal(`${modalHead(r0 ? '거절 영상' : '거절 영상 기록')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>제품</label><select id="rProd">${PRODUCTS.map(p => `<option ${r.product === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+        <div class="f"><label>거절된 날</label><input type="date" id="rDate" value="${esc(r.rejected_on || '')}"></div>
+      </div>
+      <div class="f"><label>영상 이름 *</label><input id="rTitle" list="adList" value="${esc(r.title)}" maxlength="200" placeholder="광고 영상 리스트의 영상 이름을 고르거나 직접 입력"><datalist id="adList"></datalist></div>
+      <div class="f"><label>영상 주소 (선택)</label><input id="rUrl" value="${esc(r.url || '')}" placeholder="https://youtu.be/..." inputmode="url"></div>
+      <div class="f2">
+        <div class="f"><label>거절 사유</label><input id="rReason" list="reasonList" value="${esc(r.reason || '')}" placeholder="골라 넣거나 직접 입력"><datalist id="reasonList">${REASONS.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
+        <div class="f"><label>결과</label><select id="rStatus">${STATUSES.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="f"><label>이의신청 기록</label><div class="hist" id="hist"></div></div>
+      <div class="f"><label>메모</label><textarea id="rMemo" placeholder="예: 구글 담당자 답변, 다음에 바꿀 점">${esc(r.memo || '')}</textarea></div>
+    </div>
+    <div class="mf">${r0 && (r0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="rDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="rSave">${r0 ? '저장' : '기록'}</button></div>`, { wide: true });
+  const fillAds = () => { $('#adList').innerHTML = adTitles($('#rProd').value).map(t => `<option value="${esc(t)}">`).join(''); };
+  fillAds(); $('#rProd').onchange = fillAds;
+  const drawHist = () => {
+    $('#hist').innerHTML = appeals.map((a, i) => `<div class="h"><span class="n">${i + 1}차</span><span class="at">${fmtDateTime(a.at)}</span><span class="nt">${esc(a.note || '')}</span><span class="hint">${esc(a.by || '')}</span><button class="x" data-rm="${a.id}" title="이 기록 지우기">✕</button></div>`).join('')
+      + `<div class="add"><input type="datetime-local" id="hAt" value="${toLocalInput()}"><input type="text" id="hNote" placeholder="메모 (선택)"><button class="btn sm" id="hAdd">＋ 이의신청 추가</button></div>`;
+    document.querySelectorAll('#hist [data-rm]').forEach(b => b.onclick = () => { appeals = appeals.filter(a => a.id !== b.dataset.rm); drawHist(); });
+    $('#hAdd').onclick = () => {
+      const at = fromLocalInput($('#hAt').value); if (!at) { toast('일시를 넣어 주세요', true); return; }
+      appeals = sortAppeals([...appeals, { id: uid(), at, by: me, note: $('#hNote').value.trim() }]);
+      if (['거절됨', '다시 거절'].includes($('#rStatus').value)) $('#rStatus').value = '검토중';
+      drawHist();
+    };
+    $('#hNote').onkeydown = e => { if (e.key === 'Enter') $('#hAdd').click(); };
+  };
+  drawHist();
+  (r0 ? $('#rStatus') : $('#rTitle')).focus();
+  $('#rSave').onclick = async () => {
+    const title = $('#rTitle').value.trim();
+    if (!title) { $('#rTitle').focus(); toast('영상 이름을 입력하세요', true); return; }
+    const url = $('#rUrl').value.trim();
+    if (url && !/^https?:\/\//i.test(url)) { $('#rUrl').focus(); toast('영상 주소는 https:// 로 시작해야 합니다', true); return; }
+    const product = $('#rProd').value;
+    const ad = (DATA.ads || []).find(a => a.product === product && a.title === title);
+    const row = { id: r0 ? r0.id : uid(), product, ad_id: ad ? ad.id : (r.ad_id && r.title === title ? r.ad_id : null),
+      title, url: url || null, rejected_on: $('#rDate').value || null, reason: $('#rReason').value.trim() || null, status: $('#rStatus').value,
+      appeals, memo: $('#rMemo').value.trim() || null,
+      created_by: r0 ? r0.created_by : me, created_at: r0 ? r0.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('google_appeals', row);
+    if (row.product !== tab) { tab = row.product; LS.set('appeals_tab', tab); render(); }
+    toast(r0 ? '저장했습니다' : '거절 영상을 기록했습니다');
+  };
+  const del = $('#rDel'); if (del) del.onclick = async () => { if (!confirm(`"${r0.title}" 기록을 삭제할까요? 이의신청 기록도 함께 지워집니다.`)) return; closeModal(); await removeRow('google_appeals', r0.id); toast('삭제했습니다'); };
+}
+
+boot({ icon: '🖥️', title: '구글 이의신청내역 관리', tables: ['google_appeals', 'ads'], render, normalize });
+</script>
+</body>
+</html>
