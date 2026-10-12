@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표 점검</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610121317">
-<script src="common.js?v=202610121317"></script>
+<link rel="stylesheet" href="common.css?v=202610121432">
+<script src="common.js?v=202610121432"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -92,6 +92,16 @@
   .plan .row b{font-weight:600;color:var(--fg2);white-space:nowrap;font-size:12px}
   .plan .row span{background:var(--bg2);border-radius:999px;padding:1px 8px}
   .srcnote{font-size:11px;color:var(--fg3)}
+  .qa{border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;background:var(--bg);display:grid;gap:10px}
+  .qa h4{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+  .qa .item{display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:10px}
+  .qa .q{font-size:13.5px;font-weight:600;line-height:1.5}
+  .qa .q .who{font-weight:400;font-size:11px;color:var(--fg3);margin-left:6px}
+  .qa .a{font-size:13.5px;line-height:1.7;white-space:pre-wrap;background:#eef2ff;border-radius:6px;padding:8px 10px}
+  .qa .a.wait{background:#fffbea;color:#92400e;font-style:italic}
+  .qa .a.err{background:#fff1f2;color:#b91c1c}
+  .qa .ask{display:flex;gap:8px;align-items:flex-end}
+  .qa .ask textarea{flex:1;min-height:56px;font:inherit;font-size:13.5px;border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;resize:vertical}
 </style>
 </head>
 <body>
@@ -218,6 +228,34 @@ function opinionHtml(r){
     ${(o.advice || []).length ? `<div><b style="font-size:13px">권고</b><ul>${o.advice.map(a => `<li>💡 ${esc(a)}</li>`).join('')}</ul></div>` : ''}
   </div>`;
 }
+/* 질의응답 — 결과를 보고 궁금한 것을 적으면 대표 PC 의 로봇이 그 점검 자료로 AI 변리사 답을 단다(tm_check_qa) */
+let openId = null;
+const QA = id => (DATA.tm_check_qa || []).filter(q => q.check_id === id).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+function qaHtml(t){
+  const list = QA(t.id);
+  const item = q => `<div class="item"><div class="q">Q. ${esc(q.question)}<span class="who">${esc(q.asked_by || '')} · ${fmtDateTime(q.created_at).slice(5)}</span></div>
+    ${q.status === '완료' ? `<div class="a">${esc(q.answer || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</div>` : q.status === '실패' ? `<div class="a err">답변 실패: ${esc(q.error || '')}</div>` : `<div class="a wait">⏳ ${q.status === '진행중' ? 'AI 변리사가 답을 쓰는 중입니다 (1분 안팎)' : watchOn() ? '곧 답합니다' : '대표 PC 의 로봇이 켜지면 답합니다'}</div>`}</div>`;
+  return `<div class="qa" id="qaBox"><h4>💬 이 결과에 대해 질문하기 <span class="hint" style="font-weight:400">(점검 자료·의견서를 바탕으로 AI 변리사가 답합니다)</span></h4>
+    ${list.map(item).join('') || '<div class="hint">아직 질문이 없습니다. 예) "흑마늘 제품으로만 팔면 종근당이 문제 삼을 수 있나?", "이름을 어떻게 바꾸면 안전한가?"</div>'}
+    ${t.status === '완료' ? `<div class="ask"><textarea id="qaText" placeholder="궁금한 점을 적고 '질문'을 누르세요 (Ctrl+Enter)"></textarea><button class="btn primary" id="qaSend">질문</button></div>` : '<div class="hint">점검이 끝난 뒤에 질문할 수 있습니다.</div>'}
+  </div>`;
+}
+function bindQa(t){
+  const ta = $('#qaText'), btn = $('#qaSend'); if (!ta || !btn) return;
+  const send = async () => {
+    const q = ta.value.trim(); if (!q) { ta.focus(); return; }
+    ta.value = '';
+    await saveRow('tm_check_qa', { id: uid(), check_id: t.id, question: q, asked_by: me, status: '대기', created_at: nowIso() });
+    refreshQa(t.id); toast(watchOn() ? '질문을 보냈습니다 · 1분 안팎에 답이 달립니다' : '질문을 저장했습니다 · 로봇이 켜지면 답합니다');
+  };
+  btn.onclick = send;
+  ta.onkeydown = e => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); send(); } };
+}
+function refreshQa(id){
+  const box = $('#qaBox'); const t = T().find(x => x.id === id); if (!box || !t) return;
+  const draft = ($('#qaText') || {}).value || '';
+  box.outerHTML = qaHtml(t); bindQa(t); if ($('#qaText')) $('#qaText').value = draft;
+}
 /* 심판 사례(특허심판원·법원) — 우리 이름·요부·닮은 선행상표가 걸린 사건 요약 */
 function trialsHtml(r){
   const ts = r.trials || []; if (!ts.length) return `<details class="more"><summary>심판 사례 — 관련 사건 없음</summary><div class="hint">우리 이름·요부·닮은 선행상표로 특허심판원 사건을 찾았지만 없었습니다. <a href="${esc(r.trials_link || '#')}" target="_blank" rel="noopener">키프리스 심판 검색 ↗</a></div></details>`;
@@ -256,6 +294,7 @@ function openView(id){
   const webList = (rows, nm) => rows.length ? `<div class="web">${rows.map(x => `<div class="it ${!own(x.host + x.title + x.desc) && (x.title || '').replace(/\s/g, '').includes(nm) ? 'o' : ''}"><a href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a><span class="h">${esc(x.host || '')}</span><span class="d" title="${esc(x.desc || '')}">${esc(x.desc || '')}</span></div>`).join('')}</div>` : '<div class="hint">결과 없음</div>';
   const nm = String(t.name).replace(/\s/g, '');
   const blog = (nv.blog || []).filter(b => !(nv.web || []).some(w => w.url === b.url));
+  openId = id;
   openModal(`${head}<div class="mb view">
     <div class="scores">
       <div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${r.score}<span style="font-size:14px">점</span></div><div class="g">${gl}</div></div>
@@ -278,17 +317,18 @@ function openView(id){
       ${(shop.malls || []).length ? `<div class="hint" style="margin-top:4px">판매처: ${shop.malls.map(m => own(m) ? `<b>${esc(m)}(우리)</b>` : esc(m)).join(', ')}</div>` : ''}</div>
     <div><div class="sec">네이버 웹·블로그 <span class="n">${(nv.web || []).length + blog.length}건</span><a href="${esc(nv.link || '#')}" target="_blank" rel="noopener">네이버에서 보기 ↗</a></div>${webList([...(nv.web || []), ...blog], nm)}${(nv.errors || []).length ? `<div class="err">${nv.errors.map(esc).join(' / ')}</div>` : ''}</div>
     <div><div class="sec">구글 <span class="n">${g.stats ? esc(g.stats) : ''}</span><a href="${esc(r.google_link || '#')}" target="_blank" rel="noopener">구글에서 보기 ↗</a></div>${g.error ? `<div class="err">${esc(g.error)}</div>` : webList(g.items || [], nm)}</div>
+    ${qaHtml(t)}
     <div class="disc"><b>등록 가능성</b>은 지금 출원하면 심사관이 등록해 줄 가능성(출원·공고 중인 상표도 걸림돌), <b>침해 위험</b>은 출원 없이 상품명으로 썼을 때 등록된 상표권자가 소송·쿠팡 신고를 걸어 우리가 질 확률(등록 상표만, 요부끼리 비교, 우리 선행 상표는 유리하게)입니다. 빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 조사는 키프리스에서 이름 그대로·글자 하나 바꾼 것·붙여 쓴 것·발음 변형·영문·뜻이 같은 이름을 류와 지정상품 유사군 조건으로 찾고, 인터넷에서 이미 쓰는 곳을 봅니다. 점수는 AI 변리사 검토(요부·칭호·외관·관념·지정상품·거절사유 점검)가 있으면 그 기준, 없으면 자동 규칙 기준입니다. 도형(로고) 상표와 심사관 내부 자료는 못 보므로 출원 전에는 변리사 확인을 받으세요.</div>
   </div>${foot}`, { wide: true, cls: 'xl' });
-  bind();
+  bind(); bindQa(t);
 }
 
 /* 주소에 ?id= 가 있으면(텔레그램 링크) 그 결과를 바로 연다 */
 let openedFromLink = false;
 const _render = render;
-render = function(){ _render(); const id = new URLSearchParams(location.search).get('id'); if (id && !openedFromLink && DATA.tm_checks && T().some(t => t.id === id)) { openedFromLink = true; openView(id); } };
+render = function(){ _render(); if (openId && $('#qaBox')) refreshQa(openId); const id = new URLSearchParams(location.search).get('id'); if (id && !openedFromLink && DATA.tm_checks && T().some(t => t.id === id)) { openedFromLink = true; openView(id); } };
 
-boot({ icon: '🔎', title: '상표 점검', tables: ['tm_checks', 'tm_check_sync'], render, normalize });
+boot({ icon: '🔎', title: '상표 점검', tables: ['tm_checks', 'tm_check_sync', 'tm_check_qa'], render, normalize });
 </script>
 </body>
 </html>
