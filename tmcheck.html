@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상표 점검</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610120912">
-<script src="common.js?v=202610120912"></script>
+<link rel="stylesheet" href="common.css?v=202610121317">
+<script src="common.js?v=202610121317"></script>
 <style>
   .info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#1e3a8a}
   .info.old{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
@@ -161,7 +161,7 @@ function cardHtml(t){
       <div class="meta"><span>${clsText(t.classes)}${clsList(t.classes).length ? ` · ${clsList(t.classes).map(n => NICE[n] || '').filter(Boolean).join(' / ')}` : ''}</span><span>${esc(t.requested_by || '')}${t.via === 'telegram' ? ' (텔레그램)' : ''}</span><span>${fmtDateTime(t.created_at).slice(5)}</span>${t.goods ? `<span>지정상품: ${esc(t.goods)}</span>` : ''}</div>
       ${done && r.opinion && r.opinion.conclusion ? `<div class="sum">📝 ${esc(String(r.opinion.conclusion).slice(0, 180))}${String(r.opinion.conclusion).length > 180 ? '…' : ''}</div>` : done && top ? `<div class="sum">${top.level === '높음' ? '🔴' : top.level === '주의' ? '🟠' : '⚪'} ${esc(top.text)}</div>` : t.status === '실패' ? `<div class="sum err">${esc(t.error || '')}</div>` : t.memo ? `<div class="sum">${esc(t.memo)}</div>` : ''}
     </div>
-    ${done ? `<div class="side"><div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${t.score}</div><div class="g">${gl}</div></div><div class="sc ${rc}" title="출원 없이 이 이름을 상품명으로 썼을 때 등록상표권자가 소송·신고를 걸어 우리가 질 확률"><div class="l">쓰면 패소 위험</div><div class="v">${t.risk}</div><div class="g">${rl}</div></div></div>` : ''}
+    ${done ? `<div class="side"><div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${t.score}</div><div class="g">${gl}</div></div><div class="sc ${rc}" title="출원 없이 이 이름을 상품명으로 썼을 때 등록상표권자가 소송·신고를 걸어 우리가 질 확률"><div class="l">침해 위험</div><div class="v">${t.risk}</div><div class="g">${rl}</div></div></div>` : ''}
   </div>`;
 }
 
@@ -259,7 +259,7 @@ function openView(id){
   openModal(`${head}<div class="mb view">
     <div class="scores">
       <div class="sc ${gc}"><div class="l">등록 가능성</div><div class="v">${r.score}<span style="font-size:14px">점</span></div><div class="g">${gl}</div></div>
-      <div class="sc ${rc}" title="출원 없이 이 이름을 상품명으로 썼을 때 등록상표권자가 소송·신고를 걸어 우리가 질 확률"><div class="l">쓰면 패소 위험</div><div class="v">${r.risk}<span style="font-size:14px">점</span></div><div class="g">${rl}</div></div>
+      <div class="sc ${rc}" title="출원 없이 이 이름을 상품명으로 썼을 때 등록상표권자가 소송·신고를 걸어 우리가 질 확률"><div class="l">침해 위험</div><div class="v">${r.risk}<span style="font-size:14px">점</span></div><div class="g">${rl}</div></div>
       <div class="hint" style="align-self:center;line-height:1.6">${clsList(t.classes).map(n => `${n}류 ${NICE[n] || ''}`).join('<br>') || '전체 류 기준'}${(r.sc || []).length ? `<br>지정상품 유사군(추정): ${r.sc.join(', ')}` : ''}<br>요청 ${esc(t.requested_by || '')} · 점검 ${fmtDateTime(t.finished_at || t.updated_at)} · ${r.took_sec || ''}초<br>${r.opinion ? '점수 = AI 변리사 검토 기준' : '점수 = 자동 규칙 기준 (AI 검토 없음)'}${(r.ai_errors || []).length ? ` · <span class="err">AI 검토 못 함: ${esc(r.ai_errors.join(' / '))}</span>` : ''}</div>
     </div>
     ${opinionHtml(r)}
@@ -278,7 +278,7 @@ function openView(id){
       ${(shop.malls || []).length ? `<div class="hint" style="margin-top:4px">판매처: ${shop.malls.map(m => own(m) ? `<b>${esc(m)}(우리)</b>` : esc(m)).join(', ')}</div>` : ''}</div>
     <div><div class="sec">네이버 웹·블로그 <span class="n">${(nv.web || []).length + blog.length}건</span><a href="${esc(nv.link || '#')}" target="_blank" rel="noopener">네이버에서 보기 ↗</a></div>${webList([...(nv.web || []), ...blog], nm)}${(nv.errors || []).length ? `<div class="err">${nv.errors.map(esc).join(' / ')}</div>` : ''}</div>
     <div><div class="sec">구글 <span class="n">${g.stats ? esc(g.stats) : ''}</span><a href="${esc(r.google_link || '#')}" target="_blank" rel="noopener">구글에서 보기 ↗</a></div>${g.error ? `<div class="err">${esc(g.error)}</div>` : webList(g.items || [], nm)}</div>
-    <div class="disc"><b>등록 가능성</b>은 지금 출원하면 심사관이 등록해 줄 가능성(출원·공고 중인 상표도 걸림돌), <b>쓰면 패소 위험</b>은 출원 없이 상품명으로 썼을 때 등록된 상표권자가 소송·쿠팡 신고를 걸어 우리가 질 확률(등록 상표만, 요부끼리 비교, 우리 선행 상표는 유리하게)입니다. 빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 조사는 키프리스에서 이름 그대로·글자 하나 바꾼 것·붙여 쓴 것·발음 변형·영문·뜻이 같은 이름을 류와 지정상품 유사군 조건으로 찾고, 인터넷에서 이미 쓰는 곳을 봅니다. 점수는 AI 변리사 검토(요부·칭호·외관·관념·지정상품·거절사유 점검)가 있으면 그 기준, 없으면 자동 규칙 기준입니다. 도형(로고) 상표와 심사관 내부 자료는 못 보므로 출원 전에는 변리사 확인을 받으세요.</div>
+    <div class="disc"><b>등록 가능성</b>은 지금 출원하면 심사관이 등록해 줄 가능성(출원·공고 중인 상표도 걸림돌), <b>침해 위험</b>은 출원 없이 상품명으로 썼을 때 등록된 상표권자가 소송·쿠팡 신고를 걸어 우리가 질 확률(등록 상표만, 요부끼리 비교, 우리 선행 상표는 유리하게)입니다. 빨간 제목 = 우리 사이트가 아닌 곳이 이 이름을 제목에 쓴 결과. 조사는 키프리스에서 이름 그대로·글자 하나 바꾼 것·붙여 쓴 것·발음 변형·영문·뜻이 같은 이름을 류와 지정상품 유사군 조건으로 찾고, 인터넷에서 이미 쓰는 곳을 봅니다. 점수는 AI 변리사 검토(요부·칭호·외관·관념·지정상품·거절사유 점검)가 있으면 그 기준, 없으면 자동 규칙 기준입니다. 도형(로고) 상표와 심사관 내부 자료는 못 보므로 출원 전에는 변리사 확인을 받으세요.</div>
   </div>${foot}`, { wide: true, cls: 'xl' });
   bind();
 }
