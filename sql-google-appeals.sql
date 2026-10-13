@@ -19,3 +19,6 @@ alter table google_appeals enable row level security;
 drop policy if exists "team_all" on google_appeals;
 create policy "team_all" on google_appeals for all using (true) with check (true);
 alter publication supabase_realtime add table google_appeals;
+
+-- 2026-10-13: 영상 주소 칸 대신 광고 그룹명 (실행 완료)
+alter table google_appeals add column if not exists ad_group text;
