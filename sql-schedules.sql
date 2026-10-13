@@ -17,3 +17,6 @@ alter table schedules enable row level security;
 drop policy if exists "team_all" on schedules;
 create policy "team_all" on schedules for all using (true) with check (true);
 alter publication supabase_realtime add table schedules;
+
+-- 2026-10-13: 참석자 (실행 완료)
+alter table schedules add column if not exists attendees jsonb default '[]';
