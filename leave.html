@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연차/휴가 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610131002">
-<script src="common.js?v=202610131002"></script>
+<link rel="stylesheet" href="common.css?v=202610131008">
+<script src="common.js?v=202610131008"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -25,6 +25,8 @@
   .viewers{display:flex;flex-wrap:wrap;gap:6px 12px;padding:4px 0}
   .viewers label{display:inline-flex !important;align-items:center;gap:4px;font-size:13px;cursor:pointer;font-weight:400;white-space:nowrap;margin:0 !important;color:var(--fg) !important}
   .viewers input[type=checkbox]{width:auto !important;margin:0;padding:0}
+  .tpick{display:inline-flex;gap:4px}
+  .tpick select{width:auto !important}
   .viewers label.all{font-weight:700}
   .ev.type-반차{background:#e0f2fe;color:#0369a1}
   .ev.type-병가{background:#fee2e2;color:#b91c1c}
@@ -335,6 +337,11 @@ const SCH = () => DATA.schedules || [];
 const canSeeSched = x => x.owner === me || (x.viewers || []).includes(me) || (x.viewers || []).includes('전체');
 /* 시간은 time_text 한 칸에 "14:00" 또는 "14:00~15:30" 으로 저장 (비면 종일) */
 const tParts = t => { const m = String(t || '').match(/^(\d{1,2}:\d{2})(?:\s*~\s*(\d{1,2}:\d{2}))?$/); return m ? [m[1].padStart(5, '0'), (m[2] || '').padStart(m[2] ? 5 : 0, '0')] : ['', '']; };
+/* 시간 고르기: 시(오전/오후 표시) + 분(5분 단위) 두 목록. 값 읽기·넣기는 tGet/tSet ('HH:MM' 또는 '') */
+const timePick = (id, val) => { const [h, m] = val ? val.split(':') : ['', ''], mm = m ? String(Math.round(Number(m) / 5) * 5 % 60).padStart(2, '0') : '';
+  return `<span class="tpick" id="${id}"><select data-h><option value="">--시</option>${Array.from({ length: 24 }, (_, i) => { const v = String(i).padStart(2, '0'); return `<option value="${v}" ${v === h ? 'selected' : ''}>${i < 12 ? '오전' : '오후'} ${i % 12 || 12}시</option>`; }).join('')}</select><select data-m><option value="">--분</option>${Array.from({ length: 12 }, (_, i) => { const v = String(i * 5).padStart(2, '0'); return `<option value="${v}" ${v === mm ? 'selected' : ''}>${v}분</option>`; }).join('')}</select></span>`; };
+const tGet = id => { const h = $(`#${id} [data-h]`).value, m = $(`#${id} [data-m]`).value; return h ? `${h}:${m || '00'}` : ''; };
+const tSet = (id, v) => { const [h, m] = v ? v.split(':') : ['', '']; $(`#${id} [data-h]`).value = h; $(`#${id} [data-m]`).value = v ? m : ''; };
 const viewersText = v => !v.length ? '나만' : v.includes('전체') ? '전체' : v.join(', ');
 function openSched(id, preset = {}){
   if (!DATA.schedules) { toast('일정 표가 아직 없습니다. 관리자에게 sql-schedules.sql 실행을 부탁하세요', true); return; }
@@ -363,7 +370,7 @@ function openSched(id, preset = {}){
         <div class="f"><label>종료일</label><input type="date" id="sEnd" value="${esc(d.end_date || d.start_date || '')}"></div>
       </div>
       <div class="f"><label>시간 <span class="hint">(비워 두면 종일)</span></label>
-        <div style="display:flex;align-items:center;gap:6px"><input type="time" id="sT1" value="${esc(tParts(d.time_text)[0])}" style="width:130px"><span>~</span><input type="time" id="sT2" value="${esc(tParts(d.time_text)[1])}" style="width:130px"><button type="button" class="btn sm" id="sTClear">종일</button></div></div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${timePick('sT1', tParts(d.time_text)[0])}<span>~</span>${timePick('sT2', tParts(d.time_text)[1])}<button type="button" class="btn sm" id="sTClear">종일</button></div></div>
       <div class="f"><label>메모 <span class="hint">(선택)</span></label><textarea id="sMemo" style="min-height:60px">${esc(d.memo || '')}</textarea></div>
       <div class="f"><label>볼 사람 <span class="hint">(아무도 고르지 않으면 나만 봅니다)</span></label>
         <div class="viewers"><label class="all"><input type="checkbox" id="sAll" ${v.includes('전체') ? 'checked' : ''}>전체</label>
@@ -377,8 +384,10 @@ function openSched(id, preset = {}){
   const syncAll = () => { const all = $('#sAll').checked; document.querySelectorAll('.sv').forEach(c => { c.disabled = all; }); };
   $('#sAll').onchange = syncAll; syncAll();
   $('#sStart').onchange = () => { if (!$('#sEnd').value || $('#sEnd').value < $('#sStart').value) $('#sEnd').value = $('#sStart').value; };
-  $('#sT1').onchange = () => { const a = $('#sT1').value, b = $('#sT2').value; if (a && (!b || b <= a)) { const [h, m] = a.split(':').map(Number), t = Math.min(23 * 60 + 59, h * 60 + m + 60); $('#sT2').value = String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); } };   // 시작을 고르면 끝은 한 시간 뒤로
-  $('#sTClear').onclick = () => { $('#sT1').value = ''; $('#sT2').value = ''; };
+  // 시를 고르고 분이 비어 있으면 00분으로. 시작을 고르면 끝은 한 시간 뒤로
+  document.querySelectorAll('.tpick [data-h]').forEach(sel => sel.addEventListener('change', () => { const m = sel.parentNode.querySelector('[data-m]'); if (sel.value && !m.value) m.value = '00'; if (!sel.value) m.value = ''; }));
+  $('#sT1').onchange = () => { const a = tGet('sT1'), b = tGet('sT2'); if (a && (!b || b <= a)) { const [h, m] = a.split(':').map(Number), t = Math.min(23 * 60 + 55, h * 60 + m + 60); tSet('sT2', String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0')); } };
+  $('#sTClear').onclick = () => { tSet('sT1', ''); tSet('sT2', ''); };
   $('#sTitle').onkeydown = e => { if (e.key === 'Enter') $('#sSave').click(); };
   const tl = $('#sToLeave'); if (tl) tl.onclick = () => { const st = $('#sStart').value, en = $('#sEnd').value || st; closeModal(); openLeave(null, { start_date: st, end_date: en }); };
   $('#sSave').onclick = async () => {
@@ -386,7 +395,7 @@ function openSched(id, preset = {}){
     if (!title) { $('#sTitle').focus(); toast('일정 내용을 적어 주세요', true); return; }
     if (!st) { toast('시작일을 넣어 주세요', true); return; }
     if (en < st) { toast('종료일이 시작일보다 빠릅니다', true); return; }
-    const t1 = $('#sT1').value, t2 = $('#sT2').value;
+    const t1 = tGet('sT1'), t2 = tGet('sT2');
     if (!t1 && t2) { toast('시작 시각도 골라 주세요', true); return; }
     if (t1 && t2 && st === en && t2 <= t1) { toast('끝 시각이 시작 시각보다 빠릅니다', true); return; }
     const viewers = $('#sAll').checked ? ['전체'] : [...document.querySelectorAll('.sv:checked')].map(c => c.value);
