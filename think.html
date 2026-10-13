@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" spellcheck="false">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -629,7 +629,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-12 20:20";
+    const BUILD = "2026-10-13 10:30";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
