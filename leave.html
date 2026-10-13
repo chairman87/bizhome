@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연차/휴가 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610131015">
-<script src="common.js?v=202610131015"></script>
+<link rel="stylesheet" href="common.css?v=202610131021">
+<script src="common.js?v=202610131021"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -227,7 +227,7 @@ function calHtml(list){
     date: l => l._day,
     label: l => l._sched ? `🗓 ${l.owner !== me ? esc(l.owner) + ' · ' : ''}${l.time_text ? esc(l.time_text) + ' ' : ''}${esc(l.title)}` : `${esc(l.name)} · ${esc(l.type)}`,
     cls: l => l._sched ? `sched ${l.owner !== me ? 'shared' : ''}` : `type-${typeKey(l.type)} ${l.status === '신청' ? 'pending' : ''}`,
-    hint: (isAdmin() ? '' : '내 휴가만 표시 · ') + '점선은 승인 대기 · 날짜를 누르면 휴가 신청(창 왼쪽 아래 「일정 추가로 바꾸기」로 내 일정) · 초록=내 일정, 노랑=남이 보여 준 일정',
+    hint: (isAdmin() ? '' : '내 휴가만 표시 · ') + '점선은 승인 대기 · 날짜를 누르면 휴가 신청(창 왼쪽 아래 「일정 등록으로 바꾸기」로 내 일정) · 초록=내 일정, 노랑=남이 보여 준 일정',
   });
 }
 
@@ -298,7 +298,7 @@ function openLeave(id, preset = {}){
     </div>
     <div class="mf">
       ${l && isAdmin() ? `<button class="btn danger left" id="lDelete">삭제</button>` : ''}
-      ${!l && DATA.schedules ? `<button class="btn left" id="lToSched" title="이 날짜로 내 일정 추가 창을 엽니다">일정 추가로 바꾸기</button>` : ''}
+      ${!l && DATA.schedules ? `<button class="btn left" id="lToSched" title="이 날짜로 내 일정 등록 창을 엽니다" style="background:#16a34a;border-color:#16a34a;color:#fff">🗓 일정 등록으로 바꾸기</button>` : ''}
       ${l && l.status === '신청' && isAdmin() ? `<button class="btn" id="lNo">반려</button><button class="btn primary" id="lOk">승인</button>` : ''}
       ${l && l.status === '신청' && l.name === me && !isAdmin() ? `<button class="btn danger" id="lCancel">신청 취소</button>` : ''}
       <button class="btn" data-close>닫기</button>
@@ -340,7 +340,7 @@ const canSeeSched = x => x.owner === me || (x.viewers || []).includes(me) || (x.
 const tParts = t => { const m = String(t || '').match(/^(\d{1,2}:\d{2})(?:\s*~\s*(\d{1,2}:\d{2}))?$/); return m ? [m[1].padStart(5, '0'), (m[2] || '').padStart(m[2] ? 5 : 0, '0')] : ['', '']; };
 /* 시간 고르기: 목록 하나에 5분 단위 (오전 9:00, 오전 9:05 …). 값은 'HH:MM' 또는 '' */
 const tLabel = v => { const [h, m] = v.split(':').map(Number); return `${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(m).padStart(2, '0')}`; };
-const T_OPTS = Array.from({ length: 288 }, (_, i) => `${String(Math.floor(i / 12)).padStart(2, '0')}:${String(i % 12 * 5).padStart(2, '0')}`);
+const T_OPTS = Array.from({ length: 288 }, (_, i) => { const k = (i + 84) % 288; return `${String(Math.floor(k / 12)).padStart(2, '0')}:${String(k % 12 * 5).padStart(2, '0')}`; });   // 오전 7:00 부터, 새벽(0:00~6:55)은 맨 아래
 const timePick = (id, val, ph) => { const v = val ? (([h, m]) => `${h.padStart(2, '0')}:${String(Math.round(Number(m) / 5) * 5 % 60).padStart(2, '0')}`)(val.split(':')) : '';
   return `<select id="${id}" class="tpick"><option value="">${ph}</option>${T_OPTS.map(t => `<option value="${t}" ${t === v ? 'selected' : ''}>${tLabel(t)}</option>`).join('')}</select>`; };
 const tGet = id => $('#' + id).value;
@@ -365,7 +365,7 @@ function openSched(id, preset = {}){
       <div class="mf"><button class="btn primary" data-close>닫기</button></div>`);
     return;
   }
-  openModal(`${modalHead(x ? '내 일정' : '일정 추가')}
+  openModal(`${modalHead(x ? '내 일정' : '일정 등록')}
     <div class="mb">
       <div class="f"><label>일정 *</label><input id="sTitle" value="${esc(d.title)}" placeholder="예: 거래처 미팅, 병원, 외근" maxlength="100"></div>
       <div class="f2">
@@ -381,7 +381,7 @@ function openSched(id, preset = {}){
     </div>
     <div class="mf">
       ${x ? '<button class="btn danger left" id="sDel">삭제</button>' : '<button class="btn left" id="sToLeave" title="이 날짜로 휴가 신청 창을 엽니다">휴가 신청으로 바꾸기</button>'}
-      <button class="btn" data-close>닫기</button><button class="btn primary" id="sSave">${x ? '저장' : '추가'}</button>
+      <button class="btn" data-close>닫기</button><button class="btn primary" id="sSave">${x ? '저장' : '등록'}</button>
     </div>`);
   $('#sTitle').focus();
   const syncAll = () => { const all = $('#sAll').checked; document.querySelectorAll('.sv').forEach(c => { c.disabled = all; }); };
