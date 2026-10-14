@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>재직증명서</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610141456">
-<script src="common.js?v=202610141456"></script>
+<link rel="stylesheet" href="common.css?v=202610141459">
+<script src="common.js?v=202610141459"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -64,8 +64,8 @@
 ================================================================ */
 const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
 const CO_DEFAULT = {   // 2026-10-14 회사 서류함의 사업자등록증에서 읽은 값
-  '식이해법연구소': { name: '식이해법연구소', ceo: '홍주', ceoTitle: '대표', bizno: '228-18-02412', address: '서울특별시 서초구 형촌3길 20, 1층 A27호(우면동)', bizType: '도·소매', bizItem: '전자상거래', font: '굴림' },
-  '(주)피에이치뷰티': { name: '주식회사 피에이치뷰티', ceo: '박봉수', ceoTitle: '대표이사', bizno: '788-86-03834', address: '서울특별시 서초구 사평대로53길 30, 515호(반포동, 반포엠)', bizType: '도·소매, 서비스', bizItem: '전자상거래, 광고대행', font: '굴림' },
+  '식이해법연구소': { name: '식이해법연구소', ceo: '홍주', ceoTitle: '대표', bizno: '228-18-02412', address: '서울특별시 서초구 형촌3길 20, 1층 A27호(우면동)', bizType: '도·소매', bizItem: '전자상거래', font: '굴림', sealText: '食餌解法研究所印' },
+  '(주)피에이치뷰티': { name: '주식회사 피에이치뷰티', ceo: '박봉수', ceoTitle: '대표이사', bizno: '788-86-03834', address: '서울특별시 서초구 사평대로53길 30, 515호(반포동, 반포엠)', bizType: '도·소매, 서비스', bizItem: '전자상거래, 광고대행', font: '굴림', sealRing: '株式會社 피에이치뷰티', sealCenter: '代表理事印' },
 };
 const PURPOSES = ['은행 제출용', '관공서 제출용', '비자·여권', '대출', '어린이집·학교 제출용', '기타'];
 const R = () => (DATA.cert_requests || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -107,7 +107,7 @@ const _seals = {};
 function autoSeal(c){
   const i = coInfo(c), name = String(i.name || c).replace(/\s+/g, '');
   const corp = /주식회사|\(주\)|㈜|유한회사/.test(name) || /\(주\)/.test(c);
-  const key = (corp ? 'C' : 'P') + name + (i.ceoTitle || '');
+  const key = JSON.stringify([corp, name, i.ceoTitle, i.sealRing, i.sealCenter, i.sealText]);
   if (_seals[key]) return _seals[key];
   const S = 300, cv = document.createElement('canvas'); cv.width = cv.height = S;
   const x = cv.getContext('2d'); x.strokeStyle = x.fillStyle = SEAL_RED; x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -116,14 +116,14 @@ function autoSeal(c){
     x.lineWidth = 9; x.beginPath(); x.arc(cx, cx, R1, 0, Math.PI * 2); x.stroke();
     x.lineWidth = 5; x.beginPath(); x.arc(cx, cx, R2, 0, Math.PI * 2); x.stroke();
     // 바깥 고리 글자: 상호를 원 둘레에 고르게 (위 가운데에서 시작해 시계 방향)
-    const ring = name.replace(/^\(주\)/, '주식회사'), n = ring.length, rr = (R1 + R2) / 2 + 1;
+    const ring = String(i.sealRing || name.replace(/^\(주\)/, '주식회사')).replace(/\s+/g, ''), n = ring.length, rr = (R1 + R2) / 2 + 1;
     x.font = `bold ${Math.min(40, Math.floor((2 * Math.PI * rr) / n * 0.62))}px ${SEAL_FONT}`;
     for (let k = 0; k < n; k++) {
       const a = -Math.PI / 2 + (k + 0.5 - n / 2) * (2 * Math.PI / n) * (n > 10 ? 1 : 0.85);
       x.save(); x.translate(cx + rr * Math.cos(a), cx + rr * Math.sin(a)); x.rotate(a + Math.PI / 2); x.fillText(ring[k], 0, 2); x.restore();
     }
     // 가운데: 대표이사인 → 오른쪽 줄 '대표이', 왼쪽 줄 '사인'
-    const mid = ((i.ceoTitle || '대표이사').replace(/\s+/g, '') + '인');
+    const mid = String(i.sealCenter || ((i.ceoTitle || '대표이사') + '인')).replace(/\s+/g, '');
     const cols = mid.length <= 3 ? [mid] : [mid.slice(0, Math.ceil(mid.length / 2)), mid.slice(Math.ceil(mid.length / 2))];
     const fs = cols[0].length >= 3 ? 46 : 58; x.font = `bold ${fs}px ${SEAL_FONT}`;
     cols.forEach((col, ci) => { const colX = cx + (cols.length === 1 ? 0 : (ci === 0 ? 1 : -1) * fs * 0.55);
@@ -131,7 +131,7 @@ function autoSeal(c){
   } else {
     const pad = 14, W = S - pad * 2;
     x.lineWidth = 12; x.strokeRect(pad, pad, W, W);
-    const chars = [...(name + '인')], cols = Math.ceil(Math.sqrt(chars.length)), rows = Math.ceil(chars.length / cols);
+    const chars = [...String(i.sealText || (name + '인')).replace(/\s+/g, '')], cols = Math.ceil(Math.sqrt(chars.length)), rows = Math.ceil(chars.length / cols);
     const cw = (W - 30) / cols, ch = (W - 30) / rows, fs = Math.floor(Math.min(cw, ch) * 0.86);
     x.font = `bold ${fs}px ${SEAL_FONT}`;
     for (let k = 0; k < chars.length; k++) {
@@ -316,7 +316,10 @@ function openCompany(){
       <div class="f"><label>주소</label><input data-co="${k}" data-k="address" value="${esc(i.address || '')}"></div>
       <div class="f3" style="grid-template-columns:1fr 1fr 110px"><div class="f"><label>업태</label><input data-co="${k}" data-k="bizType" value="${esc(i.bizType || '')}"></div><div class="f"><label>종목</label><input data-co="${k}" data-k="bizItem" value="${esc(i.bizItem || '')}"></div>
         <div class="f"><label>명판 글씨체</label><select data-co="${k}" data-k="font">${Object.keys(PLATE_FONTS).map(f => `<option ${(i.font || '굴림') === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div></div>
-      <div class="hint">명판 미리보기 (저장하면 바뀐 내용으로 다시 그립니다)</div>
+      ${/주식회사|\(주\)/.test((i.name || '') + c)
+        ? `<div class="f2"><div class="f"><label>직인 둘레 글자</label><input data-co="${k}" data-k="sealRing" value="${esc(i.sealRing || '')}" placeholder="예: 株式會社 피에이치뷰티"></div><div class="f"><label>직인 가운데 글자</label><input data-co="${k}" data-k="sealCenter" value="${esc(i.sealCenter || '')}" placeholder="예: 代表理事印"></div></div>`
+        : `<div class="f"><label>직인 글자 <span class="hint">(오른쪽 줄부터 세로로 새김)</span></label><input data-co="${k}" data-k="sealText" value="${esc(i.sealText || '')}" placeholder="예: 食餌解法研究所印"></div>`}
+      <div class="hint">명판·직인 미리보기 (저장하면 바뀐 내용으로 다시 그립니다)</div>
       <div class="platebox"><img class="np" src="${namePlate(c)}"><img class="seal" src="${st || autoSeal(c)}"></div>
       <div class="stampbox"><img src="${st || autoSeal(c)}" title="${st ? '이 PC에 넣은 직인 사진' : '자동 직인'}">
         <div><div style="font-size:13px">${st ? '직인: <b>이 PC에 넣은 사진</b>을 씁니다' : '직인: <b>자동 직인</b> (위 상호·대표 직함으로 만듦, 어느 PC에서나 같음)'}</div>
