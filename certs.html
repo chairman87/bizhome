@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>재직증명서</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610141433">
-<script src="common.js?v=202610141433"></script>
+<link rel="stylesheet" href="common.css?v=202610141451">
+<script src="common.js?v=202610141451"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -69,7 +69,53 @@ const PURPOSES = ['은행 제출용', '관공서 제출용', '비자·여권', '
 const R = () => (DATA.cert_requests || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 const coInfo = c => ({ ...(CO_DEFAULT[c] || {}), ...((((DATA.settings || []).find(x => x.id === 'cert_company') || {}).value || {})[c] || {}) });
 const stampKey = c => 'cert_stamp_' + c;
-const getStamp = c => { try { return localStorage.getItem(stampKey(c)) || ''; } catch { return ''; } };
+const upStamp = c => { try { return localStorage.getItem(stampKey(c)) || ''; } catch { return ''; } };   // 이 PC에 직접 넣은 직인 사진
+const getStamp = c => upStamp(c) || autoSeal(c);                                                          // 없으면 자동 직인
+
+/* 자동 직인: 사업자등록증 내용(회사 정보)으로 그림
+   법인(주식회사): 둥근 직인 — 바깥 원을 따라 상호, 가운데 '대표이사인'
+   개인사업자: 네모 직인 — '상호+인' 을 오른쪽 줄부터 세로쓰기 */
+const SEAL_RED = '#d0312d', SEAL_FONT = "'Gungsuh','궁서','GungsuhChe','Batang','바탕',serif";
+const _seals = {};
+function autoSeal(c){
+  const i = coInfo(c), name = String(i.name || c).replace(/\s+/g, '');
+  const corp = /주식회사|\(주\)|㈜|유한회사/.test(name) || /\(주\)/.test(c);
+  const key = (corp ? 'C' : 'P') + name + (i.ceoTitle || '');
+  if (_seals[key]) return _seals[key];
+  const S = 300, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const x = cv.getContext('2d'); x.strokeStyle = x.fillStyle = SEAL_RED; x.textAlign = 'center'; x.textBaseline = 'middle';
+  if (corp) {
+    const cx = S / 2, R1 = 140, R2 = 92;
+    x.lineWidth = 9; x.beginPath(); x.arc(cx, cx, R1, 0, Math.PI * 2); x.stroke();
+    x.lineWidth = 5; x.beginPath(); x.arc(cx, cx, R2, 0, Math.PI * 2); x.stroke();
+    // 바깥 고리 글자: 상호를 원 둘레에 고르게 (위 가운데에서 시작해 시계 방향)
+    const ring = name.replace(/^\(주\)/, '주식회사'), n = ring.length, rr = (R1 + R2) / 2 + 1;
+    x.font = `bold ${Math.min(40, Math.floor((2 * Math.PI * rr) / n * 0.62))}px ${SEAL_FONT}`;
+    for (let k = 0; k < n; k++) {
+      const a = -Math.PI / 2 + (k + 0.5 - n / 2) * (2 * Math.PI / n) * (n > 10 ? 1 : 0.85);
+      x.save(); x.translate(cx + rr * Math.cos(a), cx + rr * Math.sin(a)); x.rotate(a + Math.PI / 2); x.fillText(ring[k], 0, 2); x.restore();
+    }
+    // 가운데: 대표이사인 → 오른쪽 줄 '대표이', 왼쪽 줄 '사인'
+    const mid = ((i.ceoTitle || '대표이사').replace(/\s+/g, '') + '인');
+    const cols = mid.length <= 3 ? [mid] : [mid.slice(0, Math.ceil(mid.length / 2)), mid.slice(Math.ceil(mid.length / 2))];
+    const fs = cols[0].length >= 3 ? 46 : 58; x.font = `bold ${fs}px ${SEAL_FONT}`;
+    cols.forEach((col, ci) => { const colX = cx + (cols.length === 1 ? 0 : (ci === 0 ? 1 : -1) * fs * 0.55);
+      [...col].forEach((ch, ri) => x.fillText(ch, colX, cx + (ri - (col.length - 1) / 2) * fs * 1.02)); });
+  } else {
+    const pad = 14, W = S - pad * 2;
+    x.lineWidth = 12; x.strokeRect(pad, pad, W, W);
+    const chars = [...(name + '인')], cols = Math.ceil(Math.sqrt(chars.length)), rows = Math.ceil(chars.length / cols);
+    const cw = (W - 30) / cols, ch = (W - 30) / rows, fs = Math.floor(Math.min(cw, ch) * 0.86);
+    x.font = `bold ${fs}px ${SEAL_FONT}`;
+    for (let k = 0; k < chars.length; k++) {
+      const col = Math.floor(k / rows), row = k % rows, inCol = Math.min(rows, chars.length - col * rows);
+      const colX = pad + 15 + W - 30 - (col + 0.5) * cw;                         // 오른쪽 줄부터
+      const rowY = pad + 15 + (W - 30) / 2 + (row - (inCol - 1) / 2) * ch;         // 줄마다 세로 가운데 맞춤
+      x.fillText(chars[k], colX, rowY + 2);
+    }
+  }
+  return (_seals[key] = cv.toDataURL('image/png'));
+}
 const memberOf = n => members.find(m => m.name === n) || {};
 const stHtml = r => r.status === '발급' ? '<span class="st ok">발급</span>' : r.status === '반려' ? '<span class="st no">반려</span>' : '<span class="st req">요청</span>';
 const ymdKo = s => { if (!s) return ''; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${y}년 ${Number(m)}월 ${Number(d)}일`; };
@@ -171,7 +217,7 @@ function openIssue(id){
         <div class="f"><label>입사일 *</label><input type="date" id="iHire" value="${esc(r.hire_date || m.hire_date || '')}">${m.hire_date ? '' : '<div class="hint" style="color:var(--orange)">인트라넷에 입사일이 없습니다. 넣으면 팀원 정보에도 저장됩니다.</div>'}</div>
         <div class="f"><label>직위</label><input id="iTitle" value="${esc(r.title || m.title || '사원')}"></div>
       </div>
-      <div class="hint">회사: <b>${esc(co.name || r.company)}</b> · ${esc(co.ceoTitle || '대표')} ${esc(co.ceo || '')} · 직인: ${stamp ? '✅ 이 PC에 있음' : '<span style="color:var(--red)">이 PC에 없음 (직인 없이 발급됩니다 · 🏢 회사 정보·직인 에서 넣기)</span>'}</div>
+      <div class="hint">회사: <b>${esc(co.name || r.company)}</b> · ${esc(co.ceoTitle || '대표')} ${esc(co.ceo || '')} · 직인: ${upStamp(r.company) ? '✅ 이 PC에 넣은 직인 사진' : '✅ 자동 직인 (사업자등록증 내용으로 만듦)'}</div>
       <div id="iPrev" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:420px;background:#f3f4f6;display:flex;justify-content:center"></div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="iGo">PDF 만들어 전달</button></div>`, { wide: true });
@@ -240,28 +286,29 @@ async function makePdf(html){
 /* ---------- 회사 정보·직인 (관리자) ---------- */
 function openCompany(){
   if (!isAdmin()) return;
-  const rowOf = c => { const i = coInfo(c), st = getStamp(c), k = COMPANIES.indexOf(c);
+  const rowOf = c => { const i = coInfo(c), st = upStamp(c), k = COMPANIES.indexOf(c);
     return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px">
       <div style="font-weight:700;margin-bottom:6px">${esc(c)}</div>
       <div class="f2"><div class="f"><label>상호</label><input data-co="${k}" data-k="name" value="${esc(i.name || '')}"></div><div class="f"><label>사업자등록번호</label><input data-co="${k}" data-k="bizno" value="${esc(i.bizno || '')}"></div></div>
       <div class="f2"><div class="f"><label>대표 직함</label><input data-co="${k}" data-k="ceoTitle" value="${esc(i.ceoTitle || '')}"></div><div class="f"><label>대표자</label><input data-co="${k}" data-k="ceo" value="${esc(i.ceo || '')}"></div></div>
       <div class="f"><label>주소</label><input data-co="${k}" data-k="address" value="${esc(i.address || '')}"></div>
-      <div class="stampbox">${st ? `<img src="${st}">` : '<div class="nos">직인 없음</div>'}
-        <div><div style="font-size:13px">직인 <span class="hint">(이 PC 브라우저에만 저장 · 인터넷에 올라가지 않음)</span></div>
-        <input type="file" accept="image/*" data-stamp="${k}" style="margin-top:4px">${st ? ` <button class="btn sm" data-unstamp="${k}">지우기</button>` : ''}</div></div>
+      <div class="stampbox"><img src="${st || autoSeal(c)}" title="${st ? '이 PC에 넣은 직인 사진' : '자동 직인'}">
+        <div><div style="font-size:13px">${st ? '직인: <b>이 PC에 넣은 사진</b>을 씁니다' : '직인: <b>자동 직인</b> (위 상호·대표 직함으로 만듦, 어느 PC에서나 같음)'}</div>
+        <div class="hint" style="margin-top:2px">실제 도장 사진을 쓰고 싶으면 넣으세요 (이 PC 브라우저에만 저장):</div>
+        <input type="file" accept="image/*" data-stamp="${k}" style="margin-top:4px">${st ? ` <button class="btn sm" data-unstamp="${k}">사진 지우고 자동 직인 쓰기</button>` : ''}</div></div>
     </div>`; };
   openModal(`${modalHead('회사 정보·직인')}<div class="mb">${COMPANIES.map(rowOf).join('')}
-    <div class="hint">직인은 흰 바탕에 빨간 도장이 찍힌 사진(PNG·JPG)이면 됩니다. 흰 바탕은 자동으로 투명하게 바뀝니다. 다른 PC에서 발급하려면 그 PC에서도 한 번 넣어야 합니다.</div></div>
+    <div class="hint">상호나 대표 직함을 고치고 저장하면 자동 직인도 그 내용으로 바뀝니다. 도장 사진은 흰 바탕에 빨간 도장이면 되고, 흰 바탕은 자동으로 투명해집니다.</div></div>
     <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="coSave">회사 정보 저장</button></div>`, { wide: true });
   document.querySelectorAll('[data-stamp]').forEach(inp => inp.onchange = async () => {
     const f = inp.files[0]; if (!f) return; const c = COMPANIES[Number(inp.dataset.stamp)];
     try { const url = await stampFromFile(f); localStorage.setItem(stampKey(c), url); toast(`${c} 직인을 이 PC에 저장했습니다`); openCompany(); }
     catch (e) { toast('직인을 넣지 못했습니다: ' + (e.message || e), true); }
   });
-  document.querySelectorAll('[data-unstamp]').forEach(b => b.onclick = () => { const c = COMPANIES[Number(b.dataset.unstamp)]; if (confirm(`${c} 직인을 이 PC에서 지울까요?`)) { localStorage.removeItem(stampKey(c)); openCompany(); } });
+  document.querySelectorAll('[data-unstamp]').forEach(b => b.onclick = () => { const c = COMPANIES[Number(b.dataset.unstamp)]; if (confirm(`${c} 직인 사진을 이 PC에서 지우고 자동 직인을 쓸까요?`)) { localStorage.removeItem(stampKey(c)); openCompany(); } });
   $('#coSave').onclick = async () => {
     const value = {}; COMPANIES.forEach((c, k) => { value[c] = {}; document.querySelectorAll(`[data-co="${k}"]`).forEach(i => { value[c][i.dataset.k] = i.value.trim(); }); });
-    closeModal(); await saveRow('settings', { id: 'cert_company', value, updated_by: me }); toast('회사 정보를 저장했습니다');
+    closeModal(); Object.keys(_seals).forEach(k => delete _seals[k]); await saveRow('settings', { id: 'cert_company', value, updated_by: me }); toast('회사 정보를 저장했습니다');
   };
 }
 /* 직인 사진 → 300px PNG, 흰 바탕은 투명하게 */
