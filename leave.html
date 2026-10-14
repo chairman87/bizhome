@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연차/휴가 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610131744">
-<script src="common.js?v=202610131744"></script>
+<link rel="stylesheet" href="common.css?v=202610141219">
+<script src="common.js?v=202610141219"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -74,7 +74,7 @@ const pendingCount = () => L().filter(l => l.status === '신청').length;
 const VIEWS = () => isAdmin() ? [
   { key: 'mine', label: '내 신청' }, { key: 'all', label: '전체', badge: pendingCount() },
   null, { key: 'calendar', label: '달력' }, { key: 'members', label: '팀원별 현황' },
-] : [{ key: 'mine', label: '내 신청' }, { key: 'calendar', label: '내 달력' }];
+] : [{ key: 'mine', label: '내 신청' }, { key: 'calendar', label: '달력' }];
 
 /* 평일 수 세기 (토·일 제외) */
 function weekdays(a, b){
@@ -222,7 +222,7 @@ function actionButtons(l){
 /* 달력 (승인된 것은 진하게, 신청 중은 점선) */
 function calHtml(list){
   const items = [];
-  L().filter(l => (l.status === '승인' || l.status === '신청') && (isAdmin() || l.name === me)).forEach(l => {   // 팀원은 본인 것만
+  L().filter(l => isAdmin() || l.name === me ? (l.status === '승인' || l.status === '신청') : l.status === '승인').forEach(l => {   // 팀원: 내 것(승인·대기) + 남의 승인된 휴가 (2026-10-14 달력 공개)
     const s = parseYmd(l.start_date), e = parseYmd(l.end_date || l.start_date); if (!s) return;
     for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) if (d.getDay() !== 0 && d.getDay() !== 6) items.push({ ...l, id: l.id, _day: ymd(d) });
   });
@@ -235,7 +235,7 @@ function calHtml(list){
     date: l => l._day,
     label: l => l._sched ? `🗓 ${l.owner !== me ? esc(l.owner) + ' · ' : ''}${l.time_text ? esc(l.time_text) + ' ' : ''}${esc(l.title)}${(l.attendees || []).length ? ` 👥${l.attendees.length}` : ''}` : `${esc(l.name)} · ${esc(l.type)}`,
     cls: l => l._sched ? `sched ${l.owner !== me ? 'shared' : ''}` : `type-${typeKey(l.type)} ${l.status === '신청' ? 'pending' : ''}`,
-    hint: (isAdmin() ? '' : '내 휴가만 표시 · ') + '점선은 승인 대기 · 날짜를 누르면 휴가 신청(창 왼쪽 아래 「일정 등록으로 바꾸기」로 내 일정) · 초록=내 일정, 노랑=남이 보여 준 일정',
+    hint: (isAdmin() ? '' : '다른 팀원은 승인된 휴가만 표시 · ') + '점선은 승인 대기 · 날짜를 누르면 휴가 신청(창 왼쪽 아래 「일정 등록으로 바꾸기」로 내 일정) · 초록=내 일정, 노랑=남이 보여 준 일정',
   });
 }
 
@@ -286,6 +286,10 @@ function bindView(){
 /* ---------- 신청 · 상세 창 ---------- */
 function openLeave(id, preset = {}){
   const l = id ? L().find(x => x.id === id) : null;
+  if (l && !isAdmin() && l.name !== me) {   // 남의 휴가: 이름·종류·기간만 (사유·처리 기록은 숨김)
+    openModal(`${modalHead('휴가')}<div class="mb"><div style="font-size:15px">${who(l.name)} · <b>${esc(l.type)}</b></div><div class="hint" style="margin-top:6px">${period(l)}</div></div><div class="mf"><button class="btn primary" data-close>닫기</button></div>`);
+    return;
+  }
   const d = l || { name: me, type: '연차', start_date: todayStr(), end_date: todayStr(), reason: '', ...preset };
   const editable = !l || (l.status === '신청' && (l.name === me || isAdmin()));
   const logs = l ? (l.comments || []) : [];
