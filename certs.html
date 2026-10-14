@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>재직증명서</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610141451">
-<script src="common.js?v=202610141451"></script>
+<link rel="stylesheet" href="common.css?v=202610141456">
+<script src="common.js?v=202610141456"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -38,12 +38,14 @@
   .cert th,.cert td{border:1px solid #333;padding:13px 12px;text-align:left;vertical-align:middle;white-space:normal !important;word-break:keep-all}
   .cert th{background:#f3f4f6;width:110px;font-weight:700;text-align:center}
   .cert th.grp{width:44px;writing-mode:vertical-rl;letter-spacing:6px}
-  .cert .msg{text-align:center;font-size:17px;margin:56px 0 40px}
-  .cert .date{text-align:center;font-size:17px;margin-bottom:60px;letter-spacing:2px}
-  .cert .co{font-size:15px;line-height:2;margin-left:200px;position:relative}
-  .cert .co b{font-size:18px}
-  .cert .in{position:relative;display:inline-block}
-  .cert .seal{position:absolute;width:84px;height:84px;object-fit:contain;left:50%;top:50%;transform:translate(-50%,-50%);opacity:.9}
+  .cert .msg{text-align:center;font-size:17px;margin:44px 0 28px}
+  .cert .date{text-align:center;font-size:17px;margin-bottom:34px;letter-spacing:2px}
+  .cert .plate{position:relative;width:430px;margin-left:auto;margin-right:10px}
+  .cert .plate .np{width:100%;display:block}
+  .cert .plate .seal{position:absolute;width:96px;height:96px;object-fit:contain;right:-18px;top:-6px;opacity:.9}
+  .platebox{position:relative;width:300px;margin-top:8px}
+  .platebox .np{width:100%;display:block}
+  .platebox .seal{position:absolute;width:68px;height:68px;right:-12px;top:-4px;opacity:.9}
 </style>
 </head>
 <body>
@@ -62,8 +64,8 @@
 ================================================================ */
 const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
 const CO_DEFAULT = {   // 2026-10-14 회사 서류함의 사업자등록증에서 읽은 값
-  '식이해법연구소': { name: '식이해법연구소', ceo: '홍주', ceoTitle: '대표', bizno: '228-18-02412', address: '서울특별시 서초구 형촌3길 20, 1층 A27호(우면동)' },
-  '(주)피에이치뷰티': { name: '주식회사 피에이치뷰티', ceo: '박봉수', ceoTitle: '대표이사', bizno: '788-86-03834', address: '서울특별시 서초구 사평대로53길 30, 515호(반포동, 반포엠)' },
+  '식이해법연구소': { name: '식이해법연구소', ceo: '홍주', ceoTitle: '대표', bizno: '228-18-02412', address: '서울특별시 서초구 형촌3길 20, 1층 A27호(우면동)', bizType: '도·소매', bizItem: '전자상거래', font: '굴림' },
+  '(주)피에이치뷰티': { name: '주식회사 피에이치뷰티', ceo: '박봉수', ceoTitle: '대표이사', bizno: '788-86-03834', address: '서울특별시 서초구 사평대로53길 30, 515호(반포동, 반포엠)', bizType: '도·소매, 서비스', bizItem: '전자상거래, 광고대행', font: '굴림' },
 };
 const PURPOSES = ['은행 제출용', '관공서 제출용', '비자·여권', '대출', '어린이집·학교 제출용', '기타'];
 const R = () => (DATA.cert_requests || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
@@ -75,6 +77,31 @@ const getStamp = c => upStamp(c) || autoSeal(c);                                
 /* 자동 직인: 사업자등록증 내용(회사 정보)으로 그림
    법인(주식회사): 둥근 직인 — 바깥 원을 따라 상호, 가운데 '대표이사인'
    개인사업자: 네모 직인 — '상호+인' 을 오른쪽 줄부터 세로쓰기 */
+/* 명판: 파란 글씨 4줄 — 사업자번호 / 상호 + 대표 / 주소 / 업태 · 종목. 직인은 오른쪽 위(대표 이름 옆)에 겹쳐 찍음 */
+const PLATE_BLUE = '#2b23c9';
+const PLATE_FONTS = { '굴림': "'Gulim','굴림',sans-serif", '명조': "'Batang','바탕','Nanum Myeongjo',serif", '궁서': "'Gungsuh','궁서',serif", '고딕': "'Malgun Gothic','맑은 고딕',sans-serif" };
+const _plates = {};
+function namePlate(c){
+  const i = coInfo(c), fk = PLATE_FONTS[i.font] ? i.font : '굴림', F = PLATE_FONTS[fk], bold = fk === '고딕' ? 'bold ' : '';
+  const key = JSON.stringify([i.bizno, i.name, i.ceoTitle, i.ceo, i.address, i.bizType, i.bizItem, fk]);
+  if (_plates[key]) return _plates[key];
+  const W = 860, H = 380, L = 10, RW = W - 100;   // 대표 이름은 오른쪽 100px 앞에서 끝남 (직인이 이름 끝에 겹침)
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d'); x.fillStyle = PLATE_BLUE; x.textBaseline = 'alphabetic';
+  const fit = (t, size, maxW, w = '') => { let s = size; do { x.font = `${w}${s}px ${F}`; } while (x.measureText(t).width > maxW && --s > 14); return s; };
+  // 1줄: 사업자번호 (크게)
+  fit(i.bizno || '', 66, RW - 60, bold); x.textAlign = 'left'; x.fillText(i.bizno || '', L, 80);
+  // 2줄: 상호(왼쪽) · 대표(오른쪽, 직인 바로 앞)
+  const boss = `${i.ceoTitle || ''} ${i.ceo || ''}`.trim();
+  fit(boss, 56, RW * 0.4, bold); const bw = x.measureText(boss).width; x.textAlign = 'right'; x.fillText(boss, RW, 170);
+  fit(i.name || '', 66, RW - bw - 30, 'bold '); x.textAlign = 'left'; x.fillText(i.name || '', L, 170);
+  // 3줄: 주소 (길면 글자 줄임)
+  fit(i.address || '', 40, W - L * 2, bold); x.fillText(i.address || '', L, 250);
+  // 4줄: 업태(왼쪽) · 종목(오른쪽)
+  fit(i.bizType || '', 46, W * 0.45, bold); x.fillText(i.bizType || '', L, 336);
+  fit(i.bizItem || '', 46, W * 0.5, bold); x.textAlign = 'right'; x.fillText(i.bizItem || '', W - L, 336);
+  return (_plates[key] = cv.toDataURL('image/png'));
+}
 const SEAL_RED = '#d0312d', SEAL_FONT = "'Gungsuh','궁서','GungsuhChe','Batang','바탕',serif";
 const _seals = {};
 function autoSeal(c){
@@ -132,7 +159,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '📄', title: '재직증명서', tabs: VIEWS(), active: tab })
     + `<main class="wrap" style="max-width:900px">${!DATA.cert_requests ? `<div class="empty">재직증명서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-certs.sql 을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="reqBtn">＋ 재직증명서 요청</button>
-      ${isAdmin() ? '<button class="btn" id="coBtn" title="증명서에 들어가는 회사 정보와 직인">🏢 회사 정보·직인</button>' : ''}
+      ${isAdmin() ? '<button class="btn" id="coBtn" title="증명서에 들어가는 회사 정보·명판·직인">🏢 회사 정보·명판·직인</button>' : ''}
       <span class="hint">${isAdmin() ? '요청을 눌러 <b>발급</b>하면 입사일·직위가 채워진 증명서가 PDF 로 만들어져 요청한 사람에게 전달됩니다.' : '요청하면 관리자가 발급합니다. 발급되면 여기서 PDF 를 내려받으세요.'}</span></div>
     ${list.length ? `<div class="list">${list.map(rowHtml).join('')}</div>` : `<div class="empty">${tab === 'todo' ? '발급을 기다리는 요청이 없습니다.' : '아직 요청이 없습니다.<br><b>＋ 재직증명서 요청</b>으로 요청하세요.'}</div>`}`}</main>`;
   bindHeader(k => { tab = k; render(); }, null, m => `요청 ${R().filter(r => r.name === m.name).length}건`);
@@ -260,12 +287,7 @@ function certHtml(r, no){
     </table>
     <div class="msg">위 사람은 당사에 재직하고 있음을 증명합니다.</div>
     <div class="date">${ymdKo(todayStr())}</div>
-    <div class="co">
-      <div>상 호 : <b>${esc(co.name || '')}</b></div>
-      <div>사업자등록번호 : ${esc(co.bizno || '')}</div>
-      <div>주 소 : ${esc(co.address || '')}</div>
-      <div>${esc(co.ceoTitle || '대표')} : <b>${esc(co.ceo || '')}</b> &nbsp;<span class="in">(인)${stamp ? `<img class="seal" src="${stamp}">` : ''}</span></div>
-    </div>
+    <div class="plate"><img class="np" src="${namePlate(r.company)}">${stamp ? `<img class="seal" src="${stamp}">` : ''}</div>
   </div>`;
 }
 /* 증명서 HTML → A4 PDF (html2canvas + jsPDF 를 필요할 때만 불러옴) */
@@ -292,12 +314,16 @@ function openCompany(){
       <div class="f2"><div class="f"><label>상호</label><input data-co="${k}" data-k="name" value="${esc(i.name || '')}"></div><div class="f"><label>사업자등록번호</label><input data-co="${k}" data-k="bizno" value="${esc(i.bizno || '')}"></div></div>
       <div class="f2"><div class="f"><label>대표 직함</label><input data-co="${k}" data-k="ceoTitle" value="${esc(i.ceoTitle || '')}"></div><div class="f"><label>대표자</label><input data-co="${k}" data-k="ceo" value="${esc(i.ceo || '')}"></div></div>
       <div class="f"><label>주소</label><input data-co="${k}" data-k="address" value="${esc(i.address || '')}"></div>
+      <div class="f3" style="grid-template-columns:1fr 1fr 110px"><div class="f"><label>업태</label><input data-co="${k}" data-k="bizType" value="${esc(i.bizType || '')}"></div><div class="f"><label>종목</label><input data-co="${k}" data-k="bizItem" value="${esc(i.bizItem || '')}"></div>
+        <div class="f"><label>명판 글씨체</label><select data-co="${k}" data-k="font">${Object.keys(PLATE_FONTS).map(f => `<option ${(i.font || '굴림') === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div></div>
+      <div class="hint">명판 미리보기 (저장하면 바뀐 내용으로 다시 그립니다)</div>
+      <div class="platebox"><img class="np" src="${namePlate(c)}"><img class="seal" src="${st || autoSeal(c)}"></div>
       <div class="stampbox"><img src="${st || autoSeal(c)}" title="${st ? '이 PC에 넣은 직인 사진' : '자동 직인'}">
         <div><div style="font-size:13px">${st ? '직인: <b>이 PC에 넣은 사진</b>을 씁니다' : '직인: <b>자동 직인</b> (위 상호·대표 직함으로 만듦, 어느 PC에서나 같음)'}</div>
         <div class="hint" style="margin-top:2px">실제 도장 사진을 쓰고 싶으면 넣으세요 (이 PC 브라우저에만 저장):</div>
         <input type="file" accept="image/*" data-stamp="${k}" style="margin-top:4px">${st ? ` <button class="btn sm" data-unstamp="${k}">사진 지우고 자동 직인 쓰기</button>` : ''}</div></div>
     </div>`; };
-  openModal(`${modalHead('회사 정보·직인')}<div class="mb">${COMPANIES.map(rowOf).join('')}
+  openModal(`${modalHead('회사 정보·명판·직인')}<div class="mb">${COMPANIES.map(rowOf).join('')}
     <div class="hint">상호나 대표 직함을 고치고 저장하면 자동 직인도 그 내용으로 바뀝니다. 도장 사진은 흰 바탕에 빨간 도장이면 되고, 흰 바탕은 자동으로 투명해집니다.</div></div>
     <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="coSave">회사 정보 저장</button></div>`, { wide: true });
   document.querySelectorAll('[data-stamp]').forEach(inp => inp.onchange = async () => {
@@ -308,7 +334,7 @@ function openCompany(){
   document.querySelectorAll('[data-unstamp]').forEach(b => b.onclick = () => { const c = COMPANIES[Number(b.dataset.unstamp)]; if (confirm(`${c} 직인 사진을 이 PC에서 지우고 자동 직인을 쓸까요?`)) { localStorage.removeItem(stampKey(c)); openCompany(); } });
   $('#coSave').onclick = async () => {
     const value = {}; COMPANIES.forEach((c, k) => { value[c] = {}; document.querySelectorAll(`[data-co="${k}"]`).forEach(i => { value[c][i.dataset.k] = i.value.trim(); }); });
-    closeModal(); Object.keys(_seals).forEach(k => delete _seals[k]); await saveRow('settings', { id: 'cert_company', value, updated_by: me }); toast('회사 정보를 저장했습니다');
+    closeModal(); Object.keys(_seals).forEach(k => delete _seals[k]); Object.keys(_plates).forEach(k => delete _plates[k]); await saveRow('settings', { id: 'cert_company', value, updated_by: me }); toast('회사 정보를 저장했습니다');
   };
 }
 /* 직인 사진 → 300px PNG, 흰 바탕은 투명하게 */
