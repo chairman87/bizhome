@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610141219">
-<script src="common.js?v=202610141219"></script>
+<link rel="stylesheet" href="common.css?v=202610141433">
+<script src="common.js?v=202610141433"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -172,6 +172,7 @@ const SCREENS = [
   ['rnr.html', '업무 분장'],
   ['alarms.html', '알람 (회사 운영 알람 메시지 모음)'],
   ['leave.html', '연차/휴가 등록'],
+  ['certs.html', '재직증명서 (요청·발급)'],
   ['notices.html', '공지사항'],
   ['decisions.html', '업무공유 (대표 결정·공유)'],
   ['worklog.html', '업무일지 (퇴근 전 하루 보고)'],
@@ -371,6 +372,7 @@ function render(){
     'decisions.html': dMine().filter(d => dForMe(d) && !dRead(d)).length,   // 내가 아직 확인 안 한 결정
     'worklog.html': worklogBadge(),   // 받는 사람: 안 읽은 일지 수 / 쓰는 사람: 평일 16시 이후 오늘 일지를 안 썼으면 1
     'docs.html': docs.filter(d => d.expire_date && dayDiff(d.expire_date) <= 30).length,   // 유효기간 30일 내(지난 것 포함)
+    'certs.html': isAdmin() ? (DATA.cert_requests || []).filter(r => r.status === '요청').length : (DATA.cert_requests || []).filter(r => r.name === me && r.status === '발급' && !r.downloaded_at).length,   // 관리자: 발급 대기 / 팀원: 새로 발급돼 아직 안 받은 것
     'alarms.html': (DATA.alarms || []).filter(a => !(Array.isArray(a.reads) && a.reads.includes(me))).length,   // 내가 아직 안 읽은 알람
     'meetings.html': mtNewCount(),   // 남이 새로 올린 회의록 중 아직 안 열어 본 것 (플라우드 자동 등록 포함)
     'tmcheck.html': (DATA.tm_checks || []).filter(t => t.requested_by === me && t.status === '완료' && !t.seen).length,   // 내가 요청한 상표 점검 중 아직 결과를 안 열어 본 것
@@ -918,7 +920,7 @@ async function loadMtNews(){
 }
 setTimeout(loadMtNews, 1500); setInterval(loadMtNews, 60000);
 
-boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'worklogs', 'settings', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'tm_checks', 'alarms', 'project_logs', 'project_cards', 'project_decisions'], render,
+boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'worklogs', 'settings', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'tm_checks', 'alarms', 'cert_requests', 'project_logs', 'project_cards', 'project_decisions'], render,
   onProjNews: () => { if (!editing && !document.querySelector('.modal')) render(); } });   // 프로젝트 소식이 바뀌면 판을 다시 그림 (편집 중이거나 창이 열려 있으면 건너뜀)
 </script>
 </body>

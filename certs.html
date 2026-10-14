@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재직증명서</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610141433">
+<script src="common.js?v=202610141433"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn{padding:9px 16px;font-size:14px}
+  .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
+  .r{display:grid;grid-template-columns:110px 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+  .r:last-child{border-bottom:0}
+  .r:hover{background:var(--bg2)}
+  .r .who{font-weight:700}
+  .r .t{font-size:14px}
+  .r .s{font-size:12px;color:var(--fg3);margin-top:2px}
+  .r .side{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .st{font-size:11px;font-weight:700;border-radius:4px;padding:2px 8px;white-space:nowrap}
+  .st.req{background:#fef3c7;color:#92400e}
+  .st.ok{background:#dcfce7;color:#15803d}
+  .st.no{background:#fee2e2;color:#b91c1c}
+  .new{background:var(--red);color:#fff;font-size:10px;border-radius:3px;padding:0 5px;font-weight:600;margin-left:6px}
+  .stampbox{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .stampbox img{width:64px;height:64px;object-fit:contain;border:1px dashed var(--line2);border-radius:6px;background:#fff}
+  .stampbox .nos{width:64px;height:64px;border:1px dashed var(--line2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--fg3)}
+  @media(max-width:640px){.r{grid-template-columns:1fr}.r .side{justify-content:flex-start}}
+
+  /* 증명서 (A4 794×1123px) — 화면 밖에 그린 뒤 PDF 로 찍음 */
+  #certStage{position:fixed;left:-10000px;top:0}
+  .cert{width:794px;height:1123px;background:#fff;color:#111;padding:90px 80px 70px;box-sizing:border-box;font-family:'Malgun Gothic','맑은 고딕',sans-serif;position:relative}
+  .cert .no{font-size:13px;color:#333}
+  .cert h1{text-align:center;font-size:38px;letter-spacing:22px;margin:40px 0 50px;font-weight:800}
+  .cert *{box-sizing:border-box}
+  .cert table{width:634px !important;min-width:0 !important;table-layout:fixed;border-collapse:collapse;font-size:15px}
+  .cert th,.cert td{border:1px solid #333;padding:13px 12px;text-align:left;vertical-align:middle;white-space:normal !important;word-break:keep-all}
+  .cert th{background:#f3f4f6;width:110px;font-weight:700;text-align:center}
+  .cert th.grp{width:44px;writing-mode:vertical-rl;letter-spacing:6px}
+  .cert .msg{text-align:center;font-size:17px;margin:56px 0 40px}
+  .cert .date{text-align:center;font-size:17px;margin-bottom:60px;letter-spacing:2px}
+  .cert .co{font-size:15px;line-height:2;margin-left:200px;position:relative}
+  .cert .co b{font-size:18px}
+  .cert .in{position:relative;display:inline-block}
+  .cert .seal{position:absolute;width:84px;height:84px;object-fit:contain;left:50%;top:50%;transform:translate(-50%,-50%);opacity:.9}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+<div id="certStage"></div>
+
+<script>
+/* ================================================================
+   재직증명서 — 팀원이 요청하면 관리자가 표준 양식으로 발급(PDF)
+   cert_requests 한 줄 = { name, company, dept, birth, address, purpose, submit_to, copies, memo,
+                           status(요청/발급/반려), title, hire_date, issue_no, files[발급 PDF], issued_by/at, reject_reason, downloaded_at }
+   회사 정보(상호·대표·사업자번호·주소)는 settings 표 id 'cert_company' (관리자가 고침, 처음엔 사업자등록증 값)
+   직인 사진은 인터넷에 올리지 않고 발급하는 PC 브라우저에만 저장 (LS 'cert_stamp_<회사>')
+================================================================ */
+const COMPANIES = ['식이해법연구소', '(주)피에이치뷰티'];
+const CO_DEFAULT = {   // 2026-10-14 회사 서류함의 사업자등록증에서 읽은 값
+  '식이해법연구소': { name: '식이해법연구소', ceo: '홍주', ceoTitle: '대표', bizno: '228-18-02412', address: '서울특별시 서초구 형촌3길 20, 1층 A27호(우면동)' },
+  '(주)피에이치뷰티': { name: '주식회사 피에이치뷰티', ceo: '박봉수', ceoTitle: '대표이사', bizno: '788-86-03834', address: '서울특별시 서초구 사평대로53길 30, 515호(반포동, 반포엠)' },
+};
+const PURPOSES = ['은행 제출용', '관공서 제출용', '비자·여권', '대출', '어린이집·학교 제출용', '기타'];
+const R = () => (DATA.cert_requests || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const coInfo = c => ({ ...(CO_DEFAULT[c] || {}), ...((((DATA.settings || []).find(x => x.id === 'cert_company') || {}).value || {})[c] || {}) });
+const stampKey = c => 'cert_stamp_' + c;
+const getStamp = c => { try { return localStorage.getItem(stampKey(c)) || ''; } catch { return ''; } };
+const memberOf = n => members.find(m => m.name === n) || {};
+const stHtml = r => r.status === '발급' ? '<span class="st ok">발급</span>' : r.status === '반려' ? '<span class="st no">반려</span>' : '<span class="st req">요청</span>';
+const ymdKo = s => { if (!s) return ''; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${y}년 ${Number(m)}월 ${Number(d)}일`; };
+let tab = 'todo';
+
+function normalize(table, r){ return table === 'cert_requests' ? { ...r, files: Array.isArray(r.files) ? r.files : [] } : r; }
+const VIEWS = () => isAdmin()
+  ? [{ key: 'todo', label: '발급 대기', badge: R().filter(r => r.status === '요청').length || '' }, { key: 'all', label: '전체' }, { key: 'mine', label: '내 요청' }]
+  : [{ key: 'mine', label: '내 요청' }];
+
+function render(){
+  if (!VIEWS().some(v => v.key === tab)) tab = VIEWS()[0].key;
+  const list = R().filter(r => tab === 'mine' ? r.name === me : tab === 'todo' ? r.status === '요청' : true);
+  $('#app').innerHTML = headerHtml({ icon: '📄', title: '재직증명서', tabs: VIEWS(), active: tab })
+    + `<main class="wrap" style="max-width:900px">${!DATA.cert_requests ? `<div class="empty">재직증명서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-certs.sql 을 실행하세요.' : ''}</div>` : `
+    <div class="actions"><button class="btn primary" id="reqBtn">＋ 재직증명서 요청</button>
+      ${isAdmin() ? '<button class="btn" id="coBtn" title="증명서에 들어가는 회사 정보와 직인">🏢 회사 정보·직인</button>' : ''}
+      <span class="hint">${isAdmin() ? '요청을 눌러 <b>발급</b>하면 입사일·직위가 채워진 증명서가 PDF 로 만들어져 요청한 사람에게 전달됩니다.' : '요청하면 관리자가 발급합니다. 발급되면 여기서 PDF 를 내려받으세요.'}</span></div>
+    ${list.length ? `<div class="list">${list.map(rowHtml).join('')}</div>` : `<div class="empty">${tab === 'todo' ? '발급을 기다리는 요청이 없습니다.' : '아직 요청이 없습니다.<br><b>＋ 재직증명서 요청</b>으로 요청하세요.'}</div>`}`}</main>`;
+  bindHeader(k => { tab = k; render(); }, null, m => `요청 ${R().filter(r => r.name === m.name).length}건`);
+  const rb = $('#reqBtn'); if (rb) rb.onclick = () => openRequest(null);
+  const cb = $('#coBtn'); if (cb) cb.onclick = openCompany;
+  document.querySelectorAll('.r[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a,button')) return; openRequest(el.dataset.id); });
+  document.querySelectorAll('[data-dl]').forEach(a => a.onclick = () => markDownloaded(a.dataset.dl));
+}
+function rowHtml(r){
+  const pdf = r.files[0];
+  const fresh = r.status === '발급' && r.name === me && !r.downloaded_at;
+  return `<div class="r" data-id="${r.id}">
+    <div><div class="who">${esc(r.name)}</div><div class="s">${fmtDate((r.created_at || '').slice(0, 10))}</div></div>
+    <div><div class="t">${esc(r.company || '')} · ${esc(r.purpose || '용도 미기재')}${r.submit_to ? ` → ${esc(r.submit_to)}` : ''}${fresh ? '<span class="new">새로 발급</span>' : ''}</div>
+      <div class="s">${r.copies > 1 ? `${r.copies}부 · ` : ''}${r.status === '발급' ? `발급번호 ${esc(r.issue_no || '')} · ${esc(r.issued_by || '')} ${fmtDateTime(r.issued_at)}` : r.status === '반려' ? `반려: ${esc(r.reject_reason || '')}` : '발급 대기'}</div></div>
+    <div class="side">${stHtml(r)}${pdf && (r.name === me || isAdmin()) ? `<a class="btn sm primary" href="${esc(pdf.url)}?download=${encodeURIComponent(pdf.name)}" download data-dl="${r.id}">⬇ PDF</a>` : ''}</div>
+  </div>`;
+}
+async function markDownloaded(id){ const r = R().find(x => x.id === id); if (r && r.name === me && !r.downloaded_at) await saveRow('cert_requests', { ...r, downloaded_at: nowIso() }); }
+
+/* ---------- 요청 (팀원) / 발급 (관리자) ---------- */
+function openRequest(id){
+  const r0 = id ? R().find(x => x.id === id) : null;
+  if (r0 && !isAdmin() && r0.name !== me) return;
+  const last = (() => { try { return JSON.parse(LS.get('cert_last_' + me) || '{}'); } catch { return {}; } })();   // 지난번에 적은 생년월일·주소·회사
+  const d = r0 || { name: me, company: last.company || COMPANIES[0], dept: last.dept || '', birth: last.birth || '', address: last.address || '', purpose: PURPOSES[0], submit_to: '', copies: 1, memo: '', status: '요청' };
+  const editable = !r0 || (r0.status === '요청' && (r0.name === me || isAdmin()));
+  const dis = editable ? '' : 'disabled';
+  openModal(`${modalHead(r0 ? '재직증명서 요청' : '재직증명서 요청하기', r0 ? stHtml(r0) : '')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>요청자</label>${isAdmin() && !r0 ? `<select id="cName">${memberOptions(d.name)}</select>` : `<div style="padding:8px 0">${who(d.name)}</div><input type="hidden" id="cName" value="${esc(d.name)}">`}</div>
+        <div class="f"><label>소속 회사</label><select id="cCo" ${dis}>${COMPANIES.map(c => `<option ${d.company === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>생년월일 *</label><input id="cBirth" value="${esc(d.birth || '')}" placeholder="예: 1995-03-21" ${dis}></div>
+        <div class="f"><label>부서 <span class="hint">(선택)</span></label><input id="cDept" value="${esc(d.dept || '')}" placeholder="예: 마케팅팀" ${dis}></div>
+      </div>
+      <div class="f"><label>주소 <span class="hint">(선택 · 제출처가 요구하면)</span></label><input id="cAddr" value="${esc(d.address || '')}" ${dis}></div>
+      <div class="f2">
+        <div class="f"><label>용도</label><select id="cPurp" ${dis}>${[...PURPOSES, ...(d.purpose && !PURPOSES.includes(d.purpose) ? [d.purpose] : [])].map(p => `<option ${d.purpose === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+        <div class="f"><label>제출처 <span class="hint">(선택)</span></label><input id="cTo" value="${esc(d.submit_to || '')}" placeholder="예: 국민은행" ${dis}></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>부수</label><input type="number" id="cCopies" min="1" max="10" value="${d.copies || 1}" ${dis}></div>
+        <div class="f"><label>메모 <span class="hint">(선택)</span></label><input id="cMemo" value="${esc(d.memo || '')}" ${dis}></div>
+      </div>
+      ${r0 && r0.status === '반려' ? `<div class="hint" style="color:var(--red)">반려 사유: ${esc(r0.reject_reason || '')}</div>` : ''}
+      ${r0 && r0.files.length ? `<div class="f"><label>발급한 증명서</label>${filesHtml(r0.files)}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${r0 && (r0.name === me || isAdmin()) && r0.status !== '발급' ? '<button class="btn danger left" id="cDel">요청 삭제</button>' : ''}
+      ${r0 && isAdmin() && r0.status === '요청' ? '<button class="btn" id="cNo">반려</button><button class="btn primary" id="cIssue">📄 발급하기</button>' : ''}
+      ${r0 && isAdmin() && r0.status === '발급' ? '<button class="btn" id="cIssue">다시 발급</button>' : ''}
+      <button class="btn" data-close>닫기</button>
+      ${editable && !(r0 && isAdmin() && r0.status === '요청') ? `<button class="btn primary" id="cSave">${r0 ? '저장' : '요청하기'}</button>` : ''}
+    </div>`);
+  const read = () => ({ name: $('#cName').value, company: $('#cCo').value, birth: $('#cBirth').value.trim(), dept: $('#cDept').value.trim() || null, address: $('#cAddr').value.trim() || null,
+    purpose: $('#cPurp').value, submit_to: $('#cTo').value.trim() || null, copies: Math.max(1, Number($('#cCopies').value) || 1), memo: $('#cMemo').value.trim() || null });
+  const sv = $('#cSave'); if (sv) sv.onclick = async () => {
+    const v = read(); if (!v.birth) { $('#cBirth').focus(); toast('생년월일을 적어 주세요', true); return; }
+    if (v.name === me) LS.set('cert_last_' + me, JSON.stringify({ company: v.company, dept: v.dept, birth: v.birth, address: v.address }));
+    const row = { ...(r0 || {}), ...v, id: r0 ? r0.id : uid(), status: r0 ? r0.status : '요청', files: r0 ? r0.files : [], created_by: r0 ? r0.created_by : me, created_at: r0 ? r0.created_at : nowIso() };
+    closeModal(); await saveRow('cert_requests', row); toast(r0 ? '저장했습니다' : '재직증명서를 요청했습니다. 관리자가 발급하면 여기서 내려받을 수 있습니다');
+  };
+  const del = $('#cDel'); if (del) del.onclick = async () => { if (confirm('이 요청을 삭제할까요?')) { closeModal(); await removeRow('cert_requests', r0.id); toast('삭제했습니다'); } };
+  const no = $('#cNo'); if (no) no.onclick = async () => { const why = prompt('반려 사유를 적어 주세요'); if (why === null) return; closeModal(); await saveRow('cert_requests', { ...r0, status: '반려', reject_reason: why.trim() || '사유 없음' }); toast('반려했습니다'); };
+  const is = $('#cIssue'); if (is) is.onclick = async () => {
+    const v = read(); if (!v.birth) { toast('생년월일이 비어 있습니다', true); return; }
+    await saveRow('cert_requests', { ...r0, ...v });   // 관리자가 고친 칸 먼저 저장
+    openIssue(r0.id);
+  };
+}
+
+/* ---------- 발급: 입사일·직위 확인 → 증명서 미리보기 → PDF 만들어 전달 ---------- */
+function openIssue(id){
+  const r = R().find(x => x.id === id); if (!r) return;
+  const m = memberOf(r.name), co = coInfo(r.company), stamp = getStamp(r.company);
+  openModal(`${modalHead('재직증명서 발급')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>입사일 *</label><input type="date" id="iHire" value="${esc(r.hire_date || m.hire_date || '')}">${m.hire_date ? '' : '<div class="hint" style="color:var(--orange)">인트라넷에 입사일이 없습니다. 넣으면 팀원 정보에도 저장됩니다.</div>'}</div>
+        <div class="f"><label>직위</label><input id="iTitle" value="${esc(r.title || m.title || '사원')}"></div>
+      </div>
+      <div class="hint">회사: <b>${esc(co.name || r.company)}</b> · ${esc(co.ceoTitle || '대표')} ${esc(co.ceo || '')} · 직인: ${stamp ? '✅ 이 PC에 있음' : '<span style="color:var(--red)">이 PC에 없음 (직인 없이 발급됩니다 · 🏢 회사 정보·직인 에서 넣기)</span>'}</div>
+      <div id="iPrev" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:420px;background:#f3f4f6;display:flex;justify-content:center"></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="iGo">PDF 만들어 전달</button></div>`, { wide: true });
+  const cur = () => ({ ...r, hire_date: $('#iHire').value, title: $('#iTitle').value.trim() || '사원' });
+  const prev = () => { const box = $('#iPrev'); box.innerHTML = `<div style="transform:scale(.37);transform-origin:top center;height:0">${certHtml(cur(), nextNo(r))}</div>`; };
+  $('#iHire').onchange = prev; $('#iTitle').oninput = prev; prev();
+  $('#iGo').onclick = async () => {
+    const v = cur(); if (!v.hire_date) { $('#iHire').focus(); toast('입사일을 넣어 주세요', true); return; }
+    const btn = $('#iGo'); btn.disabled = true; btn.textContent = 'PDF 만드는 중…';
+    try {
+      const no = r.issue_no || nextNo(r);
+      const blob = await makePdf(certHtml(v, no));
+      const fname = `재직증명서_${r.name}_${todayStr().replace(/-/g, '')}.pdf`;
+      const f = await uploadFile(new File([blob], fname, { type: 'application/pdf' }), 'certs');
+      if (!m.hire_date && m.id) await saveRow('members', { ...m, hire_date: v.hire_date });
+      await saveRow('cert_requests', { ...r, status: '발급', title: v.title, hire_date: v.hire_date, issue_no: no, files: [f], issued_by: me, issued_at: nowIso(), downloaded_at: null });
+      for (const old of r.files || []) if (old.path) deleteFile(old.path);   // 다시 발급: 예전 PDF 는 지움
+      closeModal(); toast(`발급했습니다 (${no}). ${r.name}님 화면에 PDF 가 올라갔습니다`);
+      window.open(f.url, '_blank');
+    } catch (e) { toast('발급하지 못했습니다: ' + (e.message || e), true); btn.disabled = false; btn.textContent = 'PDF 만들어 전달'; }
+  };
+}
+const nextNo = r => { const y = todayStr().slice(0, 4); const n = R().filter(x => x.issue_no && x.issue_no.startsWith(y + '-')).length + 1; return `${y}-${String(n).padStart(3, '0')}`; };
+function certHtml(r, no){
+  const co = coInfo(r.company), stamp = getStamp(r.company);
+  const row = (k, v) => `<tr><th>${k}</th><td>${esc(v || '')}</td></tr>`;
+  return `<div class="cert">
+    <div class="no">발급번호: 제 ${esc(no)} 호</div>
+    <h1>재직증명서</h1>
+    <table>
+      <tr><th class="grp" rowspan="3">인적사항</th><th>성 명</th><td>${esc(r.name)}</td></tr>
+      <tr><th>생년월일</th><td>${esc(r.birth || '')}</td></tr>
+      <tr><th>주 소</th><td>${esc(r.address || '')}</td></tr>
+      <tr><th class="grp" rowspan="4">재직사항</th><th>회 사 명</th><td>${esc(co.name || r.company || '')}</td></tr>
+      <tr><th>부 서</th><td>${esc(r.dept || '')}</td></tr>
+      <tr><th>직 위</th><td>${esc(r.title || '')}</td></tr>
+      <tr><th>재직기간</th><td>${ymdKo(r.hire_date)} ~ 현재</td></tr>
+      <tr><th colspan="2">용 도</th><td>${esc(r.purpose || '')}</td></tr>
+      <tr><th colspan="2">제 출 처</th><td>${esc(r.submit_to || '')}</td></tr>
+    </table>
+    <div class="msg">위 사람은 당사에 재직하고 있음을 증명합니다.</div>
+    <div class="date">${ymdKo(todayStr())}</div>
+    <div class="co">
+      <div>상 호 : <b>${esc(co.name || '')}</b></div>
+      <div>사업자등록번호 : ${esc(co.bizno || '')}</div>
+      <div>주 소 : ${esc(co.address || '')}</div>
+      <div>${esc(co.ceoTitle || '대표')} : <b>${esc(co.ceo || '')}</b> &nbsp;<span class="in">(인)${stamp ? `<img class="seal" src="${stamp}">` : ''}</span></div>
+    </div>
+  </div>`;
+}
+/* 증명서 HTML → A4 PDF (html2canvas + jsPDF 를 필요할 때만 불러옴) */
+// loadScript(src) 는 common.js 의 것을 씀
+async function makePdf(html){
+  await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+  await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+  const stage = $('#certStage'); stage.innerHTML = html;
+  try {
+    await Promise.all([...stage.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(ok => { i.onload = i.onerror = ok; })));
+    const canvas = await html2canvas(stage.firstElementChild, { scale: 2, backgroundColor: '#ffffff' });
+    const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+    return pdf.output('blob');
+  } finally { stage.innerHTML = ''; }
+}
+
+/* ---------- 회사 정보·직인 (관리자) ---------- */
+function openCompany(){
+  if (!isAdmin()) return;
+  const rowOf = c => { const i = coInfo(c), st = getStamp(c), k = COMPANIES.indexOf(c);
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-weight:700;margin-bottom:6px">${esc(c)}</div>
+      <div class="f2"><div class="f"><label>상호</label><input data-co="${k}" data-k="name" value="${esc(i.name || '')}"></div><div class="f"><label>사업자등록번호</label><input data-co="${k}" data-k="bizno" value="${esc(i.bizno || '')}"></div></div>
+      <div class="f2"><div class="f"><label>대표 직함</label><input data-co="${k}" data-k="ceoTitle" value="${esc(i.ceoTitle || '')}"></div><div class="f"><label>대표자</label><input data-co="${k}" data-k="ceo" value="${esc(i.ceo || '')}"></div></div>
+      <div class="f"><label>주소</label><input data-co="${k}" data-k="address" value="${esc(i.address || '')}"></div>
+      <div class="stampbox">${st ? `<img src="${st}">` : '<div class="nos">직인 없음</div>'}
+        <div><div style="font-size:13px">직인 <span class="hint">(이 PC 브라우저에만 저장 · 인터넷에 올라가지 않음)</span></div>
+        <input type="file" accept="image/*" data-stamp="${k}" style="margin-top:4px">${st ? ` <button class="btn sm" data-unstamp="${k}">지우기</button>` : ''}</div></div>
+    </div>`; };
+  openModal(`${modalHead('회사 정보·직인')}<div class="mb">${COMPANIES.map(rowOf).join('')}
+    <div class="hint">직인은 흰 바탕에 빨간 도장이 찍힌 사진(PNG·JPG)이면 됩니다. 흰 바탕은 자동으로 투명하게 바뀝니다. 다른 PC에서 발급하려면 그 PC에서도 한 번 넣어야 합니다.</div></div>
+    <div class="mf"><button class="btn" data-close>닫기</button><button class="btn primary" id="coSave">회사 정보 저장</button></div>`, { wide: true });
+  document.querySelectorAll('[data-stamp]').forEach(inp => inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return; const c = COMPANIES[Number(inp.dataset.stamp)];
+    try { const url = await stampFromFile(f); localStorage.setItem(stampKey(c), url); toast(`${c} 직인을 이 PC에 저장했습니다`); openCompany(); }
+    catch (e) { toast('직인을 넣지 못했습니다: ' + (e.message || e), true); }
+  });
+  document.querySelectorAll('[data-unstamp]').forEach(b => b.onclick = () => { const c = COMPANIES[Number(b.dataset.unstamp)]; if (confirm(`${c} 직인을 이 PC에서 지울까요?`)) { localStorage.removeItem(stampKey(c)); openCompany(); } });
+  $('#coSave').onclick = async () => {
+    const value = {}; COMPANIES.forEach((c, k) => { value[c] = {}; document.querySelectorAll(`[data-co="${k}"]`).forEach(i => { value[c][i.dataset.k] = i.value.trim(); }); });
+    closeModal(); await saveRow('settings', { id: 'cert_company', value, updated_by: me }); toast('회사 정보를 저장했습니다');
+  };
+}
+/* 직인 사진 → 300px PNG, 흰 바탕은 투명하게 */
+function stampFromFile(file){
+  return new Promise((ok, no) => {
+    const img = new Image(), rd = new FileReader();
+    rd.onload = () => { img.src = rd.result; }; rd.onerror = () => no(new Error('파일을 읽지 못했습니다'));
+    img.onload = () => {
+      const s = Math.min(1, 300 / Math.max(img.width, img.height)), w = Math.round(img.width * s), h = Math.round(img.height * s);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, w, h);
+      const d = cx.getImageData(0, 0, w, h);
+      for (let i = 0; i < d.data.length; i += 4) { const [r, g, b] = [d.data[i], d.data[i + 1], d.data[i + 2]]; if (r > 225 && g > 225 && b > 225) d.data[i + 3] = 0; }
+      cx.putImageData(d, 0, 0); ok(cv.toDataURL('image/png'));
+    };
+    img.onerror = () => no(new Error('그림 파일이 아닙니다'));
+    rd.readAsDataURL(file);
+  });
+}
+
+boot({ icon: '📄', title: '재직증명서', tables: ['cert_requests', 'settings'], render, normalize });
+</script>
+</body>
+</html>
