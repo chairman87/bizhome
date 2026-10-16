@@ -766,6 +766,11 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .pc.over{border-color:#fca5a5}
   .pcadd{width:100%;box-sizing:border-box;border:1px dashed var(--line2);border-radius:8px;padding:7px 8px;font-size:13px;background:transparent}
   .pcadd:focus{background:#fff;border-style:solid;outline:none}
+  .pc[draggable=true]{cursor:grab}
+  .pc.dragging{opacity:.4}
+  .pc.dropb{box-shadow:0 -3px 0 0 #2563eb}
+  .pc.dropa{box-shadow:0 3px 0 0 #2563eb}
+  .pcol.dropin{outline:2px dashed #2563eb;outline-offset:-2px}
   .dmon{font-size:13px;font-weight:700;color:var(--fg2);margin:16px 2px 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
   .dmon:first-child{margin-top:0}
   .drow{display:flex;gap:12px;align-items:flex-start;padding:10px 8px;border-bottom:1px solid var(--line)}
@@ -829,10 +834,9 @@ document.head.insertAdjacentHTML('beforeend', `<style>
    저장: project_items 표(예전 프로세스 화면이 쓰던 표) { project_id, phase, title, assignee, due_date, status(예정/진행중/완료/보류), note, sort_order, done_at, updated_by(완료한 사람) }
    날짜순(날짜 없는 단계는 맨 아래, 그 안에서는 넣은 순서). 체크하면 완료 + 대화에도 한 줄 남음 */
 /* 신제품 런칭 기본 단계 (2026-10-16 사장님 정리본). [분야, 단계, 메모] — 분야가 열이 됨 */
-const PLAN_PHASES = ['기획', 'SCM', '제품 디자인', '홈페이지', '물류', '재무', 'CS', '마케팅'];
+const PLAN_PHASES = ['기획/SCM', '제품 디자인', '홈페이지', '물류', '재무', 'CS', '마케팅'];
 const PLAN_TEMPLATE = [
-  ['기획', '제품명 / 상표 검토'],
-  ['SCM', 'BOM 처방 및 견적 확정'], ['SCM', '표시사항 최종본 수령'], ['SCM', '샘플 테스트 및 최종 발주'],
+  ['기획/SCM', '제품명 / 상표 검토'], ['기획/SCM', 'BOM 처방 및 견적 확정'], ['기획/SCM', '표시사항 최종본 수령'], ['기획/SCM', '샘플 테스트 및 최종 발주'],
   ['제품 디자인', '제품 패키지 디자인 확정'], ['제품 디자인', '제품 원화 파일 제작'], ['제품 디자인', '제품 목업이미지 제작'],
   ['홈페이지', '제품 상세 페이지 내용 확정'], ['홈페이지', '상세페이지 디자인 완료'], ['홈페이지', '제품페이지 오픈 및 설정 (자사몰, 쿠팡, 스마트스토어)'],
   ['물류', '제품 입고 확인'], ['물류', '이벗 상품 등록 및 API 연결'],
@@ -851,7 +855,7 @@ let planView = LS.get('plan_view') || 'board';   // board = 분야별 열, list 
 const planCols = list => { const extra = [...new Set(list.map(x => x.phase || '').filter(ph => ph && !PLAN_PHASES.includes(ph)))]; return [...PLAN_PHASES, ...extra, ...(list.some(x => !x.phase) ? [''] : [])]; };
 function planItemHtml(x, compact){
   const n = planDays(x.due_date), over = !planDone(x) && n != null && n < 0, soon = !planDone(x) && n != null && n >= 0 && n <= 3;
-  if (compact) return `<div class="pc ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
+  if (compact) return `<div class="pc ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}" draggable="true" title="끌어서 순서·분야 바꾸기 · 누르면 고치기">
       <label class="pck"><input type="checkbox" data-plchk="${x.id}" ${planDone(x) ? 'checked' : ''}></label>
       <div class="pcb"><div class="pct">${esc(x.title)}</div>
         <div class="pcm">${x.due_date ? `<span class="${over ? 'r' : soon ? 'o' : ''}">${fmtDate(x.due_date).slice(5)}(${planDow(x.due_date)})${planDone(x) ? '' : ' ' + planDD(n)}</span>` : '<span class="nd">날짜 미정</span>'}${x.assignee ? ` · ${esc(fullName(x.assignee))}` : ''}</div>
@@ -876,11 +880,11 @@ function planHtml(p){
     <div class="hint" style="margin-top:6px">줄을 누르면 고치기·삭제 · 체크하면 완료 (대화에도 한 줄 남음)</div></div>`;
   const cols = planCols(list);
   return `<div class="plan wide">${head}
-    <div class="pboard">${cols.map(ph => { const its = list.filter(x => (x.phase || '') === ph), d = its.filter(planDone).length;
-      return `<div class="pcol"><div class="pch"><b>${esc(ph || '분야 없음')}</b><span class="hint">${its.length ? `${d}/${its.length}` : ''}</span></div>
+    <div class="pboard">${cols.map(ph => { const its = list.filter(x => (x.phase || '') === ph).sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999) || String(a.created_at || '').localeCompare(String(b.created_at || ''))), d = its.filter(planDone).length;   // 열 안은 기본 단계 순서(넣은 순서)
+      return `<div class="pcol" data-plcol="${esc(ph)}"><div class="pch"><b>${esc(ph || '분야 없음')}</b><span class="hint">${its.length ? `${d}/${its.length}` : ''}</span></div>
         ${its.map(x => planItemHtml(x, true)).join('')}
         <input class="pcadd" data-plph="${esc(ph)}" placeholder="＋ 단계 추가 (Enter)" maxlength="120"></div>`; }).join('')}</div>
-    <div class="hint" style="margin-top:6px">카드를 누르면 날짜·담당·메모를 넣거나 고칩니다 · 체크하면 완료 (대화에도 한 줄 남음) · 열 안에서는 날짜순</div></div>`;
+    <div class="hint" style="margin-top:6px">카드를 누르면 날짜·담당·메모를 넣거나 고칩니다 · 체크하면 완료 (대화에도 한 줄 남음) · 열 안은 기본 단계 순서 · 날짜순은 ☰ 날짜순 보기</div></div>`;
 }
 function bindPlan(p){
   const addItem = async (title, phase, due, who) => {
@@ -913,6 +917,32 @@ function bindPlan(p){
     toast(cb.checked ? `"${x.title}" 완료` : '완료를 취소했습니다'); }; });
   document.querySelectorAll('.pck').forEach(l => l.onclick = e => e.stopPropagation());
   document.querySelectorAll('[data-pl]').forEach(r => r.onclick = () => openPlanItem(p, r.dataset.pl));
+  /* 카드 끌어서 순서 바꾸기: 카드 위쪽 절반에 놓으면 그 앞, 아래쪽 절반이면 그 뒤. 다른 열에 놓으면 그 분야로 옮김 */
+  let dragId = null;
+  const clear = () => document.querySelectorAll('.pc.dropb, .pc.dropa, .pcol.dropin').forEach(el => el.classList.remove('dropb', 'dropa', 'dropin'));
+  document.querySelectorAll('.pc[draggable=true]').forEach(c => {
+    c.ondragstart = e => { dragId = c.dataset.pl; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); setTimeout(() => c.classList.add('dragging'), 0); };
+    c.ondragend = () => { dragId = null; c.classList.remove('dragging'); clear(); };
+    c.ondragover = e => { if (!dragId || dragId === c.dataset.pl) return; e.preventDefault(); e.stopPropagation(); const r = c.getBoundingClientRect(); clear(); c.classList.add(e.clientY > r.top + r.height / 2 ? 'dropa' : 'dropb'); };
+  });
+  document.querySelectorAll('.pcol[data-plcol]').forEach(col => {
+    col.ondragover = e => { if (!dragId) return; e.preventDefault(); if (!e.target.closest('.pc')) { clear(); col.classList.add('dropin'); } };
+    col.ondragleave = e => { if (!col.contains(e.relatedTarget)) col.classList.remove('dropin'); };
+    col.ondrop = async e => {
+      if (!dragId) return; e.preventDefault();
+      const id = dragId, ph = col.dataset.plcol, onCard = e.target.closest('.pc'); dragId = null;
+      const after = onCard ? e.clientY > onCard.getBoundingClientRect().top + onCard.getBoundingClientRect().height / 2 : true;
+      clear();
+      const ids = [...col.querySelectorAll('.pc')].map(el => el.dataset.pl).filter(x => x !== id);
+      let at = onCard && onCard.dataset.pl !== id ? ids.indexOf(onCard.dataset.pl) + (after ? 1 : 0) : ids.length;
+      ids.splice(at, 0, id);
+      const all = DATA.project_items || [], changed = [];
+      ids.forEach((iid, k) => { const x = all.find(y => y.id === iid); if (!x) return; const nph = ph || null;
+        if (x.sort_order !== k || (x.phase || null) !== nph) changed.push({ ...x, sort_order: k, phase: nph, updated_by: x.updated_by || me }); });
+      for (const row of changed) await saveRow('project_items', row);
+      const moved = all.find(y => y.id === id); if (moved && changed.some(r => r.id === id && (r.phase || '') !== (moved.phase || ''))) toast(`"${moved.title}" → ${ph || '분야 없음'}`);
+    };
+  });
 }
 function openPlanItem(p, id){
   const x = (DATA.project_items || []).find(y => y.id === id); if (!x) return;
