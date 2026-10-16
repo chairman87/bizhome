@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161425">
-<script src="common.js?v=202610161425"></script>
-<script src="channel.js?v=202610161425"></script>
+<link rel="stylesheet" href="common.css?v=202610161426">
+<script src="common.js?v=202610161426"></script>
+<script src="channel.js?v=202610161426"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -162,7 +162,7 @@ const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
 const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
 let QP = new URLSearchParams(location.search).get('p') || '';   // 홈의 프로젝트 폴더에서 누르면 projects.html?p=프로젝트id 로 들어옴 → 그 프로젝트의 기록을 바로 엶
 let cur = QP || LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
-let tab = QP ? 'talk' : (LS.get('proj_tab') || 'talk');
+let tab = QP ? 'talk' : 'plan';   // 채널을 열면 런칭 일정부터 (알림·소식에서 특정 글로 들어올 때만 메시지)
 const QCARD = new URLSearchParams(location.search).get('card') || ''; let openedCard = false;   // projects.html?p=…&card=… 로 들어오면 그 카드를 바로 엶
 let composing = false, renderWaiting = false, openedNew = false;   // 한글을 조합하는 중에 화면을 다시 그리면 글자가 깨지므로 조합이 끝날 때까지 미룸
 document.addEventListener('compositionstart', () => { composing = true; });
@@ -522,7 +522,7 @@ function openProject(id){
       for (const [ph, items] of TEMPLATES[tplName]) for (const t of items) { await store.upsert('project_items', { id: uid(), project_id: row.id, phase: ph, title: t, status: '예정', checklist: [], sort_order: k++, created_by: me, created_at: nowIso(), updated_at: nowIso() }); }
       await reload();
     }
-    cur = row.id; LS.set('proj_cur', cur); if (!p) tab = 'talk'; render();
+    cur = row.id; LS.set('proj_cur', cur); if (!p) tab = 'plan'; render();
     toast(p ? '저장했습니다' : '프로젝트를 만들었습니다');
   };
   const del = $('#pDel'); if (del) del.onclick = async () => { const n = itemsOf(p.id).length, ln = logsOf(p.id).length; if (!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n할 일 ${n}개, 자료 카드 ${cardsOf(p.id).length}건, 기록 ${ln}건도 함께 삭제됩니다.`)) return; closeModal(); for (const it of itemsOf(p.id)) await removeRow('project_items', it.id); for (const l of logsOf(p.id)) await removeRow('project_logs', l.id); for (const c of cardsOf(p.id)) await removeRow('project_cards', c.id); for (const d of DECS().filter(x => x.project_id === p.id)) await removeRow('project_decisions', d.id); await removeRow('projects', p.id); cur = ''; render(); toast('삭제했습니다'); };

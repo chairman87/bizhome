@@ -147,7 +147,7 @@ function bindTalk(p){
 let sideOpen = false;
 const AGENDA = '__agenda';   // 왼쪽 목록의 '회의 안건'을 고른 상태 (cur 에 이 값이 들어감)
 function slRender(p){
-  if (tab !== 'cards' && tab !== 'decs' && tab !== 'plan') tab = 'talk';
+  if (tab !== 'cards' && tab !== 'decs' && tab !== 'plan' && tab !== 'talk') tab = 'plan';   // 채널 첫 화면은 런칭 일정
   const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
   const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
@@ -169,7 +169,7 @@ function slRender(p){
         <span class="ldr ${p.owner ? '' : 'none'}" title="프로젝트 리더 (⚙ 설정에서 바꿉니다)"><span class="lb">리더</span>${p.owner ? avatar(p.owner) + '<b>' + esc(fullName(p.owner)) + '</b>' : '<b>미정</b>'}</span><button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button>
         <span class="sp"></span>${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
         ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}</div>
-      <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button><button class="sltab ${tab === 'plan' ? 'on' : ''}" data-tab="plan">🗓 런칭 일정${planOf(p.id).length ? `<span class="cn">${planOf(p.id).filter(planDone).length}/${planOf(p.id).length}</span>` : ''}</button>
+      <div class="slt"><button class="sltab ${tab === 'plan' ? 'on' : ''}" data-tab="plan">🗓 런칭 일정${planOf(p.id).length ? `<span class="cn">${planOf(p.id).filter(planDone).length}/${planOf(p.id).length}</span>` : ''}</button><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지${unreadOf(p.id) ? `<span class="bd" title="안 읽은 글">${unreadOf(p.id)}</span>` : ''}</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
       ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : tab === 'plan' ? planHtml(p) : cardsHtml(p)}</div></div>`}`}
@@ -178,7 +178,7 @@ function slRender(p){
   if (READS === null) loadReads();
   bindHeader(() => {}, null, m => `리더인 채널 ${P().filter(x => x.owner === m.name && x.status !== '완료').length}개`);
   slFit();
-  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { Object.keys(newFrom).forEach(k => delete newFrom[k]); cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
+  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { Object.keys(newFrom).forEach(k => delete newFrom[k]); cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'plan'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
   const np = $('#newP'); if (np) np.onclick = () => openProject(null);
   if (agenda) { bindAgenda(); const sm = $('#slMenu'); if (sm) sm.onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); }; if (CV && $('#cvExtra')) refreshCardSide(CV.id); return; }
   if (!p) return;
@@ -474,7 +474,7 @@ function agendaHtml(){
 }
 function bindAgenda(){
   document.querySelectorAll('#tscroll .agc[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card));
-  document.querySelectorAll('#tscroll [data-goto]').forEach(a => a.onclick = () => { cur = a.dataset.goto; LS.set('proj_cur', cur); tab = 'talk'; talkStick = true; render(); });
+  document.querySelectorAll('#tscroll [data-goto]').forEach(a => a.onclick = () => { cur = a.dataset.goto; LS.set('proj_cur', cur); tab = 'plan'; talkStick = true; render(); });
   bindQuickDec();
 }
 /* 프로젝트를 고른 업무(tasks.project_id)와 업무공유(decisions.project_id)는 그 채널의 대화에도 한 줄로 나타남 */
