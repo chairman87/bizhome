@@ -852,7 +852,10 @@ const planDow = d => d ? '일월화수목금토'[new Date(d + 'T00:00:00').getDa
 const planDD = n => n == null ? '' : n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
 let planView = LS.get('plan_view') || 'board';   // board = 분야별 열, list = 날짜순 한 줄
 /* 열 순서: 기본 분야 → 그 밖에 쓰인 분야 → 분야 없음 */
-const planCols = list => { const extra = [...new Set(list.map(x => x.phase || '').filter(ph => ph && !PLAN_PHASES.includes(ph)))]; return [...PLAN_PHASES, ...extra, ...(list.some(x => !x.phase) ? [''] : [])]; };
+/* 열: 기본 분야 순서 → 그 밖에 쓰인 분야 → 분야 없음. 단계가 하나도 없는 분야는 열을 숨김(오른쪽 열이 당겨짐). all=true 면 숨긴 기본 분야도 포함(분야 고르는 목록용) */
+const planCols = (list, all) => { const extra = [...new Set(list.map(x => x.phase || '').filter(ph => ph && !PLAN_PHASES.includes(ph)))];
+  const cols = [...PLAN_PHASES, ...extra, ...(list.some(x => !x.phase) ? [''] : [])];
+  return all ? cols : cols.filter(ph => list.some(x => (x.phase || '') === ph)); };
 function planItemHtml(x, compact){
   const n = planDays(x.due_date), over = !planDone(x) && n != null && n < 0, soon = !planDone(x) && n != null && n >= 0 && n <= 3;
   if (compact) return `<div class="pc ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}" draggable="true" title="끌어서 순서·분야 바꾸기 · 누르면 고치기">
@@ -876,10 +879,11 @@ function planHtml(p){
       ${missing ? `<button class="btn sm ${list.length ? '' : 'primary'}" id="plTpl" title="기본 단계 중 아직 없는 ${missing}개를 넣습니다">＋ 기본 단계 ${list.length ? '추가' : '넣기'} (${missing})</button>` : ''}
       <button class="btn sm" id="plView">${planView === 'board' ? '☰ 날짜순 보기' : '▦ 분야별 보기'}</button></div>`;
   if (planView === 'list') return `<div class="plan">${head}${list.map(x => planItemHtml(x)).join('') || '<div class="empty">단계가 없습니다.</div>'}
-    <div class="pladd"><select id="plPhase"><option value="">분야</option>${planCols(list).filter(Boolean).map(ph => `<option>${esc(ph)}</option>`).join('')}</select><input type="date" id="plDate" title="예정일 (비워도 됨)"><input id="plTitle" placeholder="단계 — Enter 로 추가" maxlength="120"><select id="plWho"><option value="">담당</option>${memberOptions('')}</select><button class="btn primary" id="plAdd">추가</button></div>
+    <div class="pladd"><select id="plPhase"><option value="">분야</option>${planCols(list, true).filter(Boolean).map(ph => `<option>${esc(ph)}</option>`).join('')}</select><input type="date" id="plDate" title="예정일 (비워도 됨)"><input id="plTitle" placeholder="단계 — Enter 로 추가" maxlength="120"><select id="plWho"><option value="">담당</option>${memberOptions('')}</select><button class="btn primary" id="plAdd">추가</button></div>
     <div class="hint" style="margin-top:6px">줄을 누르면 고치기·삭제 · 체크하면 완료 (대화에도 한 줄 남음)</div></div>`;
   const cols = planCols(list);
   return `<div class="plan wide">${head}
+    ${cols.length ? '' : '<div class="empty">아직 런칭 일정이 없습니다.<br>위의 <b>＋ 기본 단계 넣기</b>를 누르거나, <b>☰ 날짜순 보기</b>의 입력줄에서 단계를 추가하세요.</div>'}
     <div class="pboard">${cols.map(ph => { const its = list.filter(x => (x.phase || '') === ph).sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999) || String(a.created_at || '').localeCompare(String(b.created_at || ''))), d = its.filter(planDone).length;   // 열 안은 기본 단계 순서(넣은 순서)
       return `<div class="pcol" data-plcol="${esc(ph)}"><div class="pch"><b>${esc(ph || '분야 없음')}</b><span class="hint">${its.length ? `${d}/${its.length}` : ''}</span></div>
         ${its.map(x => planItemHtml(x, true)).join('')}
@@ -948,7 +952,7 @@ function openPlanItem(p, id){
   const x = (DATA.project_items || []).find(y => y.id === id); if (!x) return;
   openModal(`${modalHead('런칭 일정 단계')}<div class="mb">
       <div class="f"><label>단계 *</label><input id="piTitle" value="${esc(x.title)}" maxlength="120"></div>
-      <div class="f2"><div class="f"><label>분야 <span class="hint">(열 이름)</span></label><input id="piPhase" value="${esc(x.phase || '')}" maxlength="20" list="piPhases"><datalist id="piPhases">${planCols(planOf(p.id)).filter(Boolean).map(ph => `<option value="${esc(ph)}">`).join('')}</datalist></div>
+      <div class="f2"><div class="f"><label>분야 <span class="hint">(열 이름)</span></label><input id="piPhase" value="${esc(x.phase || '')}" maxlength="20" list="piPhases"><datalist id="piPhases">${planCols(planOf(p.id), true).filter(Boolean).map(ph => `<option value="${esc(ph)}">`).join('')}</datalist></div>
         <div class="f"><label>담당</label><select id="piWho"><option value="">미정</option>${memberOptions(x.assignee || '')}</select></div></div>
       <div class="f2"><div class="f"><label>예정일</label><input type="date" id="piDate" value="${esc(x.due_date || '')}"></div>
         <div class="f"><label>상태</label><select id="piSt">${['예정', '진행중', '완료', '보류'].map(v => `<option ${x.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
