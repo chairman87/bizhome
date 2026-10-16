@@ -874,10 +874,12 @@ function openPlanItem(p, id){
       ${x.done_at ? `<div class="hint">완료: ${esc(x.updated_by || '')} ${fmtDateTime(x.done_at)}</div>` : ''}
     </div><div class="mf"><button class="btn danger left" id="piDel">삭제</button><button class="btn" data-close>취소</button><button class="btn primary" id="piSave">저장</button></div>`);
   $('#piTitle').focus();
+  ['#piTitle', '#piPhase', '#piNote'].forEach(q => { $(q).onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('#piSave').click(); } }; });
   $('#piSave').onclick = async () => { const title = $('#piTitle').value.trim(); if (!title) { $('#piTitle').focus(); toast('단계 이름을 적어 주세요', true); return; }
-    const st = $('#piSt').value;
-    closeModal(); await saveRow('project_items', { ...x, title, phase: $('#piPhase').value.trim() || null, assignee: $('#piWho').value || null, due_date: $('#piDate').value || null, status: st, note: $('#piNote').value.trim() || null,
-      done_at: st === '완료' ? (x.done_at || nowIso()) : null, updated_by: me }); toast('저장했습니다'); };
+    const st = $('#piSt').value;   // 창을 닫기 전에 입력값을 모두 읽어 둠 (닫은 뒤에는 칸이 없어짐)
+    const row = { ...x, title, phase: $('#piPhase').value.trim() || null, assignee: $('#piWho').value || null, due_date: $('#piDate').value || null, status: st, note: $('#piNote').value.trim() || null,
+      done_at: st === '완료' ? (x.done_at || nowIso()) : null, updated_by: me };
+    closeModal(); await saveRow('project_items', row); toast('저장했습니다'); };
   $('#piDel').onclick = async () => { if (confirm(`"${x.title}" 단계를 지울까요?`)) { closeModal(); await removeRow('project_items', x.id); toast('지웠습니다'); } };
 }
 /* 완료한 단계는 대화에도 한 줄 */
