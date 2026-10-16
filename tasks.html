@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610141503">
-<script src="common.js?v=202610141503"></script>
+<link rel="stylesheet" href="common.css?v=202610161213">
+<script src="common.js?v=202610161213"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -89,7 +89,7 @@
    흐름: 요청자가 업무 요청(담당자 지정) → 담당자가 [진행 보고](진행률+내용)
          → 100% 보고하면 "보고완료" → 요청자가 [완료처리] 또는 [보완 요청]
 ================================================================ */
-const ST = { '요청': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8'], '보고완료': ['#ede9fe','#6d28d9'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'] };
+const ST = { '요청': ['#e9e9e7','#5a5a55'], '진행중': ['#dbeafe','#1d4ed8'], '보고완료': ['#ede9fe','#6d28d9'], '완료': ['#dcfce7','#15803d'], '보류': ['#fbeccc','#9a6700'], '반려': ['#fee2e2','#b91c1c'] };
 const STATUSES = Object.keys(ST);
 const PRIORITIES = ['높음', '보통', '낮음'];
 const stHtml = s => tag(s, ...(ST[s] || ST['요청']), true);
@@ -108,16 +108,30 @@ const isManual = () => view === 'received' && sortMine.key === 'manual';
 const cal = (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
 let expanded = {};
 
-const isDone = t => t.status === '완료';
+const isDone = t => t.status === '완료' || t.status === '반려';
+/* ---------- 대표(관리자) 요청함 (2026-10-16) ----------
+   팀원(관리자 아님)이 관리자에게 보낸 요청은 '업무'가 아니라 '결정·처리할 요청'으로 다룸:
+   진행 보고·진행률 대신 [답변] [승인] [반려] [넘기기]. 상태는 요청 → 진행중(=답변함) → 완료(승인/처리 완료) / 반려 */
+const isAdminName = n => !!(members.find(m => m.name === n) || {}).role && (members.find(m => m.name === n) || {}).role === 'admin';
+const isUpward = t => !!t.assignee && t.assignee !== t.created_by && isAdminName(t.assignee) && !isAdminName(t.created_by);
+const DECIDE = ['answer', 'approve', 'reject'];
+const lastDecision = t => (t.comments || []).slice().reverse().find(c => DECIDE.includes(c.kind) && c.by === t.assignee);
 const isOver = t => !isDone(t) && t.status !== '보류' && t.due_date && t.due_date < todayStr();
 const prog = t => Math.max(0, Math.min(100, Number(t.progress) || 0));
 const progHtml = t => `<span class="prog"><span class="bar ${isDone(t) ? 'done' : isOver(t) ? 'over' : ''}"><i style="width:${prog(t)}%"></i></span><span class="pct">${prog(t)}%</span></span>`;
 const projTag = t => { const p = t.project_id && (DATA.projects || []).find(x => x.id === t.project_id); return p ? ` <a class="ptag" href="projects.html?p=${p.id}" title="프로젝트 채널로" onclick="event.stopPropagation()"># ${esc(p.name)}</a>` : ''; };
 const cmtHtml = t => ((t.comments && t.comments.length) ? `<span class="cmt">💬 ${t.comments.length}</span>` : '') + filesCount(t.files);
 const ccHtml = t => (t.cc || []).length ? `<span class="cctag ${(t.cc || []).includes(me) ? 'me' : ''}" title="참조: ${esc(t.cc.join(', '))}">참조 ${t.cc.length}</span>` : '';   // 참조 인원이 있으면 '참조 n' (내가 참조면 색 다르게)
-function lastLog(t){ const c = (t.comments || []).slice().reverse().find(x => x.kind === 'report' || x.kind === 'comment' || x.kind === 'revise'); return c ? `<span class="last" title="${esc(c.by)}: ${esc(c.text)}">${esc(c.by)}: ${esc(c.text)}<span class="at">${fmtDateTime(c.at).slice(5)}</span></span>` : '<span class="hint">-</span>'; }
+function lastLog(t){ const c = (t.comments || []).slice().reverse().find(x => ['report', 'comment', 'revise', ...DECIDE].includes(x.kind)); return c ? `<span class="last" title="${esc(c.by)}: ${esc(c.text)}">${esc(c.by)}: ${esc(c.text)}<span class="at">${fmtDateTime(c.at).slice(5)}</span></span>` : '<span class="hint">-</span>'; }
 const isSelf = t => t.assignee && t.assignee === t.created_by;   // 본인이 직접 등록한 내 업무
-const stTask = t => (t.status === '요청' && isSelf(t)) ? tag('내 업무', '#e0f2fe', '#0369a1', true) : stHtml(t.status);
+const stTask = t => {
+  if (t.status === '요청' && isSelf(t)) return tag('내 업무', '#e0f2fe', '#0369a1', true);
+  if (isUpward(t)) {
+    if (t.status === '진행중' || t.status === '보고완료') return tag('답변함', '#dbeafe', '#1d4ed8', true);
+    if (t.status === '완료') return (lastDecision(t) || {}).kind === 'approve' ? tag('승인', '#dcfce7', '#15803d', true) : tag('처리 완료', '#dcfce7', '#15803d', true);
+  }
+  return stHtml(t.status);
+};
 const newForMe = () => T().filter(t => t.assignee === me && t.status === '요청' && !isSelf(t)).length;
 const waitingMe = () => T().filter(t => t.created_by === me && t.status === '보고완료').length;
 /* 보완 요청에 답해야 할 사람. 보완 요청을 쓴 사람의 상대방(담당자가 썼으면 요청자, 요청자·관리자가 썼으면 담당자).
@@ -136,7 +150,9 @@ const reviseForMe = () => T().filter(t => reviseWaiter(t) === me).length;
    업무를 눌러 열면 '본 시각'이 남고 숫자가 사라짐. 본 뒤에 남이 보고·댓글을 또 남기면 다시 셈.
    본 시각은 tasks.seen 칸({이름: 시각}, sql-tasks-seen.sql)에 저장. 그 칸이 아직 없으면 이 브라우저에만 남김 */
 function needMe(t){
+  if (isUpward(t) && t.created_by === me && lastDecision(t)) return true;   // 대표가 답변·승인·반려 → 요청한 사람이 볼 차례 (본 뒤에는 unseen 이 걸러 줌)
   if (isDone(t)) return false;
+  if (isUpward(t) && t.assignee === me) return t.status === '요청' || reviseWaiter(t) === me;
   if (t.assignee === me && t.status === '요청' && !isSelf(t)) return true;
   if (t.created_by === me && t.status === '보고완료') return true;
   return reviseWaiter(t) === me;
@@ -352,7 +368,7 @@ function tableHtml(list){
       due_date: `<td>${dueHtml(t.due_date, isDone(t))}</td>`,
       created_at: `<td><span class="date" title="${fmtDateTime(t.created_at)}">${fmtDate((t.created_at || '').slice(0, 10)) || '-'}</span></td>`,
       status: `<td>${stTask(t)}</td>`,
-      progress: `<td>${progHtml(t)}</td>`,
+      progress: `<td>${isUpward(t) ? '<span class="hint">–</span>' : progHtml(t)}</td>`,
       priority: `<td>${canPr(t) ? `<select class="prsel ${t.priority === '높음' ? 'high' : t.priority === '낮음' ? 'low' : ''}" data-pr="${t.id}" title="눌러서 우선순위 바꾸기">${PRIORITIES.map(x => `<option value="${x}" ${t.priority === x ? 'selected' : ''}>${prLabel(x)}</option>`).join('')}</select>` : (prHtml(t.priority) || '<span class="pr">중간</span>')}</td>`,
     };
     return `<tr class="row ${isDone(t) ? 'done' : ''}" data-id="${t.id}" data-grp="${grp}" ${drag && !isDone(t) && t.assignee === me ? 'draggable="true"' : ''}>${view === 'received' ? `<td class="grip" ${t.assignee === me ? 'title="끌어서 순서 바꾸기"' : ''}>${drag && !isDone(t) && t.assignee === me ? '⠿' : ''}</td>` : ''}${cols.map(([k]) => cells[k]).join('')}<td>${lastLog(t)}</td>${view !== 'archive' ? `<td class="act">${actionButtons(t)}</td>` : ''}</tr>`;
@@ -406,6 +422,9 @@ async function setPriority(id, priority){
 /* 행 안의 처리 버튼: 담당자는 진행 보고, 요청자는 완료처리·보완 요청 */
 function actionButtons(t){
   if (isDone(t)) return '';
+  if (isUpward(t)) return t.assignee === me
+    ? `<button class="btn sm primary" data-ans="${t.id}">답변</button><button class="btn sm" data-ok="${t.id}" style="color:#15803d">승인</button><button class="btn sm" data-no="${t.id}" style="color:#b91c1c">반려</button><button class="btn sm" data-pass="${t.id}" title="다른 사람에게 넘기기">넘기기</button>`
+    : '';   // 요청한 팀원·다른 관리자는 대표의 처리를 기다림
   let h = '';
   if (t.assignee === me && t.status !== '보고완료') h += `<button class="btn sm primary" data-report="${t.id}">${isSelf(t) ? '진행률' : '진행 보고'}</button>`;
   if (isSelf(t) && t.assignee === me) { h += `<button class="btn sm" data-fin="${t.id}">완료</button>`; return h; }   // 내가 등록한 내 업무는 스스로 완료
@@ -486,6 +505,10 @@ function bindView(){
   v.querySelectorAll('[data-report]').forEach(b => b.onclick = e => { e.stopPropagation(); openReport(b.dataset.report); });
   v.querySelectorAll('[data-fin]').forEach(b => b.onclick = e => { e.stopPropagation(); completeTask(b.dataset.fin); });
   v.querySelectorAll('[data-revise]').forEach(b => b.onclick = e => { e.stopPropagation(); openRevise(b.dataset.revise); });
+  v.querySelectorAll('[data-ans]').forEach(b => b.onclick = e => { e.stopPropagation(); openDecide(b.dataset.ans, 'answer'); });
+  v.querySelectorAll('[data-ok]').forEach(b => b.onclick = e => { e.stopPropagation(); openDecide(b.dataset.ok, 'approve'); });
+  v.querySelectorAll('[data-no]').forEach(b => b.onclick = e => { e.stopPropagation(); openDecide(b.dataset.no, 'reject'); });
+  v.querySelectorAll('[data-pass]').forEach(b => b.onclick = e => { e.stopPropagation(); openPass(b.dataset.pass); });
   v.querySelectorAll('.item[data-id]').forEach(el => el.onclick = () => openTask(el.dataset.id));
   v.querySelectorAll('[data-more]').forEach(el => el.onclick = () => { expanded[el.dataset.more] = true; renderView(); });
   v.querySelectorAll('.kc').forEach(c => {
@@ -500,6 +523,53 @@ function bindView(){
     col.ondrop = e => { e.preventDefault(); col.classList.remove('over'); setStatus(e.dataTransfer.getData('text/plain'), col.dataset.col); };
   });
   bindCalendar(cal, renderView, day => openTask(null, { due_date: day }), id => openTask(id));
+}
+
+/* ---------- 요청함: 답변 / 승인 / 반려 / 넘기기 ---------- */
+function openDecide(id, kind){
+  const t = T().find(x => x.id === id); if (!t) return;
+  const K = { answer: ['답변', '요청한 사람에게 보낼 답변', '예: 목요일 3시에 이야기합시다', 'primary', '답변 보내기'],
+              approve: ['승인', '한마디 (선택)', '예: 진행하세요', 'primary', '승인'],
+              reject: ['반려', '반려 사유 *', '예: 이번 달은 어렵습니다. 다음 달에 다시 이야기해요', 'danger', '반려'] }[kind];
+  const at = attachBox('dFiles', [], 'tasks');
+  openModal(`${modalHead(K[0])}<div class="mb">
+      <div style="font-weight:600;margin-bottom:4px">${esc(t.title)}</div><div class="hint" style="margin-bottom:10px">요청: ${esc(t.created_by)} · ${fmtDateTime(t.created_at)}</div>
+      ${t.memo ? `<div class="hint" style="white-space:pre-wrap;margin-bottom:10px;max-height:140px;overflow:auto">${esc(t.memo)}</div>` : ''}
+      <div class="f"><label>${K[1]}</label><textarea id="dText" placeholder="${esc(K[2])}"></textarea>${at.html}</div>
+      ${kind === 'answer' ? '<div class="hint">답변만 보내면 요청은 그대로 열려 있습니다. 끝내려면 <b>승인</b>이나 <b>처리 완료</b>를 누르세요.</div>' : ''}
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button>${kind === 'answer' ? '<button class="btn" id="dDone">답변하고 처리 완료</button>' : ''}<button class="btn ${K[3]}" id="dGo">${K[4]}</button></div>`);
+  at.bind(); $('#dText').focus();
+  const go = async finish => {
+    const text = $('#dText').value.trim();
+    if (kind === 'reject' && !text) { $('#dText').focus(); toast('반려 사유를 적어 주세요', true); return; }
+    if (kind === 'answer' && !text && !at.files.length) { $('#dText').focus(); toast('답변을 적어 주세요', true); return; }
+    const status = kind === 'reject' ? '반려' : kind === 'approve' || finish ? '완료' : (t.status === '요청' ? '진행중' : t.status);
+    const label = kind === 'approve' ? (text ? `승인: ${text}` : '승인') : kind === 'reject' ? `반려: ${text}` : text || '첨부 파일';
+    const n = { ...t, status, comments: [...(t.comments || []), log(label, kind, undefined, at.files)] };
+    if (finish) n.comments.push(log('처리 완료'));
+    n.completed_at = isDone(n) ? nowIso() : null; if (status === '완료') n.progress = 100;
+    closeModal(); await saveRow('tasks', n);
+    toast(kind === 'approve' ? `승인했습니다. ${t.created_by}님에게 알림이 갑니다` : kind === 'reject' ? `반려했습니다. ${t.created_by}님에게 알림이 갑니다` : `${t.created_by}님에게 답변했습니다${finish ? ' (처리 완료)' : ''}`);
+  };
+  $('#dGo').onclick = () => go(false);
+  const dd = $('#dDone'); if (dd) dd.onclick = () => go(true);
+}
+function openPass(id){
+  const t = T().find(x => x.id === id); if (!t) return;
+  openModal(`${modalHead('다른 사람에게 넘기기')}<div class="mb">
+      <div style="font-weight:600;margin-bottom:10px">${esc(t.title)}</div>
+      <div class="f"><label>누구에게 넘길까요</label><select id="pTo"><option value="">고르세요</option>${members.filter(m => m.name !== me && m.name !== t.created_by).map(m => `<option>${esc(m.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>전할 말 (선택)</label><input id="pNote" placeholder="예: 홍 팀장이 처리해 주세요"></div>
+      <div class="hint">넘기면 그 사람의 업무가 되고(진행 보고 → 완료), 나는 <b>참조</b>로 남아 진행 상황을 볼 수 있습니다.</div>
+    </div><div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pGo">넘기기</button></div>`);
+  $('#pGo').onclick = async () => {
+    const to = $('#pTo').value; if (!to) { toast('넘길 사람을 고르세요', true); return; }
+    const note = $('#pNote').value.trim();
+    const n = { ...t, assignee: to, status: '요청', progress: 0, sort_order: null, cc: [...new Set([...(t.cc || []), me])].filter(x => x !== to),
+      comments: [...(t.comments || []), log(`넘김: ${me} → ${to}${note ? ` · ${note}` : ''}`, 'comment')] };
+    closeModal(); await saveRow('tasks', n); toast(`${to}님에게 넘겼습니다. 나는 참조로 남습니다`);
+  };
 }
 
 /* ---------- 업무 요청·수정 창 ---------- */
@@ -526,18 +596,19 @@ function openTask(id, preset = {}){
       </div>
       ${t ? `<div class="f2">
         <div class="f"><label>상태</label><select id="mStatus">${STATUSES.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
-        <div class="f"><label>진행률</label>${stepsHtml('mProg', prog(d))}</div>
+        ${isUpward(t) ? '<div class="f"></div>' : `<div class="f"><label>진행률</label>${stepsHtml('mProg', prog(d))}</div>`}
       </div>` : ''}
       <div class="f"><label>${selfMode ? '내용 (자세한 설명, 참고 링크 등)' : '요청 내용 (자세한 설명, 참고 링크 등)'}</label><textarea id="mMemo">${esc(d.memo || '')}</textarea>${mAt.html}</div>
       ${t ? `<div class="comments"><h4>보고·기록 ${logs.length ? `(${logs.length})` : ''}</h4>
-        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${c.kind === 'report' ? tag('보고', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'revise' ? tag('보완 요청', '#fbeccc', '#9a6700') + ' ' : ''}${c.progress != null ? `<span class="pg">${c.progress}%</span>` : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
+        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${c.kind === 'report' ? tag('보고', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'revise' ? tag('보완 요청', '#fbeccc', '#9a6700') + ' ' : c.kind === 'answer' ? tag('답변', '#dbeafe', '#1d4ed8') + ' ' : c.kind === 'approve' ? tag('승인', '#dcfce7', '#15803d') + ' ' : c.kind === 'reject' ? tag('반려', '#fee2e2', '#b91c1c') + ' ' : ''}${c.progress != null ? `<span class="pg">${c.progress}%</span>` : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
         <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>${cAt.html}
       </div>
       <div class="hint">요청: ${esc(t.created_by || '')} ${fmtDateTime(t.created_at)}${(t.cc || []).length ? ` · 참조: ${esc(t.cc.join(', '))}` : ''}${t.completed_at ? ` · 완료: ${fmtDateTime(t.completed_at)}` : ''}</div>` : ''}
     </div>
     <div class="mf">
       ${t ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
-      ${t && t.assignee === me && !isDone(t) ? `<button class="btn" id="mReport">${isSelf(t) ? '진행률 업데이트' : '진행 보고'}</button>` : ''}
+      ${t && t.assignee === me && !isDone(t) && !isUpward(t) ? `<button class="btn" id="mReport">${isSelf(t) ? '진행률 업데이트' : '진행 보고'}</button>` : ''}
+      ${t && t.assignee === me && !isDone(t) && isUpward(t) ? '<button class="btn primary" id="mAns">답변</button><button class="btn" id="mOk" style="color:#15803d">승인</button><button class="btn" id="mNo" style="color:#b91c1c">반려</button><button class="btn" id="mPass">넘기기</button>' : ''}
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="mSave">${t ? '저장' : selfMode ? '등록' : '요청하기'}</button>
     </div>`);
@@ -587,6 +658,8 @@ function openTask(id, preset = {}){
     $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text && !cAt.files.length) { $('#cText').focus(); return; } save(log(text || '첨부 파일', 'comment', undefined, cAt.files)); };
     $('#mDelete').onclick = async () => { if (confirm(`"${t.title}" 업무를 삭제할까요?`)) { closeModal(); await removeRow('tasks', t.id); toast('삭제했습니다'); } };
     const rb = $('#mReport'); if (rb) rb.onclick = () => { closeModal(); openReport(t.id); };
+    [['mAns', 'answer'], ['mOk', 'approve'], ['mNo', 'reject']].forEach(([bid, k]) => { const b = $('#' + bid); if (b) b.onclick = () => { closeModal(); openDecide(t.id, k); }; });
+    const pb = $('#mPass'); if (pb) pb.onclick = () => { closeModal(); openPass(t.id); };
   }
 }
 
