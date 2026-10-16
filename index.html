@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -144,6 +144,31 @@
   #gItems{min-height:170px}
   @media(max-width:640px){.nrow{grid-template-columns:1fr 70px}.nrow .by,.nrow .dt{display:none}}
   .content{white-space:pre-wrap;line-height:1.6;font-size:14px}
+
+  /* ===== 홈 검색 (머리의 검색창 + 결과 목록) ===== */
+  .srch{display:flex;align-items:center;gap:4px;background:var(--bg3);border-radius:8px;padding:0 8px;height:30px;width:min(320px,32vw);flex:none}
+  .srch .ic{font-size:13px;opacity:.7}
+  .srch input{border:0;background:transparent;outline:0;flex:1;min-width:0;font-size:13px;color:var(--fg)}
+  .srch input::-webkit-search-cancel-button{display:none}
+  .srch button{border:0;background:transparent;color:var(--fg3);cursor:pointer;padding:0 2px;font-size:13px}
+  .srch:focus-within{background:var(--bg);box-shadow:0 0 0 2px var(--blue)}
+  @media(max-width:720px){.srch{order:11;flex-basis:100%;width:auto}}
+  .srchres{max-width:900px;margin:0 auto;padding:16px}
+  .srchres .shead{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .srchres .shead h2{font-size:17px;margin:0;flex:1}
+  .srchres .shead h2 span{color:var(--fg3);font-weight:500;font-size:14px}
+  .srchres .shead .hint{font-size:12px;color:var(--fg3)}
+  .sgrp{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:12px}
+  .sgrp h3{font-size:14px;margin:4px 0 6px;display:flex;gap:6px;align-items:center}
+  .sgrp h3 span{background:var(--bg3);border-radius:999px;padding:0 8px;font-size:12px;color:var(--fg2)}
+  .srow{display:block;padding:8px 6px;border-top:1px solid var(--line);color:inherit;text-decoration:none;border-radius:6px}
+  .srow:hover{background:var(--bg2)}
+  .srow b{display:block;font-size:14px}
+  .srow .sn{display:block;font-size:13px;color:var(--fg2);margin-top:2px;line-height:1.45;word-break:break-all}
+  .srow .sm{display:block;font-size:12px;color:var(--fg3);margin-top:2px}
+  .srchres mark{background:#fff3b0;color:inherit;border-radius:2px;padding:0 1px}
+  .srchres .smore{margin:6px 0 4px}
+  .srchres .empty{padding:40px 10px}
 </style>
 </head>
 <body>
@@ -350,6 +375,8 @@ async function seedDefault(){
 /* ---------- 화면 ---------- */
 function render(){
   if (members.length && admins().length === 0) { ensureAdmin(); return; }
+  if (srchComposing) { srchRenderWaiting = true; return; }   // 검색창에 한글을 조합하는 중이면 끝난 뒤에 그림
+  const srchFocus = document.activeElement && document.activeElement.id === 'srchIn' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const keepScroll = PENDING_SCROLL || scrollState();   // 다시 그리면 페이지가 잠깐 비어 스크롤이 맨 위로 튀므로, 그린 뒤 이 자리로 되돌림
   if (!M().length && isAdmin() && !seeding) { seedDefault(); }
   const admin = isAdmin();
@@ -383,7 +410,7 @@ function render(){
     'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
-  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: editBtn }) + `<main class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
+  $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: searchBox() + editBtn }) + `<div id="srchRes" class="srchres" hidden></div><main id="dash" class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
     ${editing ? `<div class="editbar">✎ 편집 중: 판(공지사항·업무공유·목표)과 폴더를 <b>잡아서 원하는 자리에 놓으면</b> 그 자리에 고정됩니다(빈 곳에도 놓을 수 있습니다. 다른 칸과 겹치게 놓으면 다른 칸은 그대로 두고, 옮긴 칸이 가장 가까운 빈자리에 붙습니다). 잘못 옮겼으면 <b>Ctrl+Z</b> 로 되돌립니다. 다른 칸 가까이 가져가면 <b>자석처럼 딱 붙습니다</b>(빨간 선이 보이면 줄이 맞은 것). <b>여러 칸을 같이</b> 옮기려면 빈 곳에서 끌어 네모로 묶거나 Ctrl+클릭으로 고른 뒤, 그중 하나를 잡아 끕니다. 각 칸 <b>오른쪽 끝 손잡이</b>를 좌우로 끌면 가로 길이가 바뀝니다(더블클릭 = 기본 길이). 폴더 안의 페이지도 끌어서 순서를 바꾸거나 다른 폴더로 옮깁니다. 눌러서 이름/아이콘/연결 화면을 바꾸고, ✕ 로 삭제. 끝나면 오른쪽 위 <b>편집 끝내기</b>.</div>` : ''}
     ${M().length ? '' : `<div class="empty">${admin ? (seeding ? '기본 메뉴를 넣는 중...' : '메뉴가 없습니다.') : '아직 메뉴가 없습니다. 관리자가 메뉴를 만들면 여기에 나타납니다.'}</div>`}
     ${M().some(x => x.type === 'board') || editing ? '' : noticeBoard(notices) + decisionBoard() + goalBoard() + projNewsBoard()}
@@ -417,6 +444,7 @@ function render(){
     ${admin && editing ? `<button class="adddept" id="deptAdd" style="max-width:260px;margin-top:14px">＋ 부서 추가</button>` : ''}
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
+  bindSearch();
   const eb = $('#editBtn'); if (eb) eb.onclick = () => { editing = !editing; SS.set(EDIT_KEY, editing ? '1' : '0'); SEL = new Set(); UNDO = []; REDO = []; render(); };
   document.querySelectorAll('[data-members]').forEach(b => b.onclick = () => openMembers());
   document.querySelectorAll('[data-notice]').forEach(el => el.onclick = () => openNotice(el.dataset.notice));
@@ -436,6 +464,8 @@ function render(){
   const ub = $('#undoBtn'); if (ub) ub.onclick = () => undoLayout(false);
   const rb = $('#redoBtn'); if (rb) rb.onclick = () => undoLayout(true);
   restoreScroll(keepScroll);
+  if (SQ) renderSearch();   // 검색 중이었으면(남이 저장해서 다시 그려진 경우 등) 결과 화면 유지
+  if (srchFocus) { const i = $('#srchIn'); if (i) { i.focus(); try { i.setSelectionRange(srchFocus[0], srchFocus[1]); } catch {} } }
   if (PENDING_SCROLL && (Math.abs(window.scrollY - (PENDING_SCROLL.y || 0)) <= 2 || M().length)) PENDING_SCROLL = null;   // 새로고침 전 자리로 갔으면(또는 메뉴까지 다 그렸으면) 끝
 }
 /* 프로젝트 폴더(menu 의 폴더 줄에 href='projects'): 페이지를 따로 등록하지 않아도 진행 중인 프로젝트가 나열되고, 누르면 그 프로젝트의 기록 화면으로 바로 감 */
@@ -922,6 +952,137 @@ async function loadMtNews(){
   } catch (e) { console.warn('회의록 새 글을 읽지 못했습니다', e); }
 }
 setTimeout(loadMtNews, 1500); setInterval(loadMtNews, 60000);
+
+/* ================================================================
+   홈 검색: 머리의 검색창에 낱말을 넣으면 인트라넷 글(업무·공지·회의록·프로젝트 대화·매뉴얼…)을 훑어
+   화면별로 묶어 보여 줍니다. 결과를 누르면 그 화면의 그 글이 바로 열립니다(주소 ?open=글번호 → common.js openFromLink).
+   - 띄어쓰기로 낱말을 여러 개 넣으면 모두 들어간 글만 (AND)
+   - 메뉴 편집에서 '볼 수 있는 사람'이 정해진(🔒) 화면의 글과, 관리자 전용(admin_only) 글은 볼 수 없는 사람에게 안 나옴
+   - 비밀번호·아이디·주민번호·연락처·주소 칸은 검색하지 않음
+   - 홈이 평소에 안 읽는 표(회의록·매뉴얼·상표 등)는 검색창을 처음 쓸 때 읽어 둠(2분 지나면 다시)
+================================================================ */
+let SQ = '';                       // 지금 검색어
+const SOPEN = new Set();           // '더 보기'를 눌러 전부 펼친 묶음
+const SEARCH_EXTRA = ['meetings', 'manuals', 'trademarks', 'project_items', 'ads', 'videos', 'quotes', 'partners', 'partner_leads', 'samples', 'google_appeals', 'contractors'];
+let extraLoadedAt = 0, extraLoading = null;
+const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];   // accounts.html 과 같은 목록 (마케팅계정 화면으로 보낼 묶음)
+const txt = (...xs) => xs.flat(Infinity).filter(x => x != null && typeof x !== 'object').map(x => String(x).replace(/<[^>]+>/g, ' ')).join(' ').replace(/\s+/g, ' ').trim();
+const cmts = a => (Array.isArray(a) ? a : []).map(c => c && (c.text || c.body || c.memo || c.note || ''));
+const pjName = r => { const p = (DATA.projects || []).find(x => x.id === r.project_id); return p ? p.name : ''; };
+const firstLine = s => String(s || '').split('\n')[0].slice(0, 80);
+const dash = (a, b) => [a, b].filter(Boolean).join(' · ');
+/* 표마다: 어느 화면(page·icon·menu=잠금 판정에 쓸 메뉴 주소), 결과를 누르면 갈 주소(href), 제목(title), 찾을 글(text), 쓴 사람(by), 때(at) */
+const SEARCH_DEFS = [
+  { table: 'projects',          page: '프로젝트',          icon: '🗂️', menu: ['projects.html'], href: r => `projects.html?p=${r.id}`,                           title: r => r.name,                                    text: r => [r.goal, r.memo, r.summary, r.status], by: r => r.owner || r.created_by },
+  { table: 'project_logs',      page: '프로젝트 대화',      icon: '💬', menu: ['projects.html'], href: r => `projects.html?p=${r.project_id}&log=${r.id}`,     title: r => dash(pjName(r), firstLine(r.body)),        text: r => [r.body, cmts(r.comments), r.kind] },
+  { table: 'project_cards',     page: '프로젝트 카드',      icon: '🗂️', menu: ['projects.html'], href: r => `projects.html?p=${r.project_id}&card=${r.id}`,    title: r => dash(pjName(r), r.title),                  text: r => [r.memo, r.kind, r.status, cmts(r.comments), (r.revisions || []).map(v => v && v.memo)] },
+  { table: 'project_items',     page: '프로젝트 할 일',     icon: '☑️', menu: ['projects.html'], href: r => `projects.html?p=${r.project_id}&item=${r.id}`,    title: r => dash(pjName(r), r.title),                  text: r => [r.note, r.phase, r.assignee, r.status, (r.checklist || []).map(c => c && (c.text || c.title))], by: r => r.assignee || r.created_by },
+  { table: 'tasks',             page: '업무',              icon: '📝', menu: ['tasks.html'],    href: r => `tasks.html?open=${r.id}`,                         title: r => r.title,                                   text: r => [r.memo, r.assignee, r.status, cmts(r.comments)], by: r => r.assignee || r.created_by, skip: r => !(isAdmin() || !(r.assignee && r.assignee === r.created_by) || r.assignee === me) },   // skip: tasks.html 의 visibleTask 와 같은 기준
+  { table: 'decisions',         page: '업무공유',          icon: '✅', menu: ['decisions.html'], href: r => `decisions.html?open=${r.id}`,                    title: r => r.title,                                   text: r => [r.reason, r.topic] },
+  { table: 'notices',           page: '공지사항',          icon: '📢', menu: ['notices.html'],  href: r => `notices.html?open=${r.id}`,                       title: r => r.title,                                   text: r => [r.content] },
+  { table: 'meetings',          page: '회의록',            icon: '📝', menu: ['meetings.html'], href: r => `meetings.html?open=${r.id}`,                      title: r => dash(r.meeting_date, r.title),             text: r => [r.summary, r.decisions, r.details, r.actions, r.memo, r.attendees, r.category], at: r => r.meeting_date || r.created_at },
+  { table: 'manuals',           page: '업무 매뉴얼',        icon: '📘', menu: ['manuals.html'],  href: r => `manuals.html?open=${r.id}`,                       title: r => r.title,                                   text: r => [r.content, r.category, r.targets] },
+  { table: 'docs',              page: '회사 서류함',        icon: '📁', menu: ['docs.html'],     href: r => `docs.html?open=${r.id}`,                          title: r => dash(r.company, r.title),                  text: r => [r.doc_type, r.memo] },
+  { table: 'accounts',          page: '운영계정·마케팅계정',  icon: '🔐', menu: ['accounts.html', 'accounts.html?dept=마케팅'], href: r => `accounts.html?${MARKETING_GROUPS.includes(r.group_name) ? 'dept=마케팅&' : ''}open=${r.id}`, title: r => r.service, text: r => [r.purpose, r.memo, r.group_name, r.owner, r.company] },
+  { table: 'subscriptions',     page: '구독관리',          icon: '💸', menu: ['subscriptions.html'], href: r => `subscriptions.html?open=${r.id}`,            title: r => r.name,                                    text: r => [r.vendor, r.category, r.memo, r.owner, r.company] },
+  { table: 'trademarks',        page: '상표관리',          icon: '™️', menu: ['trademarks.html'], href: r => `trademarks.html?open=${r.id}`,                  title: r => dash(r.company, r.name),                   text: r => [r.goods, r.memo, r.note, r.app_no, r.reg_no, r.region, r.status, r.next_action, r.classes] },
+  { table: 'tm_checks',         page: '상표 점검',          icon: '🔎', menu: ['tmcheck.html'],  href: r => `tmcheck.html?id=${r.id}`,                         title: r => r.name,                                    text: r => [r.alias, r.goods, r.summary, r.memo, r.classes], by: r => r.requested_by },
+  { table: 'contractors',       page: '외주 용역관리',      icon: '🧾', menu: ['contractors.html'], href: r => `contractors.html?open=${r.id}`,                title: r => r.name,                                    text: r => [r.role, r.memo] },
+  { table: 'quotes',            page: '견적서 관리',        icon: '📑', menu: ['quotes.html'],   href: r => `quotes.html?open=${r.id}`,                        title: r => dash(r.supplier, r.product),               text: r => [r.spec, r.terms, r.memo, r.change], at: r => r.quote_date || r.created_at },
+  { table: 'partners',          page: '파트너스',          icon: '🤝', menu: ['partners.html'], href: r => `partners.html?open=${r.id}`,                      title: r => dash(r.name, r.handle),                    text: r => [r.product, r.memo, r.fee_note, r.stage, r.assignee], by: r => r.assignee || r.created_by },
+  { table: 'partner_leads',     page: '파트너스 (접촉)',     icon: '🤝', menu: ['partners.html'], href: r => `partners.html?open=${r.id}`,                      title: r => dash(r.name, r.handle),                    text: r => [r.job, r.note, r.opinion, r.status, r.method], by: r => r.owner || r.created_by },
+  { table: 'samples',           page: '비매출 (샘플 발송)',  icon: '📦', menu: ['samples.html'],  href: r => `samples.html?open=${r.id}`,                       title: r => dash(r.recipient, r.product_name || r.product), text: r => [r.memo, r.option_name, r.category, r.country, r.pay_type], at: r => r.order_date || r.created_at },
+  { table: 'ads',               page: '광고 영상 리스트',    icon: '🎬', menu: ['ads.html'],      href: r => `ads.html?open=${r.id}`,                           title: r => dash(r.product, r.title),                  text: r => [r.editor, r.note, r.status, r.meta_account], by: r => r.editor || r.created_by, at: r => r.date || r.created_at },
+  { table: 'google_appeals',    page: '구글 이의신청',      icon: '🖥️', menu: ['appeals.html'],  href: r => `appeals.html?open=${r.id}`,                       title: r => dash(r.product, r.title),                  text: r => [r.reason, r.memo, r.status] },
+  { table: 'videos',            page: '참고 컨텐츠 영상',    icon: '🎥', menu: ['videos.html'],   href: r => `videos.html?open=${r.id}`,                        title: r => r.title,                                   text: r => [r.author, r.category, r.product, r.memo] },
+  { table: 'worklogs',          page: '업무일지',          icon: '📝', menu: ['worklog.html'],  href: r => `worklog.html?open=${r.id}`,                       title: r => dash(r.log_date, fullName(r.author)),      text: r => [r.done, r.plan, cmts(r.comments)], by: r => r.author, at: r => r.log_date || r.created_at },
+  { table: 'leaves',            page: '연차/휴가',          icon: '📅', menu: ['leave.html'],    href: r => `leave.html?open=${r.id}`,                         title: r => dash(fullName(r.name), [r.type, r.start_date, r.end_date && r.end_date !== r.start_date ? '~' + r.end_date : ''].filter(Boolean).join(' ')), text: r => [r.reason, r.status], by: r => r.name, at: r => r.start_date || r.created_at },
+  { table: 'alarms',            page: '알람',              icon: '🔔', menu: ['alarms.html'],   href: r => `alarms.html?open=${r.id}`,                        title: r => r.title,                                   text: r => [r.body, r.source, r.status], by: () => '' },
+  { table: 'ad_comments',       page: '댓글 관리',          icon: '💬', menu: ['comments.html'], href: r => `comments.html?open=${r.id}`,                      title: r => dash(r.author, r.product || r.page),       text: r => [r.body, r.campaign, r.platform], by: () => '', at: r => r.posted_at || r.updated_at },
+];
+/* 잠긴 화면 판정: 메뉴에 그 화면 줄이 있고 '볼 수 있는 사람'이 정해져 있으면 그 사람과 관리자만 (index 의 canSee 와 같은 기준). 메뉴에 없는 화면은 모두 볼 수 있는 것으로 봄 */
+function pageVisible(hrefs){
+  const hit = M().filter(p => p.type === 'page' && p.href && hrefs.includes(decodeURIComponent(p.href)));
+  return !hit.length || hit.some(canSee);
+}
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordsOf = q => [...new Set(q.toLowerCase().split(/\s+/).filter(Boolean))];
+function searchRows(q){
+  const words = wordsOf(q); if (!words.length) return [];
+  const groups = [];
+  for (const d of SEARCH_DEFS) {
+    const rows = DATA[d.table]; if (!Array.isArray(rows) || !rows.length) continue;
+    if (!pageVisible(d.menu)) continue;
+    const hits = [];
+    for (const r of rows) {
+      if (!r || (r.admin_only && !isAdmin()) || (d.skip && d.skip(r))) continue;   // 관리자 전용 글은 관리자만, skip 은 화면별 추가 기준
+      const title = txt(d.title(r)), body = txt(d.text(r)), hay = (title + ' ' + body).toLowerCase();
+      if (!words.every(w => hay.includes(w))) continue;
+      const tl = title.toLowerCase();
+      hits.push({ r, title, body, score: words.filter(w => tl.includes(w)).length, at: String((d.at ? d.at(r) : null) || r.updated_at || r.created_at || '') });
+    }
+    if (hits.length) { hits.sort((a, b) => b.score - a.score || b.at.localeCompare(a.at)); groups.push({ d, hits }); }
+  }
+  return groups;
+}
+/* 낱말이 들어간 자리를 <mark> 로 표시 (HTML 로 바꾼 뒤가 아니라 원문을 쪼개서 표시하므로 안전) */
+function mark(s, words){
+  if (!words.length) return esc(s);
+  const re = new RegExp('(' + words.map(escRe).join('|') + ')', 'gi');
+  return s.split(re).map((part, i) => i % 2 ? `<mark>${esc(part)}</mark>` : esc(part)).join('');
+}
+function snippet(body, words){
+  const low = body.toLowerCase(); let i = -1;
+  for (const w of words) { const k = low.indexOf(w); if (k >= 0 && (i < 0 || k < i)) i = k; }
+  if (i < 0) return esc(body.slice(0, 110)) + (body.length > 110 ? '…' : '');
+  const s = Math.max(0, i - 45), e = Math.min(body.length, i + 95);
+  return (s ? '…' : '') + mark(body.slice(s, e), words) + (e < body.length ? '…' : '');
+}
+async function loadSearchExtra(){
+  if (extraLoading || Date.now() - extraLoadedAt < 120000) return;
+  extraLoading = Promise.all(SEARCH_EXTRA.map(t => store.load(t).then(rows => { DATA[t] = rows; }).catch(() => {})));
+  await extraLoading; extraLoading = null; extraLoadedAt = Date.now();
+  if (SQ.trim()) renderSearch();
+}
+function renderSearch(){
+  const box = $('#srchRes'), dashEl = $('#dash'); if (!box || !dashEl) return;
+  const q = SQ.trim();
+  if (!q) { box.hidden = true; box.innerHTML = ''; dashEl.hidden = false; return; }
+  const words = wordsOf(q), groups = searchRows(q), total = groups.reduce((n, g) => n + g.hits.length, 0);
+  const wasHidden = box.hidden;
+  box.hidden = false; dashEl.hidden = true;
+  box.innerHTML = `<div class="shead"><h2>“${esc(q)}” 검색 결과 <span>${total}건</span></h2>${extraLoading ? '<span class="hint">회의록·매뉴얼·상표 등을 더 읽는 중…</span>' : ''}<button class="btn sm" id="srchClose" title="Esc">✕ 닫기</button></div>
+    ${total ? groups.map(g => {
+      const list = SOPEN.has(g.d.table) ? g.hits : g.hits.slice(0, 8);
+      return `<section class="sgrp"><h3>${g.d.icon} ${esc(g.d.page)} <span>${g.hits.length}</span></h3>
+        ${list.map(h => { const by = g.d.by ? g.d.by(h.r) : (h.r.created_by || ''); return `<a class="srow" href="${esc(g.d.href(h.r))}"><b>${mark(h.title.slice(0, 120), words) || '(제목 없음)'}</b>${h.body ? `<span class="sn">${snippet(h.body, words)}</span>` : ''}<span class="sm">${esc([by ? fullName(by) : '', h.at.slice(0, 10)].filter(Boolean).join(' · '))}</span></a>`; }).join('')}
+        ${g.hits.length > list.length ? `<button class="btn sm smore" data-more="${g.d.table}">더 보기 (${g.hits.length - list.length}건)</button>` : ''}</section>`;
+    }).join('')
+    : `<div class="empty">찾는 글이 없습니다.${extraLoading ? ' 아직 읽는 중인 표가 있어 잠시 뒤 다시 나올 수 있습니다.' : ''}<br><span class="hint">띄어쓰기로 낱말을 여러 개 넣으면 모두 들어간 글만 나옵니다. 낱말 하나로 줄여 보세요.</span></div>`}`;
+  $('#srchClose').onclick = () => { clearSearch(); };
+  box.querySelectorAll('[data-more]').forEach(b => b.onclick = () => { SOPEN.add(b.dataset.more); renderSearch(); });
+  if (wasHidden) window.scrollTo(0, 0);
+}
+function searchBox(){
+  return `<form class="srch" id="srchForm" role="search" onsubmit="return false" title="인트라넷 글 검색 (어디서나 / 키를 누르면 검색창으로)"><span class="ic">🔍</span><input id="srchIn" type="search" placeholder="검색: 업무·회의록·프로젝트 대화…" value="${esc(SQ)}" autocomplete="off"><button type="button" id="srchX" title="지우기 (Esc)"${SQ ? '' : ' hidden'}>✕</button></form>`;
+}
+let srchTimer, srchComposing = false, srchRenderWaiting = false;   // 한글을 조합하는 중에 화면을 다시 그리면 글자가 깨지므로 조합이 끝날 때까지 미룸
+document.addEventListener('compositionstart', e => { if (e.target && e.target.id === 'srchIn') srchComposing = true; });
+document.addEventListener('compositionend', e => { if (e.target && e.target.id === 'srchIn') { srchComposing = false; if (srchRenderWaiting) { srchRenderWaiting = false; setTimeout(render, 0); } } });
+function bindSearch(){
+  const inp = $('#srchIn'), x = $('#srchX'); if (!inp) return;
+  inp.oninput = () => { SQ = inp.value; x.hidden = !SQ; clearTimeout(srchTimer); srchTimer = setTimeout(() => { if (SQ.trim()) loadSearchExtra(); renderSearch(); }, 120); };
+  inp.onfocus = () => loadSearchExtra();
+  inp.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); clearSearch(); inp.blur(); } };
+  x.onclick = () => { clearSearch(); inp.focus(); };
+}
+function clearSearch(){ SQ = ''; SOPEN.clear(); const i = $('#srchIn'); if (i) i.value = ''; const x = $('#srchX'); if (x) x.hidden = true; renderSearch(); }
+document.addEventListener('keydown', e => {   // 어디서나 / 키 → 검색창 (글을 쓰는 중이거나 창이 열려 있으면 제외)
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const a = document.activeElement; if (a && (/INPUT|TEXTAREA|SELECT/.test(a.tagName) || a.isContentEditable)) return;
+  const md = $('#modal'); if (md && md.innerHTML) return;
+  const i = $('#srchIn'); if (i) { e.preventDefault(); i.focus(); i.select(); }
+});
 
 boot({ icon: BRAND.icon, title: BRAND.name, tables: ['menu', 'projects', 'tasks', 'leaves', 'notices', 'decisions', 'goals', 'worklogs', 'settings', 'accounts', 'subscriptions', 'payments', 'docs', 'ad_comments', 'tm_checks', 'alarms', 'cert_requests', 'project_logs', 'project_cards', 'project_decisions'], render,
   onProjNews: () => { if (!editing && !document.querySelector('.modal')) render(); } });   // 프로젝트 소식이 바뀌면 판을 다시 그림 (편집 중이거나 창이 열려 있으면 건너뜀)

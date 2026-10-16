@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -208,7 +208,7 @@ function openRec(id, preset = {}){
   const del = $('#rDel'); if (del) del.onclick = async () => { if (!confirm(`"${r0.title}" 기록을 삭제할까요? 이의신청 기록도 함께 지워집니다.`)) return; closeModal(); await removeRow('google_appeals', r0.id); toast('삭제했습니다'); };
 }
 
-boot({ icon: '🖥️', title: '구글 이의신청내역 관리', tables: ['google_appeals', 'ads'], render, normalize });
+boot({ icon: '🖥️', title: '구글 이의신청내역 관리', tables: ['google_appeals', 'ads'], render, normalize, open: id => openRec(id) });   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>

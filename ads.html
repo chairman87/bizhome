@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -441,7 +441,7 @@ function openAd(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.title}" 을(를) 목록에서 삭제할까요?`)) { closeModal(); await removeRow('ads', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🎬', title: '광고 영상 리스트', tables: ['ads', 'ads_sync'], render, normalize });
+boot({ icon: '🎬', title: '광고 영상 리스트', tables: ['ads', 'ads_sync'], render, normalize, open: id => openAd(id) });   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>

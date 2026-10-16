@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>파트너스</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -301,7 +301,7 @@ function openLead(id, owner){
   const del = $('#lDelete'); if (del) del.onclick = async () => { if (confirm(`${l0.name || l0.handle} 후보를 삭제할까요?`)) { closeModal(); await removeRow('partner_leads', l0.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🤝', title: '파트너스', tables: ['partners', 'partner_leads'], render, normalize });
+boot({ icon: '🤝', title: '파트너스', tables: ['partners', 'partner_leads'], render, normalize, open: id => (DATA.partners || []).some(p => p.id === id) ? openEdit(id) : openLead(id) });   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>

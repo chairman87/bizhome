@@ -85,7 +85,7 @@ function talkHtml(p){
     const mine = e.by === me || isAdmin();
     const dk = !mine ? '' : e.type === 'msg' ? 'msg|' + e.log.id : e.type === 'card' ? 'card|' + e.card.id : e.type === 'rev' && e.rev.no === lastRev(e.card).no ? 'rev|' + e.card.id + '|' + e.rev.no : e.type === 'cmt' ? 'cmt|' + e.card.id + '|' + e.cmt.id : e.type === 'dec' && e.dec ? 'dec|' + e.dec.id : '';
     const del = dk ? `<button class="mx" data-xdel="${dk}" title="삭제">✕ 삭제</button>` : '';
-    return head + `<div class="msg t-${e.type}">${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
+    return head + `<div class="msg t-${e.type}"${e.type === 'msg' ? ` data-id="${e.log.id}"` : ''}>${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
   }).join('');
   return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
       ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}</div></div>

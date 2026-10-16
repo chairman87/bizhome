@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
-<script src="channel.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
+<script src="channel.js?v=202610161708"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -163,7 +163,9 @@ const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
 let QP = new URLSearchParams(location.search).get('p') || '';   // 홈의 프로젝트 폴더에서 누르면 projects.html?p=프로젝트id 로 들어옴 → 그 프로젝트의 기록을 바로 엶
 let cur = QP || LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
 let tab = QP ? 'talk' : 'plan';   // 채널을 열면 런칭 일정부터 (알림·소식에서 특정 글로 들어올 때만 메시지)
-const QCARD = new URLSearchParams(location.search).get('card') || ''; let openedCard = false;   // projects.html?p=…&card=… 로 들어오면 그 카드를 바로 엶
+const QCARD = new URLSearchParams(location.search).get('card') || ''; let openedCard = false;
+const QITEM = new URLSearchParams(location.search).get('item') || '', QLOG = new URLSearchParams(location.search).get('log') || ''; let openedQ = false;   // 홈 검색 결과에서 ?p=…&item=할일번호 / &log=대화글번호 로 들어오면 그것을 바로 엶·비춤
+if (QLOG) talkLimit = 100000;   // 오래된 대화 글도 찾을 수 있게 전부 그림   // projects.html?p=…&card=… 로 들어오면 그 카드를 바로 엶
 let composing = false, renderWaiting = false, openedNew = false;   // 한글을 조합하는 중에 화면을 다시 그리면 글자가 깨지므로 조합이 끝날 때까지 미룸
 document.addEventListener('compositionstart', () => { composing = true; });
 document.addEventListener('compositionend', () => { composing = false; if (renderWaiting) { renderWaiting = false; setTimeout(render, 0); } });
@@ -204,6 +206,8 @@ function render(){
   if (cur === AGENDA) { slRender(null); return; }
   if (!p) { p = P().filter(x => x.status !== '완료').sort((a, b) => String(projLastAt(b.id) || b.created_at || '').localeCompare(String(projLastAt(a.id) || a.created_at || '')))[0] || P()[0] || null; cur = p ? p.id : ''; }
   slRender(p);
+  if (QITEM && !openedQ && DATA.project_items && I().some(x => x.id === QITEM)) { openedQ = true; setTimeout(() => openItem(QITEM), 0); }
+  if (QLOG && !openedQ && DATA.project_logs && tab === 'talk') { openedQ = true; setTimeout(() => flashRow(QLOG), 50); }
   if (location.hash === '#new' && !openedNew && DATA.projects) { openedNew = true; history.replaceState(null, '', location.pathname); openProject(null); }
 }
 function renderList(){

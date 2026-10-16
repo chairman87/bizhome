@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>견적서 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610161433">
-<script src="common.js?v=202610161433"></script>
+<link rel="stylesheet" href="common.css?v=202610161708">
+<script src="common.js?v=202610161708"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -201,7 +201,7 @@ function openQuote(id, preset = {}){
   };
 }
 
-boot({ icon: '📑', title: '견적서 관리', tables: ['quotes'], render, normalize });
+boot({ icon: '📑', title: '견적서 관리', tables: ['quotes'], render, normalize, open: id => openQuote(id) });   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>

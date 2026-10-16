@@ -149,7 +149,7 @@ async function checkAccess(){
   accessState = 'checking';
   try {
     const rows = await store.load('menu');
-    const params = new URLSearchParams(location.search); params.delete('v'); params.delete('t');   // 캐시용 꼬리표는 무시
+    const params = new URLSearchParams(location.search); ['v', 't', 'open', 'id', 'p', 'card', 'log', 'item'].forEach(k => params.delete(k));   // 캐시용 꼬리표와 글 바로 열기 꼬리표(검색 결과·알림에서 들어올 때)는 무시 → 잠긴 화면 판정은 화면 주소만으로
     const qs = decodeURIComponent(params.toString());
     const key = location.pathname.split('/').pop() + (qs ? '?' + qs : '');
     const row = rows.find(r => decodeURIComponent(r.href || '') === key);
@@ -167,7 +167,26 @@ function renderApp(){
     if (accessState === 'denied') { $('#app').innerHTML = headerHtml({ icon: APP.icon, title: APP.title }) + `<main class="wrap"><div class="empty">이 화면은 볼 수 있는 사람이 정해져 있어 <b>${esc(me)}</b>님은 열 수 없습니다.<br>필요하면 관리자에게 요청하세요.<br><br><a class="btn" href="index.html">홈으로</a></div></main>`; bindHeader(() => {}, null, () => ''); return; }
   }
   APP.render();
+  openFromLink();      // 주소 뒤 ?open=글번호 로 들어왔으면(홈 검색 결과·알림) 그 글을 바로 열거나 비춤
   refreshProjNews();   // 왼쪽 위 '프로젝트' 탭의 빨간 숫자(홈에서는 '프로젝트 소식' 판도)
+}
+/* 글 바로 열기: 화면 주소 뒤 ?open=글번호 가 붙어 있으면, 자료를 읽은 뒤 한 번만
+   - 화면이 boot({ open: id => ... }) 로 여는 함수를 알려 줬으면 그 함수로 글을 열고
+   - 목록에서 그 글의 줄(data-id 등)을 찾아 가운데로 스크롤하고 잠깐 노랗게 비춥니다 */
+let linkOpened = false;
+function openFromLink(){
+  if (linkOpened) return;
+  const id = new URLSearchParams(location.search).get('open'); if (!id) return;
+  const found = Object.values(DATA).some(rows => Array.isArray(rows) && rows.some(r => r && r.id === id));
+  if (!found) return;   // 아직 그 표를 안 읽었으면 다음 그리기 때 다시 시도
+  linkOpened = true;
+  setTimeout(() => { if (typeof APP.open === 'function') { try { APP.open(id); } catch (e) { console.warn(e); } } flashRow(id); }, 0);
+}
+function flashRow(id){
+  const el = document.querySelector(`[data-id="${id}"],[data-open="${id}"],[data-edit="${id}"],[data-person="${id}"],[data-pay="${id}"]`);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center' }); el.classList.add('hl-found'); setTimeout(() => el.classList.remove('hl-found'), 4000);
+  return true;
 }
 /* 한 줄 저장(화면 먼저 바꾸고 저장소에 씀). 실패하면 알리고 다시 읽음 */
 async function saveRow(table, row){

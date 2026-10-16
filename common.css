@@ -204,6 +204,10 @@ body.login-bg{background:#0f2a4a;background-image:radial-gradient(1200px 600px a
 .mrow .nm{flex:1}
 .mrow .cnt{font-size:12px;color:var(--fg3)}
 
+/* 검색 결과·알림에서 들어와 찾은 글: 4초 동안 노랗게 비춤 (common.js flashRow) */
+.hl-found{animation:hlFound 4s ease-out}
+@keyframes hlFound{0%,60%{background:#fff3b0;box-shadow:0 0 0 3px #ffd84d}100%{background:transparent;box-shadow:none}}
+
 /* 알림 */
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:99;box-shadow:var(--shadow);max-width:90vw}
 .toast.err{background:var(--red)}
