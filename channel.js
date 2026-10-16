@@ -750,6 +750,22 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .pladd{display:flex;gap:6px;align-items:center;padding:10px 8px;background:#fafafa;border:1px dashed var(--line2);border-radius:8px;margin-top:10px;flex-wrap:wrap}
   .pladd input,.pladd select{border:1px solid var(--line2);border-radius:6px;padding:7px 8px;font-size:14px;background:#fff}
   .pladd #plTitle{flex:1;min-width:180px}
+  .plan.wide{max-width:none}
+  .pboard{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:10px;overflow-x:auto;padding-bottom:6px;align-items:start}
+  .pcol{background:#f6f6f4;border:1px solid var(--line);border-radius:10px;padding:8px;min-width:0}
+  .pch{display:flex;justify-content:space-between;align-items:center;padding:2px 4px 8px;font-size:14px}
+  .pc{display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;cursor:pointer}
+  .pc:hover{border-color:var(--line2);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .pc .pck{flex:none;padding-top:1px}.pc .pck input{width:16px;height:16px;margin:0;cursor:pointer}
+  .pc .pcb{flex:1;min-width:0}
+  .pc .pct{font-size:13.5px;line-height:1.4;word-break:keep-all;overflow-wrap:anywhere}
+  .pc .pcm{font-size:11.5px;color:#6b7280;margin-top:3px}
+  .pc .pcm .r{color:#dc2626;font-weight:700}.pc .pcm .o{color:#d97706;font-weight:700}.pc .pcm .nd{color:#b0b0b0}
+  .pc .pcn{font-size:11.5px;color:#6b7280;margin-top:2px}
+  .pc.done .pct{color:#9ca3af;text-decoration:line-through}.pc.done{background:#fafafa}
+  .pc.over{border-color:#fca5a5}
+  .pcadd{width:100%;box-sizing:border-box;border:1px dashed var(--line2);border-radius:8px;padding:7px 8px;font-size:13px;background:transparent}
+  .pcadd:focus{background:#fff;border-style:solid;outline:none}
   .dmon{font-size:13px;font-weight:700;color:var(--fg2);margin:16px 2px 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
   .dmon:first-child{margin-top:0}
   .drow{display:flex;gap:12px;align-items:flex-start;padding:10px 8px;border-bottom:1px solid var(--line)}
@@ -812,61 +828,97 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 /* ================= 런칭 일정 탭 (2026-10-16): 신제품 런칭 단계를 한 줄씩 쌓는 로그 =================
    저장: project_items 표(예전 프로세스 화면이 쓰던 표) { project_id, phase, title, assignee, due_date, status(예정/진행중/완료/보류), note, sort_order, done_at, updated_by(완료한 사람) }
    날짜순(날짜 없는 단계는 맨 아래, 그 안에서는 넣은 순서). 체크하면 완료 + 대화에도 한 줄 남음 */
+/* 신제품 런칭 기본 단계 (2026-10-16 사장님 정리본). [분야, 단계, 메모] — 분야가 열이 됨 */
+const PLAN_PHASES = ['기획', 'SCM', '제품 디자인', '홈페이지', '물류', '재무', 'CS', '마케팅'];
 const PLAN_TEMPLATE = [
-  ['기획', '컨셉·타겟 확정'], ['기획', '제품명·상표 검토'], ['개발', '처방·원료 확정'], ['개발', '제조사 견적·최소 수량(MOQ) 확인'],
-  ['개발', '샘플 테스트·수정'], ['기획', '원가·손익 시뮬레이션'], ['디자인', '패키지·디자인 확정'], ['생산', '생산 발주'],
-  ['디자인', '상세페이지·촬영'], ['생산', '입고·검수'], ['판매', '판매처 등록 (자사몰·스토어·쿠팡)'], ['마케팅', '광고 소재 제작'],
-  ['판매', '런칭·광고 집행'], ['판매', '런칭 후 리뷰·반응 점검'],
+  ['기획', '제품명 / 상표 검토'],
+  ['SCM', 'BOM 처방 및 견적 확정'], ['SCM', '표시사항 최종본 수령'], ['SCM', '샘플 테스트 및 최종 발주'],
+  ['제품 디자인', '제품 패키지 디자인 확정'], ['제품 디자인', '제품 원화 파일 제작'], ['제품 디자인', '제품 목업이미지 제작'],
+  ['홈페이지', '제품 상세 페이지 내용 확정'], ['홈페이지', '상세페이지 디자인 완료'], ['홈페이지', '제품페이지 오픈 및 설정 (자사몰, 쿠팡, 스마트스토어)'],
+  ['물류', '제품 입고 확인'], ['물류', '이벗 상품 등록 및 API 연결'],
+  ['재무', '다날 서비스 센터 가입'], ['재무', '네이버페이 신청'],
+  ['CS', 'CS 채널 셋팅'], ['CS', '휴대폰 번호 개통, 아톡 셋팅'],
+  ['마케팅', '블로그 리뷰 셋팅', '대가를 준 리뷰는 "협찬·광고" 표기'], ['마케팅', '쿠팡 리뷰 셋팅'], ['마케팅', '자사몰 리뷰 셋팅'],
 ];
 const planDone = x => x.status === '완료';
 const planOf = pid => (DATA.project_items || []).filter(x => x.project_id === pid)
   .sort((a, b) => (a.due_date ? 0 : 1) - (b.due_date ? 0 : 1) || String(a.due_date || '').localeCompare(String(b.due_date || '')) || (a.sort_order ?? 9999) - (b.sort_order ?? 9999) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
 const planDays = d => d ? Math.round((new Date(d + 'T00:00:00') - new Date(todayStr() + 'T00:00:00')) / 86400000) : null;
 const planDow = d => d ? '일월화수목금토'[new Date(d + 'T00:00:00').getDay()] : '';
-function planHtml(p){
-  const list = planOf(p.id), done = list.filter(planDone).length, next = list.find(x => !planDone(x));
-  const nd = next ? planDays(next.due_date) : null;
-  const ddTxt = n => n == null ? '' : n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
-  const rows = list.map(x => { const n = planDays(x.due_date), over = !planDone(x) && n != null && n < 0, soon = !planDone(x) && n != null && n >= 0 && n <= 3;
-    return `<div class="plrow ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
+const planDD = n => n == null ? '' : n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
+let planView = LS.get('plan_view') || 'board';   // board = 분야별 열, list = 날짜순 한 줄
+/* 열 순서: 기본 분야 → 그 밖에 쓰인 분야 → 분야 없음 */
+const planCols = list => { const extra = [...new Set(list.map(x => x.phase || '').filter(ph => ph && !PLAN_PHASES.includes(ph)))]; return [...PLAN_PHASES, ...extra, ...(list.some(x => !x.phase) ? [''] : [])]; };
+function planItemHtml(x, compact){
+  const n = planDays(x.due_date), over = !planDone(x) && n != null && n < 0, soon = !planDone(x) && n != null && n >= 0 && n <= 3;
+  if (compact) return `<div class="pc ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
+      <label class="pck"><input type="checkbox" data-plchk="${x.id}" ${planDone(x) ? 'checked' : ''}></label>
+      <div class="pcb"><div class="pct">${esc(x.title)}</div>
+        <div class="pcm">${x.due_date ? `<span class="${over ? 'r' : soon ? 'o' : ''}">${fmtDate(x.due_date).slice(5)}(${planDow(x.due_date)})${planDone(x) ? '' : ' ' + planDD(n)}</span>` : '<span class="nd">날짜 미정</span>'}${x.assignee ? ` · ${esc(fullName(x.assignee))}` : ''}</div>
+        ${x.note ? `<div class="pcn">${esc(x.note)}</div>` : ''}</div></div>`;
+  return `<div class="plrow ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
       <input type="checkbox" data-plchk="${x.id}" ${planDone(x) ? 'checked' : ''} title="${planDone(x) ? '완료 취소' : '완료로 표시'}">
       <span class="pd">${x.due_date ? `${fmtDate(x.due_date).slice(5)}(${planDow(x.due_date)})` : '날짜 미정'}</span>
-      <span class="pdd ${over ? 'over' : soon ? 'soon' : ''}">${planDone(x) ? '완료' : ddTxt(n)}</span>
+      <span class="pdd ${over ? 'over' : soon ? 'soon' : ''}">${planDone(x) ? '완료' : planDD(n)}</span>
       <span class="pt">${x.phase ? `<span class="ph">${esc(x.phase)}</span>` : ''}${esc(x.title)}${x.note ? `<span class="pn">${esc(x.note)}</span>` : ''}</span>
-      ${x.assignee ? who(x.assignee) : ''}</div>`; }).join('');
-  return `<div class="plan">
-    ${list.length ? `<div class="plsum"><b>${list.length}단계 중 ${done} 완료</b><span class="pbar"><i style="width:${list.length ? done / list.length * 100 : 0}%"></i></span>
-      ${next ? `<span>다음: <b>${esc(next.title)}</b>${next.due_date ? ` <span class="hint">(${fmtDate(next.due_date).slice(5)}, ${ddTxt(nd)})</span>` : ''}${next.assignee ? ' · ' + esc(fullName(next.assignee)) : ''}</span>` : '<span>🎉 모든 단계 완료</span>'}
-      ${p.target_date ? `<span class="hint" style="margin-left:auto">런칭 목표일 ${fmtDate(p.target_date)}</span>` : ''}</div>` : ''}
-    ${rows || `<div class="empty">아직 런칭 일정이 없습니다.<br>아래 입력줄에 단계를 하나씩 적거나, <button class="btn sm primary" id="plTpl">신제품 런칭 기본 단계 넣기</button> 로 14단계를 한 번에 넣은 뒤 날짜·담당만 채우세요.</div>`}
-    <div class="pladd"><input type="date" id="plDate" title="예정일 (비워도 됨)"><input id="plTitle" placeholder="단계 (예: 샘플 2차 테스트) — Enter 로 추가" maxlength="120"><select id="plWho"><option value="">담당</option>${memberOptions('')}</select><button class="btn primary" id="plAdd">추가</button></div>
-    <div class="hint" style="margin-top:6px">줄을 누르면 고치기·삭제 · 체크하면 완료 (대화에도 한 줄 남음) · 날짜순으로 정렬됩니다</div>
-  </div>`;
+      ${x.assignee ? who(x.assignee) : ''}</div>`;
+}
+function planHtml(p){
+  const list = planOf(p.id), done = list.filter(planDone).length, next = list.find(x => !planDone(x));
+  const missing = PLAN_TEMPLATE.filter(([, t]) => !list.some(x => x.title === t)).length;
+  const head = `<div class="plsum">${list.length ? `<b>${list.length}단계 중 ${done} 완료</b><span class="pbar"><i style="width:${done / list.length * 100}%"></i></span>
+      ${next ? `<span>다음: <b>${esc(next.title)}</b>${next.due_date ? ` <span class="hint">(${fmtDate(next.due_date).slice(5)}, ${planDD(planDays(next.due_date))})</span>` : ''}${next.assignee ? ' · ' + esc(fullName(next.assignee)) : ''}</span>` : '<span>🎉 모든 단계 완료</span>'}` : '<b>아직 런칭 일정이 없습니다</b>'}
+      <span class="sp" style="flex:1"></span>
+      ${missing ? `<button class="btn sm ${list.length ? '' : 'primary'}" id="plTpl" title="기본 단계 중 아직 없는 ${missing}개를 넣습니다">＋ 기본 단계 ${list.length ? '추가' : '넣기'} (${missing})</button>` : ''}
+      <button class="btn sm" id="plView">${planView === 'board' ? '☰ 날짜순 보기' : '▦ 분야별 보기'}</button></div>`;
+  if (planView === 'list') return `<div class="plan">${head}${list.map(x => planItemHtml(x)).join('') || '<div class="empty">단계가 없습니다.</div>'}
+    <div class="pladd"><select id="plPhase"><option value="">분야</option>${planCols(list).filter(Boolean).map(ph => `<option>${esc(ph)}</option>`).join('')}</select><input type="date" id="plDate" title="예정일 (비워도 됨)"><input id="plTitle" placeholder="단계 — Enter 로 추가" maxlength="120"><select id="plWho"><option value="">담당</option>${memberOptions('')}</select><button class="btn primary" id="plAdd">추가</button></div>
+    <div class="hint" style="margin-top:6px">줄을 누르면 고치기·삭제 · 체크하면 완료 (대화에도 한 줄 남음)</div></div>`;
+  const cols = planCols(list);
+  return `<div class="plan wide">${head}
+    <div class="pboard">${cols.map(ph => { const its = list.filter(x => (x.phase || '') === ph), d = its.filter(planDone).length;
+      return `<div class="pcol"><div class="pch"><b>${esc(ph || '분야 없음')}</b><span class="hint">${its.length ? `${d}/${its.length}` : ''}</span></div>
+        ${its.map(x => planItemHtml(x, true)).join('')}
+        <input class="pcadd" data-plph="${esc(ph)}" placeholder="＋ 단계 추가 (Enter)" maxlength="120"></div>`; }).join('')}</div>
+    <div class="hint" style="margin-top:6px">카드를 누르면 날짜·담당·메모를 넣거나 고칩니다 · 체크하면 완료 (대화에도 한 줄 남음) · 열 안에서는 날짜순</div></div>`;
 }
 function bindPlan(p){
-  const tpl = $('#plTpl'); if (tpl) tpl.onclick = async () => {
-    if (!confirm('신제품 런칭 기본 단계 14개를 넣을까요? 날짜·담당은 넣은 뒤 줄을 눌러 채우면 됩니다.')) return;
-    for (let k = 0; k < PLAN_TEMPLATE.length; k++) { const [phase, title] = PLAN_TEMPLATE[k];
-      await saveRow('project_items', { id: uid(), project_id: p.id, phase, title, assignee: null, start_date: null, due_date: null, status: '예정', note: null, checklist: [], sort_order: k, created_by: me, created_at: nowIso() }); }
-    toast('기본 단계 14개를 넣었습니다');
-  };
-  const add = async () => { const title = $('#plTitle').value.trim(); if (!title) { $('#plTitle').focus(); return; }
+  const addItem = async (title, phase, due, who) => {
     const so = Math.max(-1, ...planOf(p.id).map(x => x.sort_order ?? -1)) + 1;
-    await saveRow('project_items', { id: uid(), project_id: p.id, phase: null, title, assignee: $('#plWho').value || null, start_date: null, due_date: $('#plDate').value || null, status: '예정', note: null, checklist: [], sort_order: so, created_by: me, created_at: nowIso() });
-    toast('추가했습니다'); const t = $('#plTitle'); if (t) t.focus(); };
-  $('#plAdd').onclick = add;
-  $('#plTitle').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); add(); } };
+    await saveRow('project_items', { id: uid(), project_id: p.id, phase: phase || null, title, assignee: who || null, start_date: null, due_date: due || null, status: '예정', note: null, checklist: [], sort_order: so, created_by: me, created_at: nowIso() });
+  };
+  const tpl = $('#plTpl'); if (tpl) tpl.onclick = async () => {
+    const list = planOf(p.id), add = PLAN_TEMPLATE.filter(([, t]) => !list.some(x => x.title === t));
+    if (!add.length || !confirm(`기본 단계 ${add.length}개를 넣을까요? (이미 있는 단계는 건너뜁니다)\n날짜·담당은 넣은 뒤 카드를 눌러 채우면 됩니다.`)) return;
+    const base = Math.max(-1, ...list.map(x => x.sort_order ?? -1)) + 1;
+    for (let k = 0; k < add.length; k++) { const [phase, title, note] = add[k];
+      await saveRow('project_items', { id: uid(), project_id: p.id, phase, title, assignee: null, start_date: null, due_date: null, status: '예정', note: note || null, checklist: [], sort_order: base + PLAN_TEMPLATE.findIndex(t => t[1] === title), created_by: me, created_at: nowIso() }); }
+    toast(`기본 단계 ${add.length}개를 넣었습니다`);
+  };
+  const pv = $('#plView'); if (pv) pv.onclick = () => { planView = planView === 'board' ? 'list' : 'board'; LS.set('plan_view', planView); render(); };
+  const ab = $('#plAdd'); if (ab) {
+    const add = async () => { const title = $('#plTitle').value.trim(); if (!title) { $('#plTitle').focus(); return; }
+      const v = [$('#plPhase').value, $('#plDate').value, $('#plWho').value]; await addItem(title, ...v); toast('추가했습니다'); const t = $('#plTitle'); if (t) t.focus(); };
+    ab.onclick = add; $('#plTitle').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); add(); } };
+  }
+  document.querySelectorAll('.pcadd').forEach(inp => inp.onkeydown = async e => {
+    if (e.key !== 'Enter' || e.isComposing) return; e.preventDefault();
+    const title = inp.value.trim(), ph = inp.dataset.plph; if (!title) return;
+    inp.value = ''; await addItem(title, ph); toast(`${ph || '분야 없음'}에 추가했습니다`);
+    const again = document.querySelector(`.pcadd[data-plph="${CSS.escape(ph)}"]`); if (again) again.focus();
+  });
   document.querySelectorAll('[data-plchk]').forEach(cb => { cb.onclick = e => e.stopPropagation(); cb.onchange = async () => {
     const x = (DATA.project_items || []).find(y => y.id === cb.dataset.plchk); if (!x) return;
     await saveRow('project_items', cb.checked ? { ...x, status: '완료', done_at: nowIso(), updated_by: me } : { ...x, status: '예정', done_at: null, updated_by: me });
     toast(cb.checked ? `"${x.title}" 완료` : '완료를 취소했습니다'); }; });
+  document.querySelectorAll('.pck').forEach(l => l.onclick = e => e.stopPropagation());
   document.querySelectorAll('[data-pl]').forEach(r => r.onclick = () => openPlanItem(p, r.dataset.pl));
 }
 function openPlanItem(p, id){
   const x = (DATA.project_items || []).find(y => y.id === id); if (!x) return;
   openModal(`${modalHead('런칭 일정 단계')}<div class="mb">
       <div class="f"><label>단계 *</label><input id="piTitle" value="${esc(x.title)}" maxlength="120"></div>
-      <div class="f2"><div class="f"><label>구분 <span class="hint">(선택 · 예: 기획, 개발, 디자인)</span></label><input id="piPhase" value="${esc(x.phase || '')}" maxlength="20"></div>
+      <div class="f2"><div class="f"><label>분야 <span class="hint">(열 이름)</span></label><input id="piPhase" value="${esc(x.phase || '')}" maxlength="20" list="piPhases"><datalist id="piPhases">${planCols(planOf(p.id)).filter(Boolean).map(ph => `<option value="${esc(ph)}">`).join('')}</datalist></div>
         <div class="f"><label>담당</label><select id="piWho"><option value="">미정</option>${memberOptions(x.assignee || '')}</select></div></div>
       <div class="f2"><div class="f"><label>예정일</label><input type="date" id="piDate" value="${esc(x.due_date || '')}"></div>
         <div class="f"><label>상태</label><select id="piSt">${['예정', '진행중', '완료', '보류'].map(v => `<option ${x.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
