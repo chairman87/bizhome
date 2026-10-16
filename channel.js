@@ -762,7 +762,9 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .pc .pcm{font-size:11.5px;color:#6b7280;margin-top:3px}
   .pc .pcm .r{color:#dc2626;font-weight:700}.pc .pcm .o{color:#d97706;font-weight:700}.pc .pcm .nd{color:#b0b0b0}
   .pc .pcn{font-size:11.5px;color:#6b7280;margin-top:2px}
-  .pc.done .pct{color:#9ca3af;text-decoration:line-through}.pc.done{background:#fafafa}
+  .pc.done .pct{color:#9ca3af;text-decoration:line-through}.pc.done{background:#ececec;border-color:#e0e0e0}
+  .pc.prog{background:#e0efff;border-color:#bcd8fb}
+  .plrow.prog{background:#e0efff}.plrow.done{background:#f1f1f1}
   .pc.over{border-color:#fca5a5}
   .pcadd{width:100%;box-sizing:border-box;border:1px dashed var(--line2);border-radius:8px;padding:7px 8px;font-size:13px;background:transparent}
   .pcadd:focus{background:#fff;border-style:solid;outline:none}
@@ -838,7 +840,7 @@ const PLAN_PHASES = ['기획/SCM', '제품 디자인', '홈페이지', '물류',
 const PLAN_TEMPLATE = [
   ['기획/SCM', '제품명 / 상표 검토'], ['기획/SCM', 'BOM 처방 및 견적 확정'], ['기획/SCM', '표시사항 최종본 수령'], ['기획/SCM', '샘플 테스트 및 최종 발주'],
   ['제품 디자인', '제품 패키지 디자인 확정'], ['제품 디자인', '제품 원화 파일 제작'], ['제품 디자인', '제품 목업이미지 제작'],
-  ['홈페이지', '제품 상세 페이지 내용 확정'], ['홈페이지', '상세페이지 디자인 완료'], ['홈페이지', '제품페이지 오픈 및 설정 (자사몰, 쿠팡, 스마트스토어)'],
+  ['홈페이지', '제품 상세 페이지 세부 내용 기획'], ['홈페이지', '상세페이지 디자인 완료'], ['홈페이지', '제품페이지 오픈 및 설정 (자사몰, 쿠팡, 스마트스토어)'],
   ['물류', '제품 입고 확인'], ['물류', '이벗 상품 등록 및 API 연결'],
   ['재무', '다날 서비스 센터 가입'], ['재무', '네이버페이 신청'],
   ['CS', 'CS 채널 셋팅'], ['CS', '휴대폰 번호 개통, 아톡 셋팅'],
@@ -858,12 +860,12 @@ const planCols = (list, all) => { const extra = [...new Set(list.map(x => x.phas
   return all ? cols : cols.filter(ph => list.some(x => (x.phase || '') === ph)); };
 function planItemHtml(x, compact){
   const n = planDays(x.due_date), over = !planDone(x) && n != null && n < 0, soon = !planDone(x) && n != null && n >= 0 && n <= 3;
-  if (compact) return `<div class="pc ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}" draggable="true" title="끌어서 순서·분야 바꾸기 · 누르면 고치기">
+  if (compact) return `<div class="pc ${planDone(x) ? 'done' : x.status === '진행중' ? 'prog' : ''} ${over ? 'over' : ''}" data-pl="${x.id}" draggable="true" title="끌어서 순서·분야 바꾸기 · 누르면 고치기">
       <label class="pck"><input type="checkbox" data-plchk="${x.id}" ${planDone(x) ? 'checked' : ''}></label>
       <div class="pcb"><div class="pct">${esc(x.title)}</div>
         <div class="pcm">${x.due_date ? `<span class="${over ? 'r' : soon ? 'o' : ''}">${fmtDate(x.due_date).slice(5)}(${planDow(x.due_date)})${planDone(x) ? '' : ' ' + planDD(n)}</span>` : '<span class="nd">날짜 미정</span>'}${x.assignee ? ` · ${esc(fullName(x.assignee))}` : ''}</div>
         ${x.note ? `<div class="pcn">${esc(x.note)}</div>` : ''}</div></div>`;
-  return `<div class="plrow ${planDone(x) ? 'done' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
+  return `<div class="plrow ${planDone(x) ? 'done' : x.status === '진행중' ? 'prog' : ''} ${over ? 'over' : ''}" data-pl="${x.id}">
       <input type="checkbox" data-plchk="${x.id}" ${planDone(x) ? 'checked' : ''} title="${planDone(x) ? '완료 취소' : '완료로 표시'}">
       <span class="pd">${x.due_date ? `${fmtDate(x.due_date).slice(5)}(${planDow(x.due_date)})` : '날짜 미정'}</span>
       <span class="pdd ${over ? 'over' : soon ? 'soon' : ''}">${planDone(x) ? '완료' : planDD(n)}</span>
