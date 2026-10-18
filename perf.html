@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>퍼포먼스 데이터</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610182151">
-<script src="common.js?v=202610182151"></script>
+<link rel="stylesheet" href="common.css?v=202610182155">
+<script src="common.js?v=202610182155"></script>
 <style>
   .wrap-perf{max-width:1180px}
   .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
@@ -15,6 +15,9 @@
   .ctl .seg button+button{border-left:1px solid var(--line)}
   .ctl .seg button.on{background:var(--fg);color:#fff}
   .ctl .upd{margin-left:auto;font-size:12px;color:var(--fg3)}
+  .ctl .range{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--fg2);opacity:.55}
+  .ctl .range.on{opacity:1}
+  .ctl .range input{border:1px solid var(--line2);border-radius:6px;padding:4px 6px;font-size:13px;background:var(--bg)}
   .sig{border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;border:1px solid var(--line);background:var(--bg)}
   .sig h2{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
   .sig h2 .cmp{font-size:12px;color:var(--fg3);font-weight:400}
@@ -85,10 +88,11 @@ const BRANDS = ['레모너리', '서리맥스', '흑생마'];
 /* 채널 색: 같은 대상은 같은 색(쿠팡 매출 = 쿠팡 광고비 = 주황). 색 순서는 색약·인쇄 검증을 통과한 순서라 바꾸지 않음 */
 const SALES_CH = [['cf_s', '자사몰', '#2a78d6'], ['nv_s', '스마트스토어', '#1baf7a'], ['cp', '쿠팡', '#eb6834']];
 const AD_CH = [['coupang_ad', '쿠팡광고', '#eb6834'], ['meta', '메타', '#4a3aa7'], ['tiktok', '틱톡', '#e87ba4'], ['naver_cpc', '네이버', '#008300'], ['google', '구글', '#eda100'], ['kakao', '카카오', '#e34948']];
-const PERIODS = [['14', '최근 14일'], ['30', '최근 30일'], ['thisM', '이번 달'], ['lastM', '지난 달'], ['months', '월별']];
+const PERIODS = [['yday', '어제'], ['7', '최근 7일'], ['14', '최근 14일'], ['30', '최근 30일'], ['thisM', '이번 달'], ['lastM', '지난 달'], ['months', '월별'], ['custom', '기간 직접']];
 
 let brand = decodeURIComponent((location.hash || '').slice(1)) || BRANDS[0]; if (!BRANDS.includes(brand)) brand = BRANDS[0];
 let period = LS.get('perf_period') || '30'; if (!PERIODS.some(p => p[0] === period)) period = '30';
+let range = { from: LS.get('perf_from') || '', to: LS.get('perf_to') || '' };   // '기간 직접'일 때 달력에서 고른 시작일~끝일
 
 /* 금액은 만원 단위로, 1억이 넘으면 "6억 1,751만"처럼 억을 앞에 붙임 (61,751만 처럼 쓰면 읽기 어려워서, 2026-10-18 사장님 지적) */
 const man = n => { if (n == null) return '-'; const m = Math.round(n / 10000), s = m < 0 ? '-' : '', a = Math.abs(m); return a >= 10000 ? `${s}${Math.floor(a / 10000)}억${a % 10000 ? ' ' + (a % 10000).toLocaleString('ko-KR') + '만' : ''}` : `${s}${a.toLocaleString('ko-KR')}만`; };
@@ -97,7 +101,7 @@ const won = n => n == null ? '-' : Math.round(n).toLocaleString('ko-KR') + '원'
 const pct = (a, b) => (b > 0 ? (a - b) / b : null);
 const pctTxt = p => p == null ? '' : (p > 0 ? '+' : p < 0 ? '−' : '') + Math.round(Math.abs(p) * 100) + '%';
 const ratio = (s, a) => a > 0 ? s / a : null;
-const ratioTxt = r => r == null ? '-' : r.toFixed(2) + '배';
+const ratioTxt = r => r == null ? '-' : r.toFixed(2);   // '배'는 빼고 숫자만 (2026-10-18 사장님 요청)
 const cpOf = r => (r.cp_s || 0) + (r.rg_s || 0);
 const adv = (r, k) => (r.ad && r.ad[k]) || 0;
 const sumBy = (rows, f) => rows.reduce((s, r) => s + (f(r) || 0), 0);
@@ -112,7 +116,9 @@ function pick(){
   if (period === 'months') { const sel = rowsOf('month'); return { sel, full: sel, prev: [], months: true }; }
   const today = todayStr();
   let sel;
-  if (period === 'thisM') sel = days.filter(r => r.period.slice(0, 7) === today.slice(0, 7));
+  if (period === 'yday') { const d = parseYmd(today); d.setDate(d.getDate() - 1); const y = ymd(d); sel = days.filter(r => r.period === y); }
+  else if (period === 'custom') { const f = range.from || days[0]?.period || today, e = range.to || today; sel = days.filter(r => r.period >= f && r.period <= e); }
+  else if (period === 'thisM') sel = days.filter(r => r.period.slice(0, 7) === today.slice(0, 7));
   else if (period === 'lastM') { const d = parseYmd(today); d.setDate(0); const m = ymd(d).slice(0, 7); sel = days.filter(r => r.period.slice(0, 7) === m); }
   else sel = days.slice(-Number(period));
   const full = sel.filter(r => !r.partial);
@@ -265,13 +271,17 @@ function render(){
   const upd = (DATA.mkt_perf || []).reduce((m, r) => r.updated_at > m ? r.updated_at : m, '');
   $('#app').innerHTML = headerHtml({ icon: '📈', title: '퍼포먼스 데이터', tabs: BRANDS.map(b => ({ key: b, label: b })), active: brand }) + `<main class="wrap wrap-perf">
     <div class="ctl"><div class="seg">${PERIODS.map(p => `<button data-period="${p[0]}" class="${period === p[0] ? 'on' : ''}">${p[1]}</button>`).join('')}</div>
+      <span class="range ${period === 'custom' ? 'on' : ''}"><input type="date" id="rFrom" value="${esc(range.from)}" max="${todayStr()}"> ~ <input type="date" id="rTo" value="${esc(range.to)}" max="${todayStr()}"></span>
       <span class="upd">${upd ? '자료 갱신 ' + fmtDateTime(upd) + ' · 매시간 40분에 자동 반영' : ''}</span></div>
     ${DATA.mkt_perf === undefined ? '' : sigHtml() + tilesHtml(P) + chartsHtml(P) + tableHtml(P)}
     <div class="foot"><b>보는 법</b> — 광고비는 메타·틱톡·구글·네이버·쿠팡 광고센터가 보고한 금액(부가세 전)이고, 매출은 결제 기준(취소 전)입니다. 쿠팡 매출은 판매자배송과 로켓그로스를 합한 값입니다. 오늘 줄은 진행 중인 값이라 점선·기울임으로 표시됩니다.<br>
     매출 ÷ 광고비는 "광고비 1원으로 매출 몇 원을 만들었나"입니다. 쿠팡 로아스는 쿠팡 매출(판매자배송+로켓그로스)을 쿠팡광고비로만 나눈 값입니다(쿠팡 매출에는 메타·틱톡 광고를 보고 쿠팡에서 산 사람도 섞여 있어 참고치입니다). 이 숫자가 내려가거나, 매출은 빠지는데 광고비는 그대로면 그 채널을 들여다볼 때입니다. 광고 소재·예산은 <a href="ads.html">광고 영상 리스트</a>, 아이템위너·품절 같은 상품 상태는 담당자가 각 판매처에서 확인합니다.</div>
   </main>`;
   bindHeader(b => { brand = b; location.hash = encodeURIComponent(b); renderApp(); }, null, null);
-  document.querySelectorAll('[data-period]').forEach(b => b.onclick = () => { period = b.dataset.period; LS.set('perf_period', period); renderApp(); });
+  document.querySelectorAll('[data-period]').forEach(b => b.onclick = () => { period = b.dataset.period; LS.set('perf_period', period); if (period === 'custom' && !range.from) { setTimeout(() => $('#rFrom') && $('#rFrom').showPicker && $('#rFrom').showPicker(), 0); } renderApp(); });
+  /* 달력에서 날짜를 고르면 '기간 직접'으로 바뀜. 시작일이 끝일보다 뒤면 서로 바꿈 */
+  const onRange = () => { let f = $('#rFrom').value, e = $('#rTo').value; if (f && e && f > e) [f, e] = [e, f]; range = { from: f, to: e }; LS.set('perf_from', f); LS.set('perf_to', e); period = 'custom'; LS.set('perf_period', period); renderApp(); };
+  $('#rFrom').onchange = onRange; $('#rTo').onchange = onRange;
   bindTips(P);
 }
 /* 막대 위에 마우스를 올리면 그 날의 채널별 값 */
