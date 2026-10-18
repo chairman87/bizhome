@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>퍼포먼스 데이터</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610182200">
-<script src="common.js?v=202610182200"></script>
+<link rel="stylesheet" href="common.css?v=202610182220">
+<script src="common.js?v=202610182220"></script>
 <style>
   .wrap-perf{max-width:1180px}
   .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
@@ -15,6 +15,17 @@
   .ctl .seg button+button{border-left:1px solid var(--line)}
   .ctl .seg button.on{background:var(--fg);color:#fff}
   .ctl .upd{margin-left:auto;font-size:12px;color:var(--fg3)}
+  .ctl .seg.view button.on{background:#9c1f4a}
+  .camp td.name{text-align:left;max-width:380px;overflow:hidden;text-overflow:ellipsis}
+  .camp tr.pf td{background:var(--bg3);font-weight:600;font-size:12px}
+  .camp tr.pf td.name{font-size:13px}
+  .camp .st{display:inline-block;font-size:11px;border-radius:999px;padding:0 7px;border:1px solid var(--line2);color:var(--fg2)}
+  .camp .st.on{background:#dcfce7;border-color:#86efac;color:#166534}
+  .camp .st.off{background:var(--bg2);color:var(--fg3)}
+  .camp .share{display:inline-block;width:60px;height:8px;background:var(--bg3);border-radius:2px;vertical-align:middle;margin-left:6px;overflow:hidden}
+  .camp .share i{display:block;height:100%;background:#9c1f4a;opacity:.55}
+  .camp input{border:1px solid var(--line2);border-radius:6px;padding:4px 8px;font-size:13px;width:220px}
+  .camp .bar{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--fg2);flex-wrap:wrap}
   .ctl .range{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--fg2);opacity:.55}
   .ctl .range.on{opacity:1}
   .ctl .range input{border:1px solid var(--line2);border-radius:6px;padding:4px 6px;font-size:13px;background:var(--bg)}
@@ -91,7 +102,26 @@ const PERIODS = [['yday', '어제'], ['7', '최근 7일'], ['14', '최근 14일'
 
 let brand = decodeURIComponent((location.hash || '').slice(1)) || BRANDS[0]; if (!BRANDS.includes(brand)) brand = BRANDS[0];
 let period = LS.get('perf_period') || '30'; if (!PERIODS.some(p => p[0] === period)) period = '30';
-let range = { from: LS.get('perf_from') || '', to: LS.get('perf_to') || '' };   // '기간 직접'일 때 달력에서 고른 시작일~끝일
+let range = { from: LS.get('perf_from') || '', to: LS.get('perf_to') || '' };
+let view = LS.get('perf_view') === 'camp' ? 'camp' : 'ch';   // ch=채널 보기(브랜드×채널) / camp=캠페인 보기(메타·구글·틱톡 캠페인별, mkt_perf_camp 표)
+let campQ = '';                                              // 캠페인 이름 검색
+const CAMP = { key: '', rows: [], loading: false, error: '' };
+const PF = [['meta', '메타'], ['tiktok', '틱톡'], ['google', '구글']];
+/* 캠페인 줄은 많아서(브랜드마다 하루 30~40줄) 화면이 필요한 브랜드·기간만 따로 읽음. 1,000줄씩 끊어 읽음 */
+async function loadCamp(key, b, from, to){
+  if (!store.client) { CAMP.error = '팀 저장소에 연결돼 있을 때만 볼 수 있습니다'; return; }
+  CAMP.key = key; CAMP.loading = true; CAMP.error = ''; CAMP.rows = [];
+  try {
+    let off = 0, all = [];
+    while (true) {
+      const { data, error } = await store.client.from('mkt_perf_camp').select('*').eq('brand', b).gte('date', from).lte('date', to).order('date').range(off, off + 999);
+      if (error) throw error;
+      all = all.concat(data || []); if (!data || data.length < 1000) break; off += 1000;
+    }
+    if (CAMP.key === key) CAMP.rows = all;
+  } catch (e) { CAMP.error = /does not exist|not find|schema cache/i.test(e.message || '') ? '저장소에 mkt_perf_camp 표가 없습니다 (sql-mkt-perf-camp.sql 실행 필요)' : (e.message || String(e)); }
+  CAMP.loading = false; renderApp();
+}   // '기간 직접'일 때 달력에서 고른 시작일~끝일
 
 /* 금액은 만원 단위로, 1억이 넘으면 "6억 1,751만"처럼 억을 앞에 붙임 (61,751만 처럼 쓰면 읽기 어려워서, 2026-10-18 사장님 지적) */
 const man = n => { if (n == null) return '-'; const m = Math.round(n / 10000), s = m < 0 ? '-' : '', a = Math.abs(m); return a >= 10000 ? `${s}${Math.floor(a / 10000)}억${a % 10000 ? ' ' + (a % 10000).toLocaleString('ko-KR') + '만' : ''}` : `${s}${a.toLocaleString('ko-KR')}만`; };
@@ -262,23 +292,65 @@ function tableHtml(P){
     <tr>${adCols.map(c => `<th>${c[1]}</th>`).join('')}<th class="gb">합계</th><th class="gb">자사몰</th><th>스스</th><th>쿠팡</th><th class="gb">합계</th><th class="gb">주문</th>${hasCpAd ? '<th title="쿠팡 매출(판매자배송+로켓그로스) ÷ 쿠팡광고비. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">쿠팡 ROAS</th>' : ''}<th title="매출 합계 ÷ 광고비 합계. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">전체 ROAS</th></tr></thead>
     <tbody>${rows.map(tr).join('')}${sumRow}</tbody></table></div>`;
 }
+/* 캠페인 보기: 플랫폼(메타·틱톡·구글)별로 캠페인을 광고비 순으로. 플랫폼 ROAS = 플랫폼이 추적한 구매 금액 ÷ 광고비 (광고관리자와 같은 숫자) */
+function campHtml(P){
+  const { sel, months } = P;
+  const dates = sel.map(r => r.period);
+  const from = months ? ymd(new Date(Date.now() - 29 * 86400000)) : (dates[0] || todayStr()), to = months ? todayStr() : (dates[dates.length - 1] || todayStr());
+  const key = `${brand}|${from}|${to}`;
+  if (CAMP.key !== key && !CAMP.loading) loadCamp(key, brand, from, to);
+  if (CAMP.loading || CAMP.key !== key) return `<div class="tbl camp"><div class="bar">캠페인 자료를 읽는 중…</div></div>`;
+  if (CAMP.error) return `<div class="tbl camp"><div class="bar">⚠ ${esc(CAMP.error)}</div></div>`;
+  const rows = CAMP.rows, last = rows.reduce((m, r) => r.date > m && r.date < todayStr() ? r.date : m, '') || to;   // 마지막으로 끝난 날 (보통 어제)
+  const q = campQ.trim().toLowerCase();
+  const by = {};
+  for (const r of rows) {
+    const k = r.platform + '|' + r.campaign_id;
+    const c = by[k] || (by[k] = { platform: r.platform, id: r.campaign_id, name: r.name, spend: 0, conv: 0, value: 0, last: 0, status: '', budget: 0, lastDate: '' });
+    c.spend += r.spend || 0; c.conv += Number(r.conv) || 0; c.value += r.value || 0;
+    if (r.date === last) c.last = r.spend || 0;
+    if (r.date >= c.lastDate) { c.lastDate = r.date; c.name = r.name || c.name; c.status = r.status || ''; c.budget = r.budget || 0; }
+  }
+  const totalSpend = sumBy(Object.values(by), c => c.spend) || 1;   // 비중은 검색으로 거르기 전 전체 기준
+  const all = Object.values(by).filter(c => !q || String(c.name).toLowerCase().includes(q));
+  const n = v => v ? Math.round(v).toLocaleString('ko-KR') : '-';
+  const st = s => s === '켜짐' ? '<span class="st on">켜짐</span>' : s === '꺼짐' ? '<span class="st off">꺼짐</span>' : '<span class="st">-</span>';
+  let body = '';
+  for (const [pf, pfName] of PF) {
+    const list = all.filter(c => c.platform === pf).sort((a, b) => b.spend - a.spend);
+    if (!list.length) continue;
+    const S = sumBy(list, c => c.spend), V = sumBy(list, c => c.value), C = sumBy(list, c => c.conv), L = sumBy(list, c => c.last), pfRoas = ratio(V, S);
+    body += `<tr class="pf"><td class="name">${pfName} · 캠페인 ${list.length}개</td><td></td><td></td><td>${man(S)}</td><td>${Math.round(S / totalSpend * 100)}%</td><td>${man(L)}</td><td>${n(C)}</td><td>${man(V)}</td><td>${ratioTxt(pfRoas)}</td></tr>`;
+    for (const c of list) {
+      const rt = ratio(c.value, c.spend), cls = rt == null || pfRoas == null ? '' : rt < pfRoas * 0.8 ? 'lo' : rt > pfRoas * 1.2 ? 'hi' : '';
+      body += `<tr><td class="name l" title="${esc(c.name)}">${esc(c.name || c.id)}</td><td>${st(c.status)}</td><td>${c.budget ? man(c.budget) : '-'}</td><td class="sum">${man(c.spend)}</td><td>${Math.round(c.spend / totalSpend * 100)}%<span class="share"><i style="width:${Math.min(100, c.spend / totalSpend * 100 * 2)}%"></i></span></td><td>${c.last ? man(c.last) : '-'}</td><td>${n(c.conv)}</td><td>${c.value ? man(c.value) : '-'}</td><td class="ratio ${cls}">${ratioTxt(rt)}</td></tr>`;
+    }
+  }
+  if (!body) body = `<tr><td colspan="9" class="l" style="color:var(--fg2)">이 기간에 광고비가 있는 캠페인이 없습니다${q ? ' (검색어: ' + esc(campQ) + ')' : ''}.</td></tr>`;
+  return `<div class="tbl camp"><div class="bar"><span>${fmtDate(from)} ~ ${fmtDate(to)}${months ? ' (월별 보기에서는 최근 30일)' : ''} · 광고비가 있는 캠페인만 · 쿠팡광고는 캠페인별 자료가 없어 채널 보기에만 있음</span>
+      <input id="campQ" placeholder="캠페인 이름 검색" value="${esc(campQ)}"></div>
+    <table><thead><tr><th class="l">캠페인</th><th>상태</th><th title="지금 설정된 일예산 (메타는 캠페인 예산이 없으면 켜진 광고세트 예산의 합)">일예산</th><th>기간 광고비</th><th title="이 브랜드 광고비 전체에서 차지하는 비중">비중</th><th title="마지막으로 끝난 날의 광고비">${mdLabel(last)} 광고비</th><th title="플랫폼(픽셀)이 추적한 구매 수">구매</th><th title="플랫폼이 추적한 구매 금액(결제금액)">구매 금액</th><th title="구매 금액 ÷ 광고비. 같은 플랫폼 평균보다 20% 낮으면 빨강, 높으면 초록">플랫폼 ROAS</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
 function render(){
   const P = pick();
   const upd = (DATA.mkt_perf || []).reduce((m, r) => r.updated_at > m ? r.updated_at : m, '');
   $('#app').innerHTML = headerHtml({ icon: '📈', title: '퍼포먼스 데이터', tabs: BRANDS.map(b => ({ key: b, label: b })), active: brand }) + `<main class="wrap wrap-perf">
-    <div class="ctl"><div class="seg">${PERIODS.map(p => `<button data-period="${p[0]}" class="${period === p[0] ? 'on' : ''}">${p[1]}</button>`).join('')}</div>
+    <div class="ctl"><div class="seg view"><button data-view="ch" class="${view === 'ch' ? 'on' : ''}">채널 보기</button><button data-view="camp" class="${view === 'camp' ? 'on' : ''}">캠페인 보기</button></div><div class="seg">${PERIODS.map(p => `<button data-period="${p[0]}" class="${period === p[0] ? 'on' : ''}">${p[1]}</button>`).join('')}</div>
       <span class="range ${period === 'custom' ? 'on' : ''}"><input type="date" id="rFrom" value="${esc(range.from)}" max="${todayStr()}"> ~ <input type="date" id="rTo" value="${esc(range.to)}" max="${todayStr()}"></span>
       <span class="upd">${upd ? '자료 갱신 ' + fmtDateTime(upd) + ' · 매시간 40분에 자동 반영' : ''}</span></div>
-    ${DATA.mkt_perf === undefined ? '' : sigHtml() + tilesHtml(P) + chartsHtml(P) + tableHtml(P)}
+    ${DATA.mkt_perf === undefined ? '' : sigHtml() + tilesHtml(P) + (view === 'camp' ? campHtml(P) : chartsHtml(P) + tableHtml(P))}
     <div class="foot"><b>보는 법</b> — 광고비는 메타·틱톡·구글·네이버·쿠팡 광고센터가 보고한 금액(부가세 전)이고, 매출은 결제 기준(취소 전)입니다. 쿠팡 매출은 판매자배송과 로켓그로스를 합한 값입니다. 오늘 줄은 진행 중인 값이라 점선·기울임으로 표시됩니다.<br>
-    매출 ÷ 광고비는 "광고비 1원으로 매출 몇 원을 만들었나"입니다. 쿠팡 로아스는 쿠팡 매출(판매자배송+로켓그로스)을 쿠팡광고비로만 나눈 값입니다(쿠팡 매출에는 메타·틱톡 광고를 보고 쿠팡에서 산 사람도 섞여 있어 참고치입니다). 이 숫자가 내려가거나, 매출은 빠지는데 광고비는 그대로면 그 채널을 들여다볼 때입니다. 광고 소재·예산은 <a href="ads.html">광고 영상 리스트</a>, 아이템위너·품절 같은 상품 상태는 담당자가 각 판매처에서 확인합니다.</div>
+    매출 ÷ 광고비는 "광고비 1원으로 매출 몇 원을 만들었나"입니다. 캠페인 보기의 플랫폼 ROAS는 메타·틱톡·구글이 픽셀로 추적한 구매 금액 ÷ 광고비라 광고관리자 숫자와 같고, 실제 매출과는 다릅니다(쿠팡·스스 구매는 거의 안 잡힘). 쿠팡 로아스는 쿠팡 매출(판매자배송+로켓그로스)을 쿠팡광고비로만 나눈 값입니다(쿠팡 매출에는 메타·틱톡 광고를 보고 쿠팡에서 산 사람도 섞여 있어 참고치입니다). 이 숫자가 내려가거나, 매출은 빠지는데 광고비는 그대로면 그 채널을 들여다볼 때입니다. 광고 소재·예산은 <a href="ads.html">광고 영상 리스트</a>, 아이템위너·품절 같은 상품 상태는 담당자가 각 판매처에서 확인합니다.</div>
   </main>`;
   bindHeader(b => { brand = b; location.hash = encodeURIComponent(b); renderApp(); }, null, null);
+  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; LS.set('perf_view', view); renderApp(); });
+  const cq = $('#campQ'); if (cq) { cq.oninput = () => { campQ = cq.value; const tb = document.querySelector('.camp'); if (tb) { const html = campHtml(P); const d = document.createElement('div'); d.innerHTML = html; tb.querySelector('table').outerHTML = d.querySelector('table').outerHTML; } }; }
   document.querySelectorAll('[data-period]').forEach(b => b.onclick = () => { period = b.dataset.period; LS.set('perf_period', period); if (period === 'custom' && !range.from) { setTimeout(() => $('#rFrom') && $('#rFrom').showPicker && $('#rFrom').showPicker(), 0); } renderApp(); });
   /* 달력에서 날짜를 고르면 '기간 직접'으로 바뀜. 시작일이 끝일보다 뒤면 서로 바꿈 */
   const onRange = () => { let f = $('#rFrom').value, e = $('#rTo').value; if (f && e && f > e) [f, e] = [e, f]; range = { from: f, to: e }; LS.set('perf_from', f); LS.set('perf_to', e); period = 'custom'; LS.set('perf_period', period); renderApp(); };
   $('#rFrom').onchange = onRange; $('#rTo').onchange = onRange;
-  bindTips(P);
+  if (view !== 'camp') bindTips(P);
 }
 /* 막대 위에 마우스를 올리면 그 날의 채널별 값 */
 function bindTips(P){
