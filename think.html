@@ -637,7 +637,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-18 12:00";
+    const BUILD = "2026-10-18 19:00";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1440,10 +1440,16 @@
           key: "notes", trashKey: "notesTrash", width: 444, compact: true
         });
       }
-      if (!list.length) {
+      if (!list.length) {   // 처음 들어온 사람: 주제형 탭 하나 + 메모장형 탭 하나를 켜 둠 (2026-10-18, 둘 다 보여야 쓰기 쉬움)
         list.push({
           id: "dig", title: "주제",
           key: "dig", trashKey: "digTrash", width: DEFAULT_W, compact: false
+        });
+        const mid = newId();
+        list.push({
+          id: mid, title: "메모장",
+          key: "board_" + mid, trashKey: "board_" + mid + "_trash",
+          width: DEFAULT_W, compact: false, kind: "memo"
         });
       }
       storeSet(BOARDS_KEY, JSON.stringify(list));
