@@ -118,7 +118,8 @@ const ADDR_DEFAULT = { companies: [
     { label: '단상자 표기 주소', address: '서초구 형촌3길 20, A83호', until: '2026-11-30', memo: '' } ] } ] };
 const addrSetting = () => (DATA.settings || []).find(x => x.id === ADDR_ID);
 const addrData = () => { const v = addrSetting() && addrSetting().value; return v && Array.isArray(v.companies) && v.companies.length ? v : ADDR_DEFAULT; };
-const ADDR_TAB = DEPT === '총무';
+const ADDR_MODE = new URLSearchParams(location.search).get('tab') === 'addr';   // 홈 > 계정관리 > '사업자주소지 관리' 단추로 들어오면 이 화면만 따로 보임 (운영계정 탭 줄에는 안 나옴)
+if (ADDR_MODE) document.title = '사업자주소지 관리';
 /* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
 const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9', '기타': 'c9' };
 const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
@@ -127,7 +128,7 @@ const VIS = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only)
 const ALL = () => VIS().filter(a => !a.unused);   // 지금 쓰는 계정 (전체·구분 탭)
 const OFF = () => VIS().filter(a => a.unused);    // 사용안함으로 빼 둔 계정 ('사용안함' 탭에만 보임, 원래 구분은 그대로 남음)
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
-let view = new URLSearchParams(location.search).get('tab') === 'addr' ? 'addr' : 'all';   // 열 때마다 항상 '전체' 탭부터 (?tab=addr 로 오면 사업자주소지 탭)
+let view = ADDR_MODE ? 'addr' : 'all';   // 열 때마다 항상 '전체' 탭부터
 let q = '';
 let shown = {};
 let sort = { key: 'group_name', dir: 'asc' };   // 처음 열면 구분 순서로 정렬
@@ -145,16 +146,16 @@ function normalize(table, a){ if (table !== 'accounts') return a; return { ...a,
 /* ---------- 화면 ---------- */
 function render(){
   if (view === 'subs') view = 'all';
-  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g })), ...(ADDR_TAB ? [{ key: 'addr', label: '🏢 사업자주소지' }] : []), null, { key: 'off', label: '사용안함' + (OFF().length ? ` ${OFF().length}` : '') }];   // 운영계정의 '기타' 탭은 비어 있어도 항상 구분 맨 뒤에, '사용안함'은 따로 맨 끝
+  if (ADDR_MODE) { view = 'addr'; $('#app').innerHTML = headerHtml({ icon: '🏢', title: '사업자주소지 관리', tabs: [], extra: '<a class="btn sm" href="accounts.html">🔐 운영계정 →</a>' }) + `<main class="wrap wrap-wide">${addrHtml()}</main>`; bindHeader(() => {}); const br = document.querySelector('.brand.page'); if (br) br.href = 'accounts.html?tab=addr'; bindAddr(); return; }   // 제목(새로고침) 링크도 이 화면으로
+  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g })), null, { key: 'off', label: '사용안함' + (OFF().length ? ` ${OFF().length}` : '') }];   // 운영계정의 '기타' 탭은 비어 있어도 항상 구분 맨 뒤에, '사용안함'은 따로 맨 끝
   if (!tabs.some(t => t && t.key === view)) view = 'all';
   $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
-    + `<main class="wrap wrap-wide">${view === 'addr' ? addrHtml() : !DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
+    + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
       <input type="search" id="fq" placeholder="검색 (서비스, 아이디, ${PURPOSE_LABEL}${DEPT === '마케팅' ? ', 사업자' : ''}, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
       <span class="count" id="cnt"></span></div><div id="view">${tableHtml()}</div>`}</main>`;
   bindHeader(k => { view = k; LS.set('acc_view_' + DEPT, k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null, view.startsWith('g:') ? { group_name: view.slice(2) } : {});
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; renderView(); };
-  if (view === 'addr') { bindAddr(); return; }
   bindView();
 }
 /* ---------- 사업자주소지 탭 ---------- */
@@ -316,7 +317,7 @@ function openEdit(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tables: ['accounts', 'settings'], render, normalize, open: id => openEdit(id) });   // settings: 사업자주소지 탭 저장분   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
+boot({ icon: ADDR_MODE ? '🏢' : '🔐', title: ADDR_MODE ? '사업자주소지 관리' : DEPT === '마케팅' ? '마케팅계정' : '운영계정', tables: ['accounts', 'settings'], render, normalize, open: id => openEdit(id) });   // settings: 사업자주소지 탭 저장분   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>
