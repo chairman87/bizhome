@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>생각 정리</title>
+  <title>메모장</title>
   <link rel="icon" href="favicon-think.svg?v=2">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -245,6 +245,13 @@
     }
     .add-board:hover { background: #c96442; color: #fff; }
     .topbar-left { display: flex; align-items: center; gap: 8px; position: relative; }
+    /* 왼쪽 위 세 탭: 비즈홈(common.css 의 .sw/.swt)과 같은 모양 */
+    .sw { display: flex; gap: 2px; background: #e9e7e1; border-radius: 10px; padding: 3px; flex: none; margin-right: 6px; }
+    .swt { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 8px; font-size: 15px; font-weight: 700; color: #666; text-decoration: none; white-space: nowrap; }
+    .swt:hover { color: #222; }
+    .swt.on { background: #fff; color: #222; box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+    .swt .logo-sm { width: 20px; height: 20px; border-radius: 6px; }
+    @media (max-width: 700px) { .swt { padding: 4px 9px; font-size: 14px; } }
 
     /* ── 위쪽 탭 띠: 모든 탭 이름이 늘어서고, 누른 탭만 아래에 펼쳐집니다 ── */
     .tab-strip { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
@@ -589,7 +596,7 @@
   <!-- 로그인 화면: 비즈홈과 같은 방식 (이름 고르고 비밀번호) -->
   <div class="gate" id="gate">
     <div class="gate-box">
-      <h1>생각 정리</h1>
+      <h1>메모장</h1>
       <div class="hint">비즈홈에 로그인되어 있으면 바로 열립니다. 아니면 비즈홈과 같은 이름·비밀번호로 들어갑니다. 사람마다 자기 내용만 보입니다. <span style="color:#ccc">(판 <span id="buildStamp"></span>)</span></div>
       <div class="names" id="gateNames"><span class="gate-loading">팀원 목록을 불러오는 중…</span></div>
       <div class="pwrow" id="gatePwRow" hidden>
@@ -602,6 +609,7 @@
 
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
+      <nav class="sw" title="인트라넷·프로젝트·메모장 사이를 오갑니다"><a class="swt" href="index.html"><img src="favicon.svg" class="logo-sm" alt="">인트라넷</a><a class="swt" href="projects.html">🗂️ 프로젝트</a><a class="swt on" href="think.html">📝 메모장</a></nav>
       <button id="addTopic" class="add-board" title="주제형 탭 새로 만들기">+ 주제</button>
       <button id="addMemo" class="add-board" title="메모장형 탭 새로 만들기">+ 메모장</button>
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
@@ -1007,7 +1015,7 @@
 
     // 앱이 어디까지 갔는지 브라우저 콘솔(F12)에 남깁니다
     function dbg(stepName, info) {
-      try { console.log("[생각 정리] " + stepName, info === undefined ? "" : info); } catch (e) {}
+      try { console.log("[메모장] " + stepName, info === undefined ? "" : info); } catch (e) {}
     }
     // 어디까지 갔는지 화면에 그대로 적습니다. 문제가 생기면 이 줄만 보면 압니다.
     function step(t) {
@@ -1130,7 +1138,7 @@
 
     // ── 비즈홈 로그인 이어받기 (2026-10-18) ──
     // 비즈홈(index.html)에 로그인하면 같은 주소의 localStorage 에 이름(bizhome_me)이 남습니다. 그 사람이 이 기기에 출입증이 없으면
-    // 비밀번호를 다시 묻지 않고, 팀원 표의 비밀번호로 think_login 을 대신 불러 출입증을 받습니다(비즈홈 로그인 = 생각 정리 로그인).
+    // 비밀번호를 다시 묻지 않고, 팀원 표의 비밀번호로 think_login 을 대신 불러 출입증을 받습니다(비즈홈 로그인 = 메모장 로그인).
     // 팀원 표의 비밀번호는 비즈홈 자체가 공개키로 읽어 맞히는 값이라, 여기서 읽어도 새로 열리는 것은 없습니다.
     // 돌아오는 값: 들어갈 사람 {id, name} 또는 null(비즈홈 로그인 없음·실패)
     async function autoFromBizhome() {
@@ -1311,7 +1319,7 @@
       const stamp = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
                   + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
       const L = [];
-      L.push("생각 정리  (추출: " + stamp + ")");
+      L.push("메모장  (추출: " + stamp + ")");
       L.push("");
 
       const all = loadBoards();
@@ -1390,7 +1398,7 @@
 
     // 전체 추출: 모든 탭
     function exportText() {
-      downloadText("생각_정리_" + dateTag() + ".txt", buildExportText());
+      downloadText("메모장_" + dateTag() + ".txt", buildExportText());
     }
 
     // 주제 하나만 추출: 제목 + 내용
@@ -1422,7 +1430,7 @@
       const list = [];
       if (storeGet("dig") !== null) {
         list.push({
-          id: "dig", title: storeGet("digTitle") || "생각 정리",
+          id: "dig", title: storeGet("digTitle") || "주제",
           key: "dig", trashKey: "digTrash", width: 832, compact: false
         });
       }
@@ -1434,7 +1442,7 @@
       }
       if (!list.length) {
         list.push({
-          id: "dig", title: "생각 정리",
+          id: "dig", title: "주제",
           key: "dig", trashKey: "digTrash", width: DEFAULT_W, compact: false
         });
       }

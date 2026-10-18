@@ -584,11 +584,12 @@ function openMembers(counter){
 
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
-  const page = location.pathname.split('/').pop() || 'index.html';   // 왼쪽 위 두 탭: 인트라넷(홈과 그 안의 화면들) / 프로젝트(채널 화면)
+  const page = location.pathname.split('/').pop() || 'index.html';   // 왼쪽 위 세 탭: 인트라넷(홈과 그 안의 화면들) / 프로젝트(채널 화면) / 메모장(think.html, 2026-10-18 추가. 그 화면은 common.js 를 안 쓰고 같은 모양의 탭을 직접 그림)
   return `${isAdmin() ? warnHtml() : ''}<header class="top">
     <nav class="sw" title="인트라넷과 프로젝트 사이를 오갑니다">
       <a class="swt ${page === 'projects.html' ? '' : 'on'}" href="index.html">${BRAND_LOGO}${esc(BRAND.name)}</a>
       <a class="swt ${page === 'projects.html' ? 'on' : ''}" href="projects.html">🗂️ 프로젝트${page !== 'projects.html' && projUnread() ? `<span class="badge" id="pnBadge" title="새 글이 있는 채널 수">${projUnread()}</span>` : ''}</a>
+      <a class="swt" href="think.html" title="고민·생각을 적는 개인 메모장 (사람마다 자기 것만 보임)">📝 메모장</a>
     </nav>
     ${title === BRAND.name || page === 'projects.html' ? '<span class="swsp"></span>' : `<a class="brand page" href="${esc(page)}" title="누르면 새로고침">${esc(icon || '')} ${esc(title)}</a>`}
     <nav class="tabs">${tabs.map(t => t ? `<button class="tab ${active === t.key ? 'on' : ''}" data-view="${t.key}">${esc(t.label)}${t.badge ? `<span class="badge" ${t.badgeTitle ? `title="${esc(t.badgeTitle)}"` : ''}>${t.badge}</span>` : ''}</button>` : '<span class="sep"></span>').join('')}</nav>
