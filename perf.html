@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>퍼포먼스 데이터</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610182155">
-<script src="common.js?v=202610182155"></script>
+<link rel="stylesheet" href="common.css?v=202610182200">
+<script src="common.js?v=202610182200"></script>
 <style>
   .wrap-perf{max-width:1180px}
   .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
@@ -28,9 +28,8 @@
   .sig li.crit{background:#fff1f1;border-radius:6px} .sig li.crit b.k{color:#b91c1c}
   .sig li.warn b.k{color:#9a3b00} .sig li.good b.k{color:#166534}
   .sig .none{color:var(--fg2);font-size:14px}
-  .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
   @media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
-  .tile.cp{border-color:#f3c3a8;background:#fff8f4}
   .tile{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
   .tile .l{font-size:12px;color:var(--fg2)}
   .tile .v{font-size:22px;font-weight:700;margin:3px 0 2px;letter-spacing:-.01em}
@@ -187,14 +186,11 @@ function tilesHtml(P){
   };
   const fS = sumBy(full, r => r.sales), fA = sumBy(full, r => r.ads), fO = sumBy(full, r => r.orders), pS = sumBy(prev, r => r.sales), pA = sumBy(prev, r => r.ads), pO = sumBy(prev, r => r.orders);
   const hasPart = sel.some(r => r.partial);
-  const cpAdOf = rows => sumBy(rows, r => adv(r, 'coupang_ad'));
-  const cpS = sumBy(sel, cpOf), cpA = cpAdOf(sel), fcpS = sumBy(full, cpOf), fcpA = cpAdOf(full), pcpS = sumBy(prev, cpOf), pcpA = cpAdOf(prev);   // 쿠팡 로아스 (2026-10-18 사장님 요청)
   return `<div class="tiles">
     <div class="tile"><div class="l">광고비 합계${hasPart ? ' (오늘 포함)' : ''}</div><div class="v">${man(A)}<small>원</small></div><div class="d">${cmp(fA, pA, true)}</div></div>
     <div class="tile"><div class="l">매출 합계${hasPart ? ' (오늘 포함)' : ''}</div><div class="v">${man(S)}<small>원</small></div><div class="d">${cmp(fS, pS)}</div></div>
     <div class="tile"><div class="l">매출 ÷ 광고비</div><div class="v">${ratioTxt(ratio(S, A))}</div><div class="d">${cmp(ratio(fS, fA), ratio(pS, pA))}</div></div>
     <div class="tile"><div class="l">주문 수</div><div class="v">${O.toLocaleString('ko-KR')}<small>건</small></div><div class="d">${cmp(fO, pO)}</div></div>
-    <div class="tile cp"><div class="l">쿠팡 로아스 <span title="쿠팡 매출(판매자배송+로켓그로스) ÷ 쿠팡광고비">ⓘ</span></div><div class="v">${cpA > 0 ? ratioTxt(ratio(cpS, cpA)) : '-'}</div><div class="d">${cpA > 0 ? cmp(ratio(fcpS, fcpA), ratio(pcpS, pcpA)) : '쿠팡광고 없음'}</div></div>
   </div>`;
 }
 function sigHtml(){
@@ -257,13 +253,13 @@ function tableHtml(P){
       ${adCols.map(c => c[0] === 'coupang_ad' && r.flags && r.flags.coupang_ad_tmp ? `<td class="tmp" title="쿠팡 광고센터에 아직 이 날 값이 안 떠서 전날 값으로 임시로 넣음. 오전 9시 뒤 실제 값으로 바뀜">~${man(adv(r, c[0]))}</td>` : cell(adv(r, c[0]))).join('')}
       ${cell(r.ads, 'sum gb')}
       ${cell(r.cf_s, 'gb')}${cell(r.nv_s)}${cell(cpOf(r))}${cell(r.sales, 'sum gb')}
-      <td class="gb">${r.orders ? r.orders.toLocaleString('ko-KR') : '-'}</td><td class="ratio ${rcls}">${ratioTxt(rt)}</td>${hasCpAd ? `<td class="ratio ${cpcls}">${adv(r, 'coupang_ad') > 0 ? ratioTxt(ratio(cpOf(r), adv(r, 'coupang_ad'))) : '-'}</td>` : ''}</tr>`;
+      <td class="gb">${r.orders ? r.orders.toLocaleString('ko-KR') : '-'}</td>${hasCpAd ? `<td class="ratio ${cpcls}">${adv(r, 'coupang_ad') > 0 ? ratioTxt(ratio(cpOf(r), adv(r, 'coupang_ad'))) : '-'}</td>` : ''}<td class="ratio ${rcls}">${ratioTxt(rt)}</td></tr>`;
   };
   const S = sumBy(sel, r => r.sales), A = sumBy(sel, r => r.ads);
-  const sumRow = `<tr style="background:var(--bg2);font-weight:600"><td class="l">합계 (${sel.length}${months ? '개월' : '일'})</td>${adCols.map(c => cell(sumBy(sel, r => adv(r, c[0])))).join('')}${cell(A, 'sum gb')}${cell(sumBy(sel, r => r.cf_s), 'gb')}${cell(sumBy(sel, r => r.nv_s))}${cell(sumBy(sel, cpOf))}${cell(S, 'sum gb')}<td class="gb">${sumBy(sel, r => r.orders).toLocaleString('ko-KR')}</td><td>${ratioTxt(ratio(S, A))}</td>${hasCpAd ? `<td>${ratioTxt(avgCp)}</td>` : ''}</tr>`;
+  const sumRow = `<tr style="background:var(--bg2);font-weight:600"><td class="l">합계 (${sel.length}${months ? '개월' : '일'})</td>${adCols.map(c => cell(sumBy(sel, r => adv(r, c[0])))).join('')}${cell(A, 'sum gb')}${cell(sumBy(sel, r => r.cf_s), 'gb')}${cell(sumBy(sel, r => r.nv_s))}${cell(sumBy(sel, cpOf))}${cell(S, 'sum gb')}<td class="gb">${sumBy(sel, r => r.orders).toLocaleString('ko-KR')}</td>${hasCpAd ? `<td>${ratioTxt(avgCp)}</td>` : ''}<td>${ratioTxt(ratio(S, A))}</td></tr>`;
   return `<div class="tbl"><table>
     <thead><tr><th class="l" rowspan="2">${months ? '월' : '날짜'}</th><th class="grp" colspan="${adCols.length + 1}">광고비 (플랫폼 보고 금액)</th><th class="grp" colspan="4">매출</th><th class="grp" colspan="${hasCpAd ? 3 : 2}"></th></tr>
-    <tr>${adCols.map(c => `<th>${c[1]}</th>`).join('')}<th class="gb">합계</th><th class="gb">자사몰</th><th>스스</th><th>쿠팡</th><th class="gb">합계</th><th class="gb">주문</th><th title="매출 ÷ 광고비. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">매출÷광고비</th>${hasCpAd ? '<th title="쿠팡 매출(판매자배송+로켓그로스) ÷ 쿠팡광고비. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">쿠팡 로아스</th>' : ''}</tr></thead>
+    <tr>${adCols.map(c => `<th>${c[1]}</th>`).join('')}<th class="gb">합계</th><th class="gb">자사몰</th><th>스스</th><th>쿠팡</th><th class="gb">합계</th><th class="gb">주문</th>${hasCpAd ? '<th title="쿠팡 매출(판매자배송+로켓그로스) ÷ 쿠팡광고비. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">쿠팡 ROAS</th>' : ''}<th title="매출 합계 ÷ 광고비 합계. 기간 평균보다 20% 낮으면 빨강, 높으면 초록">전체 ROAS</th></tr></thead>
     <tbody>${rows.map(tr).join('')}${sumRow}</tbody></table></div>`;
 }
 function render(){
