@@ -57,6 +57,26 @@
   table.acc td.act{text-align:right}
   table.acc td.act .btn{padding:2px 6px;font-size:12px}
   table.acc td.act .btn + .btn{margin-left:4px}
+  /* 사업자주소지 탭 */
+  .addr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:14px}
+  .addr-card .note{padding:8px 12px;font-size:13px;color:#9a3412;background:#fff7ed;border-bottom:1px solid var(--line)}
+  .addr-card table{width:100%;border-collapse:collapse}
+  .addr-card th{font-size:12px;color:var(--fg2);font-weight:600;text-align:left;padding:7px 10px;background:var(--bg2);border-bottom:1px solid var(--line);white-space:nowrap}
+  .addr-card td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
+  .addr-card tr:last-child td{border-bottom:0}
+  .addr-card td.lbl{white-space:nowrap;font-weight:600;color:var(--fg2);width:1%}
+  .addr-card td.adr{font-size:14px}
+  .addr-card td.adr .ib{margin-left:4px;vertical-align:middle}
+  .addr-card td.unt{white-space:nowrap;width:1%}
+  .addr-card td.mm{font-size:12px;color:var(--fg2)}
+  .addr-note{margin:0 0 12px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);font-size:13px;color:#92400e}
+  .addr-rows{display:grid;gap:8px}
+  .addr-row{display:grid;grid-template-columns:150px 1fr 130px 1fr 32px;gap:6px;align-items:center}
+  .addr-row input{border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;width:100%;background:var(--bg)}
+  .addr-row .x{border:0;background:none;color:var(--fg3);cursor:pointer;font-size:16px}
+  .addr-row .x:hover{color:var(--red)}
+  .addr-rowh{display:grid;grid-template-columns:150px 1fr 130px 1fr 32px;gap:6px;font-size:12px;color:var(--fg2)}
+  @media (max-width:700px){ .addr-rowh{display:none} .addr-row{grid-template-columns:1fr 1fr;padding-bottom:8px;border-bottom:1px dashed var(--line)} }   /* 휴대폰: 한 줄을 두 칸씩 접어서 보여줌 */
 </style>
 </head>
 <body>
@@ -80,6 +100,25 @@ const COMPANIES = ['식이해법연구소', '피에이치뷰티', '공용'];   /
 const COMP_CLS = { '식이해법연구소': 'c1', '피에이치뷰티': 'c3', '공용': 'c9' };
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
+/* 사업자주소지 탭(총무 > 운영계정에만): 사업자별로 사업자등록증·홈페이지·식품영업신고지·단상자에 적힌 주소와 기한을 한눈에.
+   저장은 팀 공용 settings 표 id 'biz_addresses' 한 줄 (value = { companies:[{ name, note, items:[{ label, address, until, memo }] }] }).
+   아직 저장한 적이 없으면 아래 ADDR_DEFAULT(2026-10-18 기준)가 보이고, 처음 '수정 → 저장'할 때 settings 에 들어감 */
+const ADDR_ID = 'biz_addresses';
+const ADDR_LABELS = ['사업자등록증 주소지', '홈페이지 표기 주소지', '식품영업신고지 주소', '단상자 표기 주소'];
+const ADDR_DEFAULT = { companies: [
+  { name: '식이해법', note: '', items: [
+    { label: '사업자등록증 주소지', address: '서초구 형촌3길 20, A27호', until: '2026-11-30', memo: '' },
+    { label: '홈페이지 표기 주소지', address: '서초구 형촌3길 20, A27호', until: '2026-11-30', memo: '' },
+    { label: '식품영업신고지 주소', address: '서울시 강남구 봉은사로16길 14, B1층 145호', until: '', memo: '' },
+    { label: '단상자 표기 주소', address: '서초구 형촌3길 20, A27호', until: '', memo: '' } ] },
+  { name: '피에이치뷰티', note: '신고 들어오면, 그때 카페24 강남주소지로 변경', items: [
+    { label: '사업자등록증 주소지', address: '서초구 사평대로53길30, 515', until: '', memo: '' },
+    { label: '홈페이지 표기 주소지', address: '서초구 사평대로53길30, 515', until: '', memo: '' },
+    { label: '식품영업신고지 주소', address: '서초구 형촌3길 20, A83호', until: '2026-11-30', memo: '' },
+    { label: '단상자 표기 주소', address: '서초구 형촌3길 20, A83호', until: '2026-11-30', memo: '' } ] } ] };
+const addrSetting = () => (DATA.settings || []).find(x => x.id === ADDR_ID);
+const addrData = () => { const v = addrSetting() && addrSetting().value; return v && Array.isArray(v.companies) && v.companies.length ? v : ADDR_DEFAULT; };
+const ADDR_TAB = DEPT === '총무';
 /* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
 const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9', '기타': 'c9' };
 const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
@@ -88,7 +127,7 @@ const VIS = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only)
 const ALL = () => VIS().filter(a => !a.unused);   // 지금 쓰는 계정 (전체·구분 탭)
 const OFF = () => VIS().filter(a => a.unused);    // 사용안함으로 빼 둔 계정 ('사용안함' 탭에만 보임, 원래 구분은 그대로 남음)
 const groups = () => { const g = [...new Set(ALL().map(a => a.group_name).filter(Boolean))]; return g.sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ko')); };
-let view = 'all';   // 열 때마다 항상 '전체' 탭부터
+let view = new URLSearchParams(location.search).get('tab') === 'addr' ? 'addr' : 'all';   // 열 때마다 항상 '전체' 탭부터 (?tab=addr 로 오면 사업자주소지 탭)
 let q = '';
 let shown = {};
 let sort = { key: 'group_name', dir: 'asc' };   // 처음 열면 구분 순서로 정렬
@@ -101,21 +140,72 @@ function expHtml(d){ if (!d) return '<span class="hint">-</span>'; const n = day
 const feeHtml = a => Number(a.fee) > 0 ? `${won(a.fee)}${a.cycle && a.cycle !== '없음' ? '/' + a.cycle : ''}` : (a.cycle === '없음' && a.fee === 0 ? '무료' : '');
 const siteHtml = u => u ? `<a class="site" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" data-link>${esc(u.replace(/^https?:\/\//i, '').replace(/\/$/, ''))}</a>` : '';
 const pwHtml = a => `<span class="pw"><span class="v mono">${a.password ? (shown[a.id] ? esc(a.password) : '••••••••') : '<span class="hint">-</span>'}</span>${a.password ? `<button class="ib" data-eye="${a.id}">${shown[a.id] ? '🙈' : '👁'}</button><button class="ib" data-copy="${esc(a.password)}">복사</button>` : ''}</span>`;
-function normalize(table, a){ return { ...a, admin_only: !!a.admin_only, unused: !!a.unused, cycle: CYCLES.includes(a.cycle) ? a.cycle : (Number(a.fee) > 0 ? '월' : '없음') }; }
+function normalize(table, a){ if (table !== 'accounts') return a; return { ...a, admin_only: !!a.admin_only, unused: !!a.unused, cycle: CYCLES.includes(a.cycle) ? a.cycle : (Number(a.fee) > 0 ? '월' : '없음') }; }
 
 /* ---------- 화면 ---------- */
 function render(){
   if (view === 'subs') view = 'all';
-  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g })), null, { key: 'off', label: '사용안함' + (OFF().length ? ` ${OFF().length}` : '') }];   // 운영계정의 '기타' 탭은 비어 있어도 항상 구분 맨 뒤에, '사용안함'은 따로 맨 끝
+  const tabs = [{ key: 'all', label: '전체' }, ...(DEPT === '마케팅' ? groups() : [...groups().filter(g => g !== ETC), ETC]).map(g => ({ key: 'g:' + g, label: g })), ...(ADDR_TAB ? [{ key: 'addr', label: '🏢 사업자주소지' }] : []), null, { key: 'off', label: '사용안함' + (OFF().length ? ` ${OFF().length}` : '') }];   // 운영계정의 '기타' 탭은 비어 있어도 항상 구분 맨 뒤에, '사용안함'은 따로 맨 끝
   if (!tabs.some(t => t && t.key === view)) view = 'all';
   $('#app').innerHTML = headerHtml({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tabs, active: view })
-    + `<main class="wrap wrap-wide">${!DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
+    + `<main class="wrap wrap-wide">${view === 'addr' ? addrHtml() : !DATA.accounts ? `<div class="empty">계정 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : statsHtml() + `<div class="actions"><button class="btn primary" id="newBtn2">＋ 계정 추가</button>
       <input type="search" id="fq" placeholder="검색 (서비스, 아이디, ${PURPOSE_LABEL}${DEPT === '마케팅' ? ', 사업자' : ''}, 담당자, 비고)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
       <span class="count" id="cnt"></span></div><div id="view">${tableHtml()}</div>`}</main>`;
   bindHeader(k => { view = k; LS.set('acc_view_' + DEPT, k); render(); }, null, m => `담당 ${ALL().filter(a => a.owner === m.name).length}개`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null, view.startsWith('g:') ? { group_name: view.slice(2) } : {});
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; renderView(); };
+  if (view === 'addr') { bindAddr(); return; }
   bindView();
+}
+/* ---------- 사업자주소지 탭 ---------- */
+const addrUntil = u => { if (!u) return '<span class="hint">-</span>'; const n = dayDiff(u); const cls = n < 0 ? 'over' : n <= 45 ? 'soon' : ''; return `<span class="exp ${cls}">${fmtDate(u)} 까지${n != null ? (n < 0 ? ` (${-n}일 지남)` : ` (D-${n})`) : ''}</span>`; };
+function addrHtml(){
+  const d = addrData(), st = addrSetting();
+  const soon = d.companies.flatMap(c => c.items.filter(i => i.until).map(i => ({ c: c.name, ...i }))).sort((a, b) => a.until.localeCompare(b.until));
+  const first = soon[0];
+  return `<div class="actions"><span class="hint">사업자등록증 · 홈페이지 · 식품영업신고 · 단상자에 적힌 주소가 서로 같은지, 언제까지 쓸 수 있는지 한눈에 봅니다. 주소를 바꾸면 네 곳을 모두 맞춰야 합니다.</span></div>
+    ${first ? `<div class="addr-note">⏰ 가장 먼저 끝나는 기한: <b>${fmtDate(first.until)}</b> ${(() => { const n = dayDiff(first.until); return n < 0 ? `(${-n}일 지남)` : `(D-${n})`; })()} — ${soon.filter(i => i.until === first.until).map(i => `${i.c} ${i.label}`).join(', ')}</div>` : ''}
+    <div class="addr-grid">${d.companies.map((c, ci) => `<div class="card addr-card">
+      <h3>🏢 ${esc(c.name)}<span class="stat"><button class="btn sm" data-addr-edit="${ci}">✏️ 수정</button></span></h3>
+      ${c.note ? `<div class="note">📌 ${esc(c.note)}</div>` : ''}
+      <table><thead><tr><th>항목</th><th>주소</th><th>기한</th><th>메모</th></tr></thead><tbody>
+        ${c.items.map(i => `<tr><td class="lbl">${esc(i.label)}</td><td class="adr">${esc(i.address || '')}${i.address ? `<button class="ib" data-copy="${esc(i.address)}">복사</button>` : ''}</td><td class="unt">${addrUntil(i.until)}</td><td class="mm">${esc(i.memo || '')}</td></tr>`).join('')}
+      </tbody></table></div>`).join('')}</div>
+    <div class="hint" style="margin-top:10px">${st ? `마지막 수정: ${esc(st.updated_by || '')} ${fmtDateTime(st.updated_at)}` : '아직 저장된 적이 없어 2026-10-18 기준 기본값이 보입니다. 수정 → 저장하면 팀 공용으로 저장됩니다.'}</div>`;
+}
+function bindAddr(){
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(b.dataset.copy); toast('복사했습니다'); } catch { toast('복사할 수 없습니다. 직접 선택해서 복사하세요', true); } });
+  document.querySelectorAll('[data-addr-edit]').forEach(b => b.onclick = () => openAddrEdit(Number(b.dataset.addrEdit)));
+}
+/* 사업자 하나의 주소 네 줄 + 메모를 고치는 창. 줄을 더하거나 뺄 수도 있음 */
+function openAddrEdit(ci){
+  const d = JSON.parse(JSON.stringify(addrData()));
+  const c = d.companies[ci]; if (!c) return;
+  const rowHtml = (i = {}) => `<div class="addr-row"><input class="rl" value="${esc(i.label || '')}" placeholder="항목 (예: 사업자등록증 주소지)" list="addrLabels"><input class="ra" value="${esc(i.address || '')}" placeholder="주소"><input class="ru" type="date" value="${esc(i.until || '')}" title="이 주소를 언제까지 쓸 수 있는지 (없으면 비움)"><input class="rm" value="${esc(i.memo || '')}" placeholder="메모"><button type="button" class="x" title="이 줄 빼기">×</button></div>`;
+  openModal(`${modalHead(`${c.name} 사업자주소지`)}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>사업자 이름</label><input id="adName" value="${esc(c.name)}" maxlength="30"></div>
+        <div class="f"><label>메모 (카드 위에 크게 보임)</label><input id="adNote" value="${esc(c.note || '')}" placeholder="예: 신고 들어오면 그때 카페24 강남주소지로 변경"></div>
+      </div>
+      <div class="sec">주소</div>
+      <div class="addr-rowh"><span>항목</span><span>주소</span><span>기한 (까지)</span><span>메모</span><span></span></div>
+      <div class="addr-rows" id="adRows">${c.items.map(rowHtml).join('')}</div>
+      <datalist id="addrLabels">${ADDR_LABELS.map(l => `<option value="${esc(l)}">`).join('')}</datalist>
+      <div><button type="button" class="btn sm" id="adAdd">＋ 줄 추가</button></div>
+      <div class="hint">기한은 그 주소를 더 쓸 수 없게 되는 날(예: 임대 만료 11/30)입니다. 45일 안이면 주황, 지나면 빨강으로 보입니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="adSave">저장</button></div>`, { wide: true });
+  const rows = $('#adRows');
+  const bindX = () => rows.querySelectorAll('.x').forEach(x => x.onclick = () => { if (rows.children.length <= 1) { toast('줄이 하나는 있어야 합니다', true); return; } x.closest('.addr-row').remove(); });
+  bindX();
+  $('#adAdd').onclick = () => { rows.insertAdjacentHTML('beforeend', rowHtml()); bindX(); rows.lastElementChild.querySelector('.rl').focus(); };
+  $('#adSave').onclick = async () => {
+    const name = $('#adName').value.trim(); if (!name) { $('#adName').focus(); toast('사업자 이름을 입력하세요', true); return; }
+    const items = [...rows.querySelectorAll('.addr-row')].map(r => ({ label: r.querySelector('.rl').value.trim(), address: r.querySelector('.ra').value.trim(), until: r.querySelector('.ru').value || '', memo: r.querySelector('.rm').value.trim() })).filter(i => i.label || i.address);
+    d.companies[ci] = { name, note: $('#adNote').value.trim(), items };
+    closeModal(); await saveRow('settings', { id: ADDR_ID, value: d, updated_by: me }); toast('사업자주소지를 저장했습니다');
+  };
 }
 function listOf(){
   const base = view === 'off' ? OFF() : view.startsWith('g:') ? ALL().filter(a => a.group_name === view.slice(2)) : ALL();
@@ -226,7 +316,7 @@ function openEdit(id, preset = {}){
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
 }
 
-boot({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tables: ['accounts'], render, normalize, open: id => openEdit(id) });   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
+boot({ icon: '🔐', title: DEPT === '마케팅' ? '마케팅계정' : '운영계정', tables: ['accounts', 'settings'], render, normalize, open: id => openEdit(id) });   // settings: 사업자주소지 탭 저장분   // open: 홈 검색 결과에서 ?open=글번호 로 들어오면 그 글을 바로 엶
 </script>
 </body>
 </html>
