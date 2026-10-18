@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>퍼포먼스 데이터</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610181942">
-<script src="common.js?v=202610181942"></script>
+<link rel="stylesheet" href="common.css?v=202610182148">
+<script src="common.js?v=202610182148"></script>
 <style>
   .wrap-perf{max-width:1180px}
   .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
@@ -89,7 +89,9 @@ const PERIODS = [['14', '최근 14일'], ['30', '최근 30일'], ['thisM', '이�
 let brand = decodeURIComponent((location.hash || '').slice(1)) || BRANDS[0]; if (!BRANDS.includes(brand)) brand = BRANDS[0];
 let period = LS.get('perf_period') || '30'; if (!PERIODS.some(p => p[0] === period)) period = '30';
 
-const man = n => n == null ? '-' : Math.round(n / 10000).toLocaleString('ko-KR') + '만';           // 1,320만
+/* 금액은 만원 단위로, 1억이 넘으면 "6억 1,751만"처럼 억을 앞에 붙임 (61,751만 처럼 쓰면 읽기 어려워서, 2026-10-18 사장님 지적) */
+const man = n => { if (n == null) return '-'; const m = Math.round(n / 10000), s = m < 0 ? '-' : '', a = Math.abs(m); return a >= 10000 ? `${s}${Math.floor(a / 10000)}억${a % 10000 ? ' ' + (a % 10000).toLocaleString('ko-KR') + '만' : ''}` : `${s}${a.toLocaleString('ko-KR')}만`; };
+const manShort = n => Math.abs(n) >= 100000000 ? (n / 100000000).toFixed(1).replace(/\.0$/, '') + '억' : man(n);   // 그림 눈금용 짧은 표기 (9.7억)
 const won = n => n == null ? '-' : Math.round(n).toLocaleString('ko-KR') + '원';
 const pct = (a, b) => (b > 0 ? (a - b) / b : null);
 const pctTxt = p => p == null ? '' : (p > 0 ? '+' : p < 0 ? '−' : '') + Math.round(Math.abs(p) * 100) + '%';
@@ -201,7 +203,7 @@ function chartSvg(rows, series, val, labelOf, id){
   const y = v => T + ph - v / max * ph;
   const ticks = [0.25, 0.5, 0.75, 1].map(f => max / 1.08 * f);
   const step = Math.ceil(n / 14);
-  let out = `<svg viewBox="0 0 ${W} ${H}" data-chart="${id}"><g class="grid">${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${man(t)}</text>`).join('')}</g>`;
+  let out = `<svg viewBox="0 0 ${W} ${H}" data-chart="${id}"><g class="grid">${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${manShort(t)}</text>`).join('')}</g>`;
   rows.forEach((r, i) => {
     const x = L + slot * i + (slot - bw) / 2;
     let acc = 0;
