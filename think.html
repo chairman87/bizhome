@@ -610,7 +610,7 @@
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
       <nav class="sw" title="인트라넷·프로젝트·메모장 사이를 오갑니다"><a class="swt" href="index.html"><img src="favicon.svg" class="logo-sm" alt="">인트라넷</a><a class="swt" href="projects.html">🗂️ 프로젝트</a><a class="swt on" href="think.html">📝 메모장</a></nav>
-      <button id="addTopic" class="add-board" title="주제형 탭 새로 만들기">+ 주제</button>
+      <button id="addTopic" class="add-board" title="생각 노트형 탭 새로 만들기 (고민을 제목으로 적고 그 아래에 생각을 적어 나가는 탭)">+ 생각 노트</button>
       <button id="addMemo" class="add-board" title="메모장형 탭 새로 만들기">+ 메모장</button>
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
@@ -637,7 +637,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-18 19:00";
+    const BUILD = "2026-10-18 19:30";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1430,7 +1430,7 @@
       const list = [];
       if (storeGet("dig") !== null) {
         list.push({
-          id: "dig", title: storeGet("digTitle") || "주제",
+          id: "dig", title: storeGet("digTitle") || "생각 노트",
           key: "dig", trashKey: "digTrash", width: 832, compact: false
         });
       }
@@ -1440,9 +1440,9 @@
           key: "notes", trashKey: "notesTrash", width: 444, compact: true
         });
       }
-      if (!list.length) {   // 처음 들어온 사람: 주제형 탭 하나 + 메모장형 탭 하나를 켜 둠 (2026-10-18, 둘 다 보여야 쓰기 쉬움)
+      if (!list.length) {   // 처음 들어온 사람: 생각 노트형 탭 하나 + 메모장형 탭 하나를 켜 둠 (2026-10-18, 둘 다 보여야 쓰기 쉬움)
         list.push({
-          id: "dig", title: "주제",
+          id: "dig", title: "생각 노트",
           key: "dig", trashKey: "digTrash", width: DEFAULT_W, compact: false
         });
         const mid = newId();
@@ -1455,12 +1455,12 @@
       storeSet(BOARDS_KEY, JSON.stringify(list));
     }
 
-    // kind: "topic"(주제형, 기본) 또는 "memo"(메모장형)
+    // kind: "topic"(생각 노트형, 기본. 2026-10-18 "주제" → "생각 노트"로 이름만 바뀜, 안의 항목은 그대로 "주제") 또는 "memo"(메모장형)
     function addBoard(kind) {
       const list = loadBoards();
       const id = newId();
       list.push({
-        id: id, title: kind === "memo" ? "새 메모" : "새 탭",
+        id: id, title: kind === "memo" ? "새 메모" : "새 생각 노트",
         key: "board_" + id, trashKey: "board_" + id + "_trash",
         width: DEFAULT_W, compact: false,
         kind: kind === "memo" ? "memo" : "topic"
@@ -1802,7 +1802,7 @@
 
       const active = boards.filter(b => !b.archived);
       const groups = [
-        { kind: "topic", label: "📋 주제", list: active.filter(b => b.kind !== "memo") },
+        { kind: "topic", label: "📋 생각 노트", list: active.filter(b => b.kind !== "memo") },
         { kind: "memo",  label: "📝 메모", list: active.filter(b => b.kind === "memo") }
       ];
       groups.forEach(g => {
