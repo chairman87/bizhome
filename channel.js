@@ -72,10 +72,10 @@ function talkHtml(p, top){   // top: 메시지 위에 붙이는 HTML (런칭 일
   if (!DATA.project_cards) return cardsHtml(p);
   const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
   let last = '';
-  const from = newFrom[p.id]; let lined = false;   // 이 채널에 들어왔을 때까지 읽은 시각 → 그 뒤에 남이 올린 첫 글 앞에 '새 글' 선
-  const rows = list.map(e => {
+  const from = newFrom[p.id];   // 이 채널에 들어왔을 때까지 읽은 시각 → 그 뒤에 남이 올린 글 중 가장 오래된 것 아래에 '새 글' 선 (선 위쪽이 전부 새 글)
+  const firstNew = from == null ? null : list.find(e => e.by !== me && String(e.at) > from);
+  const rows = [...list].reverse().map(e => {   // 2026-10-21 부터 최신 글이 위 (런칭 일정 바로 아래에 최근 소식이 보이도록)
     const day = fmtDateTime(e.at).slice(0, 10); let head = day === last ? '' : `<div class="tday"><span>${dayLabel(day.replace(/\//g, '-'))}</span></div>`; last = day;
-    if (!lined && from != null && e.by !== me && String(e.at) > from) { lined = true; head += '<div class="tnew"><span>새 글</span></div>'; }
     const body = e.type === 'msg' ? `${e.log.body ? `<div class="mt">${linkify(e.log.body)}</div>` : ''}${filesHtml(e.log.files)}`
       : e.type === 'card' ? `${e.card.memo ? `<div class="mt">${linkify(e.card.memo)}</div>` : ''}${cardChip(e.card, e.rev)}`
       : e.type === 'rev' ? `<div class="mt sys">${e.rev.no}차 수정본을 올렸습니다${e.rev.memo ? ' — ' + esc(e.rev.memo) : ''}</div>${cardChip(e.card, e.rev)}`
@@ -85,15 +85,16 @@ function talkHtml(p, top){   // top: 메시지 위에 붙이는 HTML (런칭 일
     const mine = e.by === me || isAdmin();
     const dk = !mine ? '' : e.type === 'msg' ? 'msg|' + e.log.id : e.type === 'card' ? 'card|' + e.card.id : e.type === 'rev' && e.rev.no === lastRev(e.card).no ? 'rev|' + e.card.id + '|' + e.rev.no : e.type === 'cmt' ? 'cmt|' + e.card.id + '|' + e.cmt.id : e.type === 'dec' && e.dec ? 'dec|' + e.dec.id : '';
     const del = dk ? `<button class="mx" data-xdel="${dk}" title="삭제">✕ 삭제</button>` : '';
-    return head + `<div class="msg t-${e.type}"${e.type === 'msg' ? ` data-id="${e.log.id}"` : ''}>${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
+    return head + `<div class="msg t-${e.type}"${e.type === 'msg' ? ` data-id="${e.log.id}"` : ''}>${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>` + (e === firstNew ? '<div class="tnew"><span>새 글</span></div>' : '');
   }).join('');
-  return `<div class="slscroll" id="tscroll">${top || ''}<div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
-      ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}</div></div>
+  return `<div class="slscroll" id="tscroll">${top || ''}
     <div class="slcomp"><div class="talkbox composer" id="composer">
       <textarea id="cBody" rows="1" maxlength="4000" placeholder="#${esc(p.name)} 에 메시지 보내기">${esc(comp.text)}</textarea>
       ${comp.box.html}
       <div class="crow"><button type="button" class="plus" id="tkPlus" title="파일 첨부 (PDF·이미지)">＋</button><span class="hint">Enter 보내기 · Shift+Enter 줄바꿈 · 파일은 끌어다 놓거나 Ctrl+V</span><span class="sp"></span><label class="need" id="tkCard" hidden title="체크하면 회의 안건 목록에 올라갑니다. 그냥 공유만 할 때는 체크하지 않습니다"><input type="checkbox" id="tkNeed" ${comp.needDec ? 'checked' : ''}> 결정 필요</label><button type="button" class="send" id="cSend" title="보내기">➤</button></div>
-    </div></div>`;
+    </div></div>
+    <div class="tfeed">${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}
+      ${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}</div></div>`;
 }
 /* 대화 줄의 ✕ 삭제 */
 async function talkDelete(key){
@@ -148,7 +149,7 @@ let sideOpen = false;
 const AGENDA = '__agenda';   // 왼쪽 목록의 '회의 안건'을 고른 상태 (cur 에 이 값이 들어감)
 function slRender(p){
   if (tab !== 'cards' && tab !== 'decs') tab = 'talk';   // 채널 첫 화면 = 런칭 일정 + 그 아래 메시지 (2026-10-21 두 탭을 합침. 예전에 저장된 'plan' 도 여기로)
-  const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
+  const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
   const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
   const act = P().filter(x => x.status !== '완료').sort(byName), done = P().filter(x => x.status === '완료').sort(byName);
@@ -172,7 +173,7 @@ function slRender(p){
       <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">🗓 런칭 일정${planOf(p.id).length ? `<span class="cn">${planOf(p.id).filter(planDone).length}/${planOf(p.id).length}</span>` : ''}<span class="cn">·</span>💬 메시지${unreadOf(p.id) ? `<span class="bd" title="안 읽은 글">${unreadOf(p.id)}</span>` : ''}</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
-      ${tab === 'talk' ? talkHtml(p, `<div class="slpad plantop">${planHtml(p)}</div><div class="pldiv"><span>💬 메시지</span><span class="sp"></span><button class="btn sm" id="toEnd" title="가장 최근 메시지로">최근 메시지로 ↓</button></div>`) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : cardsHtml(p)}</div></div>`}`}
+      ${tab === 'talk' ? talkHtml(p, `<div class="slpad plantop">${planHtml(p)}</div><div class="pldiv"><span>💬 메시지</span><span class="hint" style="font-weight:400">최신 글이 위에 옵니다</span></div>`) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : cardsHtml(p)}</div></div>`}`}
     </section></div>`;
   { const tot = P().filter(x => x.status !== '완료').reduce((n, x) => n + unreadOf(x.id), 0); document.title = (tot ? `(${tot}) ` : '') + '프로젝트'; }   // 브라우저 탭 제목에 안 읽은 수
   if (READS === null) loadReads();
@@ -192,10 +193,10 @@ function slRender(p){
   const sc = $('#tscroll');
   if (sc) { sc.dataset.tab = tab; sc.dataset.pid = p.id;
     const same = prev && prev.tab === tab && prev.id === p.id;
-    const toEnd = tab === 'talk' && (talkStick || (same && prev.stick));   // 채널을 처음 열면 맨 위(런칭 일정)부터. 내가 보냈거나 이미 맨 아래를 보고 있었으면 맨 아래
-    if (toEnd) { sc.scrollTop = sc.scrollHeight; sc.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', () => { sc.scrollTop = sc.scrollHeight; }, { once: true }); }); }
+    // 채널을 처음 열면 맨 위(런칭 일정)부터. 내가 글을 보냈거나 링크로 들어왔으면 메시지 칸(런칭 일정 바로 아래)으로
+    const dv = sc.querySelector('.pldiv');
+    if (tab === 'talk' && talkStick && dv) sc.scrollTop = dv.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 6;
     else if (same) sc.scrollTop = prev.top;
-    const te = $('#toEnd'); if (te) te.onclick = () => { sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); };
     talkStick = false; }
   const k = keep && $(keep); if (k) { k.focus(); try { k.setSelectionRange(k.value.length, k.value.length); } catch {} }
 }
@@ -681,7 +682,8 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .slscroll{flex:1;min-height:0;overflow:auto}
   .slpad{padding:14px 16px}
   .slpad.plantop{padding-bottom:4px}
-  .pldiv{display:flex;align-items:center;gap:10px;margin:6px 20px 0;padding:8px 0 2px;border-top:2px solid #e3e3e3;font-size:14px;font-weight:900;color:#1d1c1d}
+  .pldiv{display:flex;align-items:center;gap:10px;margin:6px 20px 0;padding:8px 0 4px;border-top:2px solid #e3e3e3;font-size:14px;font-weight:900;color:#1d1c1d}
+  .sl .tfeed > #talkMore{margin:10px 20px 6px}
   .slempty{padding:40px 20px;color:#616061;line-height:1.8;font-size:14px}
   .slempty .big{font-size:26px;font-weight:900;color:#1d1c1d;margin-bottom:6px}
   .sl .tfeed{padding:8px 0 10px}
@@ -700,7 +702,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .sl .msg .mt .re{color:#1264a3;font-size:14px}
   .sl .cchip{border:1px solid #ddd;border-radius:12px;max-width:440px;padding:10px 12px;margin-top:6px}
   .sl .cchip:hover{border-color:#1264a3;background:#f8f8f8;box-shadow:none}
-  .slcomp{padding:0 20px 16px}
+  .slcomp{padding:6px 20px 10px}
   .sl .talkbox{position:static;margin:0;border:1px solid #868686;border-radius:8px;padding:8px 10px 6px;box-shadow:none;gap:6px}
   .sl .talkbox:focus-within{border-color:#1d1c1d;outline:0;box-shadow:0 0 0 1px #1d1c1d}
   .sl .talkbox textarea{font-size:15px;line-height:1.47;min-height:24px;resize:none}
