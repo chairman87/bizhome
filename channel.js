@@ -68,7 +68,7 @@ function talkEvents(p){
 const cardChip = (c, r) => { const fs = (r && r.files) || cardFiles(c), img = fs.find(isImg), un = cardUnread(c) ? 'unread' : '', sub = `${r && r.no > 1 ? `${r.no}차 · ` : ''}${fs.length > 1 ? `파일 ${fs.length}개 · ` : ''}${(c.comments || []).length ? `💬 ${c.comments.length} · ` : ''}눌러서 크게 보기`;
   return img ? `<div class="mfile img ${un}" data-card="${c.id}" data-rv="${r ? r.no : ''}"><img src="${esc(img.url)}" alt="${esc(img.name)}" loading="lazy"><div class="cap"><b>${esc(c.title)}</b><span>${sub}</span>${stBtn(c)}</div></div>`
     : `<div class="cchip ${un}" data-card="${c.id}" data-rv="${r ? r.no : ''}"><span class="ic">${fs.length && isPdf(fs[0]) ? '📕' : '📄'}</span><div class="ci"><b>${esc(c.title)}</b><span>${sub}</span></div>${stBtn(c)}</div>`; };
-function talkHtml(p){
+function talkHtml(p, top){   // top: 메시지 위에 붙이는 HTML (런칭 일정, 2026-10-21 합침)
   if (!DATA.project_cards) return cardsHtml(p);
   const all = talkEvents(p), list = all.slice(-talkLimit), comp = getComp(p.id);
   let last = '';
@@ -87,7 +87,7 @@ function talkHtml(p){
     const del = dk ? `<button class="mx" data-xdel="${dk}" title="삭제">✕ 삭제</button>` : '';
     return head + `<div class="msg t-${e.type}"${e.type === 'msg' ? ` data-id="${e.log.id}"` : ''}>${avatar(e.by)}<div class="mb2"><div class="mh2"><b>${esc(fullName(e.by || ''))}</b><span class="tm">${fmtDateTime(e.at).slice(11)}</span>${del}</div>${body}</div></div>`;
   }).join('');
-  return `<div class="slscroll" id="tscroll"><div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
+  return `<div class="slscroll" id="tscroll">${top || ''}<div class="tfeed">${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}
       ${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}</div></div>
     <div class="slcomp"><div class="talkbox composer" id="composer">
       <textarea id="cBody" rows="1" maxlength="4000" placeholder="#${esc(p.name)} 에 메시지 보내기">${esc(comp.text)}</textarea>
@@ -147,7 +147,7 @@ function bindTalk(p){
 let sideOpen = false;
 const AGENDA = '__agenda';   // 왼쪽 목록의 '회의 안건'을 고른 상태 (cur 에 이 값이 들어감)
 function slRender(p){
-  if (tab !== 'cards' && tab !== 'decs' && tab !== 'plan' && tab !== 'talk') tab = 'plan';   // 채널 첫 화면은 런칭 일정
+  if (tab !== 'cards' && tab !== 'decs') tab = 'talk';   // 채널 첫 화면 = 런칭 일정 + 그 아래 메시지 (2026-10-21 두 탭을 합침. 예전에 저장된 'plan' 도 여기로)
   const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, stick: sc0.scrollHeight - sc0.scrollTop - sc0.clientHeight < 140, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
   const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
@@ -169,32 +169,33 @@ function slRender(p){
         <span class="ldr ${p.owner ? '' : 'none'}" title="프로젝트 리더 (⚙ 설정에서 바꿉니다)"><span class="lb">리더</span>${p.owner ? avatar(p.owner) + '<b>' + esc(fullName(p.owner)) + '</b>' : '<b>미정</b>'}</span><button class="btn sm" id="editP" title="채널 이름·리더·참여 팀원·NAS 경로">⚙ 설정</button>
         <span class="sp"></span>${mem.length ? `<span class="mm" title="참여: ${esc(mem.join(', '))}">👥 ${mem.length + (p.owner ? 1 : 0)}</span>` : ''}
         ${p.nas_path ? `<button class="btn sm" id="nasCopy" title="${esc(p.nas_path)}">📁 NAS 경로 복사</button>` : ''}</div>
-      <div class="slt"><button class="sltab ${tab === 'plan' ? 'on' : ''}" data-tab="plan">🗓 런칭 일정${planOf(p.id).length ? `<span class="cn">${planOf(p.id).filter(planDone).length}/${planOf(p.id).length}</span>` : ''}</button><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">💬 메시지${unreadOf(p.id) ? `<span class="bd" title="안 읽은 글">${unreadOf(p.id)}</span>` : ''}</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
+      <div class="slt"><button class="sltab ${tab === 'talk' ? 'on' : ''}" data-tab="talk">🗓 런칭 일정${planOf(p.id).length ? `<span class="cn">${planOf(p.id).filter(planDone).length}/${planOf(p.id).length}</span>` : ''}<span class="cn">·</span>💬 메시지${unreadOf(p.id) ? `<span class="bd" title="안 읽은 글">${unreadOf(p.id)}</span>` : ''}</button><button class="sltab ${tab === 'cards' ? 'on' : ''}" data-tab="cards">📎 파일${pend ? `<span class="bd">${pend}</span>` : ''}</button><button class="sltab ${tab === 'decs' ? 'on' : ''}" data-tab="decs">✅ 결정 로그${decsOf(p.id).length ? `<span class="cn">${decsOf(p.id).length}</span>` : ''}</button>
         <span class="sp"></span>${agoHtml(p.id)}</div>
       <div class="slpin" id="sumEdit" title="눌러서 고치기${p.summary_at ? ' · ' + esc(p.summary_by || '') + ' ' + fmtDateTime(p.summary_at).slice(5) + ' 수정' : ''}"><span class="pi">📌</span><span class="pt ${p.summary ? '' : 'none'}">${p.summary ? linkify(p.summary) : '현재 상태 · 다음 할 일을 적어 두세요 (눌러서 적기)'}</span></div>
-      ${tab === 'talk' ? talkHtml(p) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : tab === 'plan' ? planHtml(p) : cardsHtml(p)}</div></div>`}`}
+      ${tab === 'talk' ? talkHtml(p, `<div class="slpad plantop">${planHtml(p)}</div><div class="pldiv"><span>💬 메시지</span><span class="sp"></span><button class="btn sm" id="toEnd" title="가장 최근 메시지로">최근 메시지로 ↓</button></div>`) : `<div class="slscroll" id="tscroll"><div class="slpad">${tab === 'decs' ? decsHtml(p) : cardsHtml(p)}</div></div>`}`}
     </section></div>`;
   { const tot = P().filter(x => x.status !== '완료').reduce((n, x) => n + unreadOf(x.id), 0); document.title = (tot ? `(${tot}) ` : '') + '프로젝트'; }   // 브라우저 탭 제목에 안 읽은 수
   if (READS === null) loadReads();
   bindHeader(() => {}, null, m => `리더인 채널 ${P().filter(x => x.owner === m.name && x.status !== '완료').length}개`);
   slFit();
-  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { Object.keys(newFrom).forEach(k => delete newFrom[k]); cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'plan'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = true; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
+  document.querySelectorAll('.sls [data-open]').forEach(b => b.onclick = () => { Object.keys(newFrom).forEach(k => delete newFrom[k]); cur = b.dataset.open; LS.set('proj_cur', cur); tab = 'talk'; LS.set('proj_tab', tab); cardFilter = ''; cardQ = ''; talkLimit = 60; talkStick = false; sideOpen = false; if (QP) { QP = ''; history.replaceState(null, '', location.pathname); } render(); });
   const np = $('#newP'); if (np) np.onclick = () => openProject(null);
   if (agenda) { bindAgenda(); const sm = $('#slMenu'); if (sm) sm.onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); }; if (CV && $('#cvExtra')) refreshCardSide(CV.id); return; }
   if (!p) return;
   $('#slMenu').onclick = () => { sideOpen = !sideOpen; document.querySelector('.sl').classList.toggle('side-open', sideOpen); };
-  document.querySelectorAll('.sltab').forEach(b => b.onclick = () => { tab = b.dataset.tab; LS.set('proj_tab', tab); talkStick = true; render(); });
+  document.querySelectorAll('.sltab').forEach(b => b.onclick = () => { tab = b.dataset.tab; LS.set('proj_tab', tab); talkStick = false; render(); });
   $('#editP').onclick = () => openProject(p.id);
   bindChHead(p);
   if (QCARD && !openedCard) { openedCard = true; setTimeout(() => openCard(QCARD), 0); }
-  if (tab === 'cards') bindCards(p); else if (tab === 'decs') bindDecs(p); else if (tab === 'plan') bindPlan(p); else { bindTalk(p); markChannelSeen(p); }
+  if (tab === 'cards') bindCards(p); else if (tab === 'decs') bindDecs(p); else { bindPlan(p); bindTalk(p); markChannelSeen(p); }
   if (CV && $('#cvExtra')) refreshCardSide(CV.id);   // 카드 창이 열려 있으면 댓글·결정을 최신으로
   const sc = $('#tscroll');
   if (sc) { sc.dataset.tab = tab; sc.dataset.pid = p.id;
     const same = prev && prev.tab === tab && prev.id === p.id;
-    const toEnd = tab === 'talk' && (talkStick || !same || prev.stick);
+    const toEnd = tab === 'talk' && (talkStick || (same && prev.stick));   // 채널을 처음 열면 맨 위(런칭 일정)부터. 내가 보냈거나 이미 맨 아래를 보고 있었으면 맨 아래
     if (toEnd) { sc.scrollTop = sc.scrollHeight; sc.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', () => { sc.scrollTop = sc.scrollHeight; }, { once: true }); }); }
     else if (same) sc.scrollTop = prev.top;
+    const te = $('#toEnd'); if (te) te.onclick = () => { sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); };
     talkStick = false; }
   const k = keep && $(keep); if (k) { k.focus(); try { k.setSelectionRange(k.value.length, k.value.length); } catch {} }
 }
@@ -474,7 +475,7 @@ function agendaHtml(){
 }
 function bindAgenda(){
   document.querySelectorAll('#tscroll .agc[data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card));
-  document.querySelectorAll('#tscroll [data-goto]').forEach(a => a.onclick = () => { cur = a.dataset.goto; LS.set('proj_cur', cur); tab = 'plan'; talkStick = true; render(); });
+  document.querySelectorAll('#tscroll [data-goto]').forEach(a => a.onclick = () => { cur = a.dataset.goto; LS.set('proj_cur', cur); tab = 'talk'; talkStick = false; render(); });
   bindQuickDec();
 }
 /* 프로젝트를 고른 업무(tasks.project_id)와 업무공유(decisions.project_id)는 그 채널의 대화에도 한 줄로 나타남 */
@@ -679,6 +680,8 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .slpin .pt.none{color:#9a8a5a}
   .slscroll{flex:1;min-height:0;overflow:auto}
   .slpad{padding:14px 16px}
+  .slpad.plantop{padding-bottom:4px}
+  .pldiv{display:flex;align-items:center;gap:10px;margin:6px 20px 0;padding:8px 0 2px;border-top:2px solid #e3e3e3;font-size:14px;font-weight:900;color:#1d1c1d}
   .slempty{padding:40px 20px;color:#616061;line-height:1.8;font-size:14px}
   .slempty .big{font-size:26px;font-weight:900;color:#1d1c1d;margin-bottom:6px}
   .sl .tfeed{padding:8px 0 10px}
@@ -832,7 +835,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 </style>`);
 
 
-/* ================= 런칭 일정 탭 (2026-10-16): 신제품 런칭 단계를 한 줄씩 쌓는 로그 =================
+/* ================= 런칭 일정 (2026-10-16): 신제품 런칭 단계를 한 줄씩 쌓는 로그. 2026-10-21 부터 메시지 탭 위에 함께 보임 =================
    저장: project_items 표(예전 프로세스 화면이 쓰던 표) { project_id, phase, title, assignee, due_date, status(예정/진행중/완료/보류), note, sort_order, done_at, updated_by(완료한 사람) }
    날짜순(날짜 없는 단계는 맨 아래, 그 안에서는 넣은 순서). 체크하면 완료 + 대화에도 한 줄 남음 */
 /* 신제품 런칭 기본 단계 (2026-10-16 사장님 정리본). [분야, 단계, 메모] — 분야가 열이 됨 */

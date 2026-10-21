@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>프로젝트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610182223">
-<script src="common.js?v=202610182223"></script>
-<script src="channel.js?v=202610182223"></script>
+<link rel="stylesheet" href="common.css?v=202610211153">
+<script src="common.js?v=202610211153"></script>
+<script src="channel.js?v=202610211153"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -162,7 +162,8 @@ const stP = s => tag(s, ...(PST[s] || PST['진행중']), true);
 const stI = s => tag(s, ...(IST[s] || IST['예정']), true);
 let QP = new URLSearchParams(location.search).get('p') || '';   // 홈의 프로젝트 폴더에서 누르면 projects.html?p=프로젝트id 로 들어옴 → 그 프로젝트의 기록을 바로 엶
 let cur = QP || LS.get('proj_cur') || '';   // 열어 둔 프로젝트 id
-let tab = QP ? 'talk' : 'plan';   // 채널을 열면 런칭 일정부터 (알림·소식에서 특정 글로 들어올 때만 메시지)
+let tab = 'talk';   // 채널 첫 탭 = 런칭 일정 + 메시지 (2026-10-21 합침). 파일·결정 로그는 따로
+talkStick = !!QP;   // 알림·소식 링크(?p=…)로 들어오면 최근 메시지로, 그냥 열면 맨 위(런칭 일정)부터
 const QCARD = new URLSearchParams(location.search).get('card') || ''; let openedCard = false;
 const QITEM = new URLSearchParams(location.search).get('item') || '', QLOG = new URLSearchParams(location.search).get('log') || ''; let openedQ = false;   // 홈 검색 결과에서 ?p=…&item=할일번호 / &log=대화글번호 로 들어오면 그것을 바로 엶·비춤
 if (QLOG) talkLimit = 100000;   // 오래된 대화 글도 찾을 수 있게 전부 그림   // projects.html?p=…&card=… 로 들어오면 그 카드를 바로 엶
