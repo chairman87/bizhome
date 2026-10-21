@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>카톡 주문</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610211916">
+<script src="common.js?v=202610211916"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .tabs2{display:flex;gap:4px;flex-wrap:wrap}
+  .tabs2 button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--fg2)}
+  .tabs2 button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .card{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);padding:12px 14px;margin-bottom:10px}
+  .card.warn{border-color:#f59e0b}
+  .card.done{opacity:.65}
+  .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .brand{font-size:12px;font-weight:700;border-radius:4px;padding:2px 8px}
+  .b-레모너리{background:#fef9c3;color:#854d0e}.b-서리맥스{background:#e0f2fe;color:#075985}.b-흑생마{background:#e7e5e4;color:#292524}
+  .st{font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px}
+  .st-접수{background:#fee2e2;color:#b91c1c}.st-주문완료{background:#dcfce7;color:#15803d}.st-보류{background:#fef3c7;color:#92400e}.st-주문아님{background:#f4f4f5;color:#71717a}
+  .when{font-size:12px;color:var(--fg3);margin-left:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 10px}
+  .f{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .f.wide{grid-column:1/-1}
+  .f label{font-size:11px;color:var(--fg3)}
+  .cp{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--bg2);cursor:copy;font-size:14px;word-break:break-all;min-height:32px}
+  .cp:hover{border-color:var(--fg2)}
+  .cp.empty{color:#b91c1c;background:#fef2f2}
+  .w{display:inline-block;font-size:11px;background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 6px;margin-right:4px}
+  .raw{white-space:pre-wrap;font-size:12.5px;color:var(--fg2);background:var(--bg2);border-radius:6px;padding:8px;margin-top:8px;display:none}
+  .raw.on{display:block}
+  .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
+  .btns .done-info{font-size:12px;color:var(--fg2)}
+  select.q{border:1px solid var(--line2);border-radius:6px;padding:5px 6px;font-size:14px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   카톡 주문 — 레모너리·서리맥스·흑생마 카톡 채널로 들어온 무통장 주문 메시지 모음 (2026-10-22)
+   대표 PC 의 KAKAO-ORDER/reader.py 가 카톡 메시지를 읽어 이름·주소·전화·수량으로 나눠 넣음(읽기만, 카톡 '안 읽음' 표시는 그대로).
+   고객 개인정보라 잠긴 표(kakao_orders, sql-kakao-orders.sql)에 있고, 메모장과 같은 출입증(think_login)으로만 읽고 고침.
+   직원: 칸을 눌러 복사 → [주문하러 가기]로 홈페이지 상품 페이지 열기 → 비회원 주문 → 주문번호를 적고 '주문 완료'.
+================================================================ */
+const BRANDS = {
+  '레모너리': { 1: 29300, 2: 54500, 4: 104800, 6: 152800 },
+  '서리맥스': { 1: 29800, 2: 56500, 4: 108800, 6: 156800 },
+  '흑생마':   { 1: 29800, 2: 56500, 4: 108800, 6: 156800 },
+};
+const QTY_LABEL = { 1: '1박스', 2: '2박스', 4: '3+1박스', 6: '4+2박스' };
+const STATUSES = ['접수', '주문완료', '보류', '주문아님'];
+const TOKEN_KEY = 'think_token';   // 메모장과 같은 출입증을 씀 (think_token_<사람id>)
+let ROWS = null, loadErr = '', tab = '접수', brand = '', days = 14, openRaw = new Set(), loading = false;
+
+const sbc = () => SupabaseStore.client;
+const myMember = () => members.find(m => m.name === me);
+const tokenOf = m => { try { return localStorage.getItem(TOKEN_KEY + '_' + m.id) || ''; } catch (e) { return ''; } };
+async function token(){
+  const m = myMember(); if (!m) return '';
+  let t = tokenOf(m); if (t) return t;
+  const { data, error } = await sbc().rpc('think_login', { p_member: m.id, p_pin: m.password || '1234' });   // 비즈홈 로그인 이어받기(메모장과 같음)
+  if (error || !data || !data.ok) throw new Error('출입증을 받지 못했습니다' + (data && data.err ? ` (${data.err})` : ''));
+  try { localStorage.setItem(TOKEN_KEY + '_' + m.id, data.token); } catch (e) {}
+  return data.token;
+}
+async function call(name, args, retry = true){
+  const { data, error } = await sbc().rpc(name, { p_token: await token(), ...args });
+  if (error) throw error;
+  if (data && data.ok === false && data.err === 'session' && retry) { const m = myMember(); try { localStorage.removeItem(TOKEN_KEY + '_' + m.id); } catch (e) {} return call(name, args, false); }
+  if (data && data.ok === false) throw new Error(data.err);
+  return data;
+}
+async function load(){
+  if (loading || store !== SupabaseStore || !myMember()) return;
+  loading = true;
+  try { ROWS = (await call('ko_list', { p_days: days })).rows || []; loadErr = ''; }
+  catch (e) { loadErr = e.message || String(e); }
+  loading = false; render();
+}
+async function patch(id, p, msg){
+  try { await call('ko_update', { p_id: id, p_patch: p }); const r = ROWS.find(x => x.id === id); Object.assign(r, p); if (p.status) { r.handled_by = me; r.handled_at = nowIso(); } render(); if (msg) toast(msg); }
+  catch (e) { toast('저장 실패: ' + (e.message || e)); }
+}
+async function copy(text, label){
+  try { await navigator.clipboard.writeText(text); toast(`${label} 복사: ${text.length > 30 ? text.slice(0, 30) + '…' : text}`); }
+  catch (e) { prompt(`${label} — 아래를 복사하세요`, text); }
+}
+const fmt = n => n == null ? '' : Number(n).toLocaleString('ko-KR') + '원';
+const when = s => { if (!s) return ''; const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const cp = (r, key, label, val) => `<div class="cp ${val ? '' : 'empty'}" data-copy="${esc(r.id)}" data-key="${key}" title="눌러서 복사">${val ? esc(val) : '비어 있음 — 눌러서 적기'}</div>`;
+
+function cardHtml(r){
+  const warn = Array.isArray(r.warn) ? r.warn : [];
+  const qtyOpts = Object.keys(BRANDS[r.brand] || {}).map(q => `<option value="${q}" ${String(r.qty) === q ? 'selected' : ''}>${QTY_LABEL[q]} · ${fmt(BRANDS[r.brand][q])}</option>`).join('');
+  const done = r.status !== '접수';
+  return `<div class="card ${warn.length && !done ? 'warn' : ''} ${done ? 'done' : ''}" data-id="${esc(r.id)}">
+    <div class="top"><span class="brand b-${esc(r.brand)}">${esc(r.brand)}</span><span class="st st-${esc(r.status)}">${esc(r.status === '주문완료' ? '주문 완료' : r.status === '주문아님' ? '주문 아님' : r.status)}</span>
+      ${warn.map(w => `<span class="w">⚠ ${esc(w)}</span>`).join('')}<span class="when">카톡 ${esc(r.kakao_name || '')} · ${when(r.sent_at)}</span></div>
+    <div class="grid">
+      <div class="f"><label>받는 분 (입금자명)</label>${cp(r, 'name', '이름', r.name)}</div>
+      <div class="f"><label>휴대폰</label>${cp(r, 'phone', '휴대폰', r.phone)}</div>
+      <div class="f"><label>수량 · 금액</label><select class="q" data-qty="${esc(r.id)}"><option value="">수량 고르기</option>${qtyOpts}</select></div>
+      <div class="f wide"><label>주소</label>${cp(r, 'address', '주소', r.address)}</div>
+      ${r.memo ? `<div class="f wide"><label>메모</label><div class="hint">${esc(r.memo)}</div></div>` : ''}
+    </div>
+    <div class="raw ${openRaw.has(r.id) ? 'on' : ''}">${esc(r.raw_text || '')}</div>
+    <div class="btns">
+      ${!done ? `<button class="btn primary" data-go="${esc(r.id)}">주문하러 가기 ↗</button><button class="btn" data-doneb="${esc(r.id)}">주문 완료</button><button class="btn" data-st="보류" data-sid="${esc(r.id)}">보류</button><button class="btn" data-st="주문아님" data-sid="${esc(r.id)}">주문 아님</button>`
+        : `<span class="done-info">${r.order_no ? `주문번호 <b>${esc(r.order_no)}</b> · ` : ''}${esc(r.handled_by || '')} ${r.handled_at ? fmtDateTime(r.handled_at) : ''}</span><button class="btn" data-st="접수" data-sid="${esc(r.id)}">접수로 되돌리기</button>`}
+      <button class="btn" data-raw="${esc(r.id)}">${openRaw.has(r.id) ? '원문 닫기' : '카톡 원문'}</button>
+      <button class="btn" data-memo="${esc(r.id)}">메모</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  let body;
+  if (store !== SupabaseStore) body = '<div class="empty">팀 저장소에 연결되지 않았습니다.</div>';
+  else if (ROWS === null) body = `<div class="empty">${loadErr ? '불러오지 못했습니다: ' + esc(loadErr) + (/function|does not exist|schema/i.test(loadErr) && isAdmin() ? '<br>sql-kakao-orders.sql 을 Supabase SQL Editor 에서 실행하세요.' : '') : '불러오는 중…'}</div>`;
+  else {
+    const list = ROWS.filter(r => (tab === '전체' || r.status === tab) && (!brand || r.brand === brand));
+    const cnt = s => ROWS.filter(r => r.status === s && (!brand || r.brand === brand)).length;
+    body = `<div class="actions">
+        <div class="tabs2">${STATUSES.map(s => `<button data-tab="${s}" class="${tab === s ? 'on' : ''}">${s === '주문완료' ? '주문 완료' : s === '주문아님' ? '주문 아님' : s} ${cnt(s)}</button>`).join('')}<button data-tab="전체" class="${tab === '전체' ? 'on' : ''}">전체 ${ROWS.filter(r => !brand || r.brand === brand).length}</button></div>
+        <select id="fbrand" style="border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px"><option value="">브랜드 전체</option>${Object.keys(BRANDS).map(b => `<option ${brand === b ? 'selected' : ''}>${b}</option>`).join('')}</select>
+        <select id="fdays" style="border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px">${[3, 7, 14, 30, 90].map(d => `<option value="${d}" ${days === d ? 'selected' : ''}>최근 ${d}일</option>`).join('')}</select>
+        <button class="btn" id="reloadBtn">새로고침</button>
+      </div>
+      ${loadErr ? `<div class="hint warn">⚠ ${esc(loadErr)}</div>` : ''}
+      ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${tab === '접수' ? '처리할 카톡 주문이 없습니다. 👍' : '해당하는 주문이 없습니다.'}</div>`}`;
+  }
+  $('#app').innerHTML = headerHtml({ icon: '💬', title: '카톡 주문' }) + `<main class="wrap" style="max-width:900px">${body}
+    <div class="hint" style="margin-top:12px">대표 PC 가 10분마다 레모너리·서리맥스·흑생마 카톡 채널의 주문 메시지를 읽어 여기에 올립니다(카톡 '안 읽음' 표시는 그대로 둠).
+    칸을 누르면 복사됩니다. <b>주문하러 가기</b> → 옵션 고르고 구매하기 → <b>비회원 구매</b> → 붙여넣기 → 무통장입금(입금자명 = 받는 분) → 주문번호를 적고 <b>주문 완료</b>.
+    ⚠ 표시는 프로그램이 못 찾은 칸이니 카톡 원문을 보고 채워 주세요.</div></main>`;
+  bindHeader(() => {}, null, () => ROWS ? `처리할 카톡 주문 ${ROWS.filter(r => r.status === '접수').length}건` : '');
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
+  const fb = $('#fbrand'); if (fb) fb.onchange = () => { brand = fb.value; render(); };
+  const fd = $('#fdays'); if (fd) fd.onchange = () => { days = Number(fd.value); load(); };
+  const rb = $('#reloadBtn'); if (rb) rb.onclick = () => load();
+  const get = id => ROWS.find(x => x.id === id);
+  document.querySelectorAll('[data-copy]').forEach(el => el.onclick = () => {
+    const r = get(el.dataset.copy), k = el.dataset.key, label = { name: '이름', phone: '휴대폰', address: '주소' }[k];
+    if (r[k]) return copy(r[k], label);
+    const v = prompt(`${label} 적기`, ''); if (v && v.trim()) patch(r.id, { [k]: v.trim(), warn: undefined }, `${label}을(를) 저장했습니다`);
+  });
+  document.querySelectorAll('[data-qty]').forEach(el => el.onchange = () => {
+    const r = get(el.dataset.qty), q = el.value ? Number(el.value) : null;
+    patch(r.id, { qty: q, price: q ? BRANDS[r.brand][q] : null }, q ? `${QTY_LABEL[q]}로 바꿨습니다` : '');
+  });
+  document.querySelectorAll('[data-go]').forEach(el => el.onclick = () => {
+    const r = get(el.dataset.go);
+    if (!r.name || !r.phone || !r.address || !r.qty) { if (!confirm('비어 있는 칸이 있습니다. 그래도 열까요?')) return; }
+    window.open(r.product_url, '_blank', 'noopener');
+    if (r.name) copy(r.name, '이름');
+  });
+  document.querySelectorAll('[data-doneb]').forEach(el => el.onclick = () => {
+    const r = get(el.dataset.doneb);
+    const no = prompt(`${r.name || ''} ${QTY_LABEL[r.qty] || ''} — 카페24 주문번호를 적어 주세요 (몰라도 확인을 누르면 완료됩니다)`, '');
+    if (no === null) return;
+    patch(r.id, { status: '주문완료', order_no: no.trim() }, '주문 완료로 표시했습니다');
+  });
+  document.querySelectorAll('[data-st]').forEach(el => el.onclick = () => patch(el.dataset.sid, { status: el.dataset.st }, `${el.dataset.st === '접수' ? '접수로 되돌렸습니다' : el.dataset.st + '(으)로 표시했습니다'}`));
+  document.querySelectorAll('[data-raw]').forEach(el => el.onclick = () => { const id = el.dataset.raw; openRaw.has(id) ? openRaw.delete(id) : openRaw.add(id); render(); });
+  document.querySelectorAll('[data-memo]').forEach(el => el.onclick = () => { const r = get(el.dataset.memo); const v = prompt('메모', r.memo || ''); if (v !== null) patch(r.id, { memo: v.trim() }, '메모를 저장했습니다'); });
+  if (ROWS === null && !loading && !loadErr) load();
+}
+
+boot({ icon: '💬', title: '카톡 주문', tables: [], render });
+setInterval(() => { if (document.visibilityState === 'visible' && !document.querySelector('#modal .modal')) load(); }, 60000);   // 1분마다 새 주문 확인
+</script>
+</body>
+</html>
