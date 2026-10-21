@@ -585,6 +585,54 @@ function openMembers(counter){
   });
 }
 
+/* ---------- 조직도 (홈 인사 > 멤버 리스트, 2026-10-22) ----------
+   사람 배치는 아래 ORG 에서 바꿉니다. 직급은 팀원 관리에서 적은 것(members.title)을 씁니다.
+   ORG 에 없는 팀원은 맨 아래 '그 밖의 팀원'에 나옵니다 */
+const ORG = {
+  ceo: { name: '박봉수', label: '대표' },
+  lead: { name: '홍주', label: '팀장' },
+  teams: [
+    { name: '마케팅팀', color: '#2563eb', people: ['안상형', '류수연', '김채은', '김홍재', '전예솔'] },
+    { name: '운영기획팀', color: '#16a34a', people: ['김상우', '김홍석', '이유나'] },
+  ],
+};
+function openOrgChart(){
+  const card = (name, label, color) => `<div class="oc-p" style="${color ? `border-top:3px solid ${color}` : ''}">${avatar(name)}<span class="oc-n">${esc(name)}</span><span class="oc-t">${esc(label || titleOf(name))}</span>${name === me ? '<span class="oc-me">나</span>' : ''}</div>`;
+  const listed = [ORG.ceo.name, ORG.lead.name, ...ORG.teams.flatMap(t => t.people)];
+  const others = members.map(m => m.name).filter(n => !listed.includes(n));
+  openModal(`${modalHead('조직도', `<button class="btn sm" id="ocManage">팀원 관리</button>`)}
+    <style>
+      .oc{display:flex;flex-direction:column;align-items:center;padding:6px 0 4px}
+      .oc-p{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:96px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);position:relative}
+      .oc-p .av{width:34px;height:34px;font-size:15px}
+      .oc-n{font-weight:600;font-size:14px}
+      .oc-t{font-size:12px;color:var(--fg2,#888);min-height:14px}
+      .oc-me{position:absolute;top:4px;right:6px;font-size:10px;color:var(--orange)}
+      .oc-v{width:2px;height:18px;background:var(--line2,#ccc)}
+      .oc-teams{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;width:100%;margin-top:0}
+      .oc-team{display:flex;flex-direction:column;align-items:center;flex:1 1 260px;max-width:420px}
+      .oc-tn{color:#fff;font-weight:600;font-size:14px;padding:6px 16px;border-radius:999px}
+      .oc-ps{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:12px;border:1px dashed var(--line2,#ccc);border-radius:12px;width:100%;box-sizing:border-box}
+      .oc-bar{height:2px;background:var(--line2,#ccc);width:calc(100% - 300px);min-width:40px}
+      @media (max-width:640px){.oc-bar{display:none}.oc-teams{gap:14px}}
+    </style>
+    <div class="mb">
+      <div class="oc">
+        ${card(ORG.ceo.name, ORG.ceo.label)}
+        <div class="oc-v"></div>
+        ${card(ORG.lead.name, ORG.lead.label)}
+        <div class="oc-v"></div>
+        <div class="oc-bar"></div>
+        <div class="oc-teams">${ORG.teams.map(t => `<div class="oc-team"><div class="oc-v"></div>
+          <div class="oc-tn" style="background:${t.color}">${esc(t.name)} <span style="opacity:.8;font-weight:400">${t.people.length}명</span></div><div class="oc-v"></div>
+          <div class="oc-ps">${t.people.map(n => card(n, '', t.color)).join('')}</div></div>`).join('')}</div>
+        ${others.length ? `<div style="margin-top:18px;width:100%"><div class="hint" style="text-align:center;margin-bottom:6px">그 밖의 팀원</div><div class="oc-ps">${others.map(n => card(n)).join('')}</div></div>` : ''}
+      </div>
+    </div>
+    <div class="mf"><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  $('#ocManage').onclick = () => openMembers();
+}
+
 /* ---------- 상단 바 ---------- */
 function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, extra = '' }){
   const page = location.pathname.split('/').pop() || 'index.html';   // 왼쪽 위 세 탭: 인트라넷(홈과 그 안의 화면들) / 프로젝트(채널 화면) / 메모장(think.html, 2026-10-18 추가. 그 화면은 common.js 를 안 쓰고 같은 모양의 탭을 직접 그림)
