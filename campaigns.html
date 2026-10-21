@@ -24,7 +24,7 @@
   .bh .stats{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--fg2);font-size:13px;font-variant-numeric:tabular-nums}
   .bh .stats b{color:var(--fg)}
   .cps-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
-  .cps{border-collapse:collapse;width:100%;min-width:1200px;font-size:13px}
+  .cps{border-collapse:collapse;width:100%;min-width:1280px;font-size:13px}
   .cps th{background:var(--bg3);text-align:left;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap;font-size:12px;color:var(--fg2)}
   .cps td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
   .cps th.num,.cps td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -65,15 +65,16 @@
    · 채널별로 어떤 캠페인에 어떤 소재가 돌고 있고, 광고그룹 설정(타겟팅·오디언스·지면·최적화 이벤트·입찰)이 어떤지 한눈에.
    · 자료: ad_campaigns 표.
        kind='data' (id 'data-tiktok') — 대표 PC 의 AD-STRUCTURE\build.py 가 매시간 틱톡 보고서 API 에서 읽어 넣음(손대지 않음)
-       kind='set'  (id 'set-tiktok-<광고그룹ID>') — 이 화면에서 직접 적는 타겟팅·오디언스·최적화 이벤트 (틱톡 API 권한이 없어 못 읽는 칸)
+       kind='data' (id 'data-google') — 같은 반영기의 google.py 가 구글애즈 API 에서 설정(나이·성별·오디언스·전환 목표·입찰)까지 읽어 넣음 (그룹에 auto:true)
+       kind='set'  (id 'set-<채널>-<광고그룹ID>') — 이 화면에서 직접 적는 타겟팅·오디언스·최적화 이벤트 (틱톡은 API 권한이 없어 못 읽는 칸, 구글은 값이 빌 때만)
    · 볼 수 있는 사람: 관리자 + 메뉴 편집에서 '볼 수 있는 사람'으로 체크한 담당자 (common.js ADMIN_ONLY_PAGES)
-   · '운영 중' = 어제나 오늘 노출이 있음. 광고비·구매·ROAS 는 고른 하루(어제/오늘) 플랫폼 기준, 광고비는 부가세 별도.
+   · '운영 중' = 틱톡은 어제나 오늘 노출이 있음, 구글은 캠페인·광고그룹·광고가 모두 켜짐. 광고비·구매·CPA·ROAS 는 고른 하루(어제/오늘) 플랫폼 기준, 광고비는 부가세 별도.
 ================================================================ */
 const CHANNELS = [['tiktok', '틱톡'], ['meta', '메타'], ['google', '구글'], ['coupang', '쿠팡']];
 const FIELDS = [['target', '타겟팅', ['25세 이상 남녀', '25세 이상 여성', '25세 이상 남성', '전체 남녀']],
                 ['audience', '오디언스', ['지정 없음']],
                 ['event', '최적화 이벤트', ['구매', '장바구니 담기', '결제 시작', '페이지 조회']]];
-let channel = 'tiktok', brand = '전체';
+let channel = ['tiktok', 'google'].includes(LS.get('cps_ch')) ? LS.get('cps_ch') : 'tiktok', brand = '전체';
 let dayKey = LS.get('cps_day') === 'today' ? 'today' : 'yday';
 let showStopped = LS.get('cps_stopped') === '1';
 let editing = null;   // 지금 입력 중인 칸 { gid, field }
@@ -81,15 +82,19 @@ let editing = null;   // 지금 입력 중인 칸 { gid, field }
 const fmt = n => Math.round(n || 0).toLocaleString('ko-KR');
 const man = n => n >= 1e4 ? fmt(n / 1e4) + '만' : fmt(n);
 const roas = (v, s) => s > 0 ? Math.round(v / s * 100) + '%' : '–';
+const cpa = (s, n) => n > 0 ? fmt(s / n) : (s > 0 ? '–' : '');   // 전환당 비용 = 광고비 ÷ 구매 수
 const md = d => d ? (+d.slice(5, 7)) + '/' + (+d.slice(8, 10)) : '';
 const rows = () => DATA.ad_campaigns || [];
 const chData = () => (rows().find(r => r.id === 'data-' + channel) || {}).data || null;
 const setOf = gid => rows().find(r => r.id === `set-${channel}-${gid}`);
+const chName = () => (CHANNELS.find(c => c[0] === channel) || [, ''])[1];
 
 function dayVal(x, D){ return (x.d && x.d[D[dayKey]]) || [0, 0, 0]; }   // [광고비, 구매 수, 구매 금액]
 function sum(list, D){ return list.reduce((a, x) => { const v = dayVal(x, D); return [a[0] + v[0], a[1] + v[1], a[2] + v[2]]; }, [0, 0, 0]); }
 
-function setCell(gid, field){
+function setCell(g, field){
+  const gid = g.id;
+  if (g.auto && g[field]) return `<span title="${esc(chName())} API 에서 자동으로 읽은 값">${esc(g[field])}</span>`;
   const r = setOf(gid), v = r && r.data ? (r.data[field] || '') : '';
   if (editing && editing.gid === gid && editing.field === field)
     return `<input class="ed-in" id="edIn" list="dl-${field}" value="${esc(v)}" maxlength="120" placeholder="입력 후 Enter">`;
@@ -109,21 +114,22 @@ function brandHtml(b, D){
       body += `<tr class="${x.running ? '' : 'stopped'}${last ? ' cend' : ''}">`;
       if (gi === 0 && i === 0) body += `<td class="camp" rowspan="${n}"><div class="cname"><span class="dot${c.running ? ' on' : ''}" title="${c.running ? '운영 중' : '최근 멈춤'}"></span><span>${esc(c.name)}</span></div>
         <div class="cmeta"><span>${esc(c.objective)} · 예산 ${c.budget ? fmt(c.budget) + '원' : '광고그룹 단위'}</span>
-        <span>${md(D[dayKey])} 광고비 ${man(ct[0])} · 구매 ${fmt(ct[1])} · ROAS ${roas(ct[2], ct[0])}</span></div></td>`;
+        <span>${md(D[dayKey])} 광고비 ${man(ct[0])} · 구매 ${fmt(ct[1])} · CPA ${cpa(ct[0], ct[1]) || '–'} · ROAS ${roas(ct[2], ct[0])}</span></div></td>`;
       const tags = [x.date ? `<span class="tg dt">${esc(x.date)} 등록</span>` : '',
         x.kind !== '영상' ? `<span class="tg cat">${esc(x.kind)}</span>` : '',
         x.variants ? `<span class="tg var" title="틱톡이 음악·편집을 바꿔 자동으로 만든 변형을 이 줄에 합침">자동 변형 ${x.variants}개 포함</span>` : (x.n > 1 ? `<span class="tg var">같은 소재 ${x.n}개</span>` : ''),
-        x.running ? '' : `<span class="tg stop">${md(x.last_day)} 이후 멈춤</span>`].join('');
+        x.note ? `<span class="tg stop" title="구글 정책 검토 결과. 일부 제한이면 노출이 줄 수 있음">${esc(x.note)}</span>` : '',
+        x.running ? '' : `<span class="tg stop">${x.last_day ? md(x.last_day) + ' 이후 ' : ''}멈춤</span>`].join('');
       body += `<td><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>
-        <td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
+        <td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${cpa(v[0], v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
       if (i === 0) {
         const rs = g.creatives.length, s = setOf(g.id);
         const gname = (multi || g.name !== c.name) ? `<span class="grp">그룹 · ${esc(g.name)}</span>` : '';
         const by = s && s.updated_by ? `<span class="ed-by">${esc(s.updated_by)} · ${md(String(s.updated_at || '').slice(0, 10))}</span>` : '';
-        body += `<td class="set" rowspan="${rs}">${gname}${setCell(g.id, 'target')}</td>
-          <td class="set aud" rowspan="${rs}">${setCell(g.id, 'audience')}</td>
+        body += `<td class="set" rowspan="${rs}">${gname}${setCell(g, 'target')}</td>
+          <td class="set aud" rowspan="${rs}">${setCell(g, 'audience')}</td>
           <td class="set" rowspan="${rs}">${esc(g.placement)}</td>
-          <td class="set" rowspan="${rs}">${setCell(g.id, 'event')}${by}</td>
+          <td class="set" rowspan="${rs}">${setCell(g, 'event')}${g.auto ? '' : by}</td>
           <td class="set" rowspan="${rs}">${esc(g.bid)}</td>`;
       }
       body += '</tr>';
@@ -131,8 +137,8 @@ function brandHtml(b, D){
   });
   const runC = b.campaigns.filter(c => c.running).length, runA = all.filter(x => x.running).length;
   return `<section class="bsec"><div class="bh"><h2>${esc(b.brand)}</h2><div class="stats"><span>운영 캠페인 <b>${runC}</b></span><span>운영 소재 <b>${runA}</b></span>
-    <span>${md(D[dayKey])} 광고비 <b>${man(t[0])}원</b></span><span>구매 <b>${fmt(t[1])}</b></span><span>ROAS <b>${roas(t[2], t[0])}</b></span></div></div>
-    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고 소재</th><th class="num">광고비</th><th class="num">구매</th><th class="num">ROAS</th>
+    <span>${md(D[dayKey])} 광고비 <b>${man(t[0])}원</b></span><span>구매 <b>${fmt(t[1])}</b></span><span>CPA <b>${cpa(t[0], t[1]) || '–'}${t[1] > 0 ? '원' : ''}</b></span><span>ROAS <b>${roas(t[2], t[0])}</b></span></div></div>
+    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고 소재</th><th class="num">광고비</th><th class="num">구매</th><th class="num" title="전환당 비용 = 광고비 ÷ 구매 수">CPA</th><th class="num">ROAS</th>
     <th>타겟팅</th><th>오디언스</th><th>지면</th><th>최적화 이벤트</th><th>입찰</th></tr></thead><tbody>${body}</tbody></table></div>` : '<div class="nodata">운영 중인 캠페인이 없습니다.</div>'}</section>`;
 }
 
@@ -142,18 +148,21 @@ function render(){
   if (brand !== '전체' && !brands.includes(brand)) brand = '전체';
   const opts = f => [...new Set([...FIELDS.find(x => x[0] === f)[2], ...rows().filter(r => r.kind === 'set' && r.data && r.data[f]).map(r => r.data[f])])];
   $('#app').innerHTML = headerHtml({ icon: '🧭', title: '광고 캠페인 현황(관리자용)', tabs: ['전체', ...brands].map(b => ({ key: b, label: b })), active: brand }) + `<main class="wrap wrap-cps">
-    <div class="ctl"><div class="seg">${CHANNELS.map(([k, l]) => `<button data-ch="${k}" class="${channel === k ? 'on' : ''}" ${k === 'tiktok' ? '' : 'disabled'}>${l}${k === 'tiktok' ? '' : '<small>준비 중</small>'}</button>`).join('')}</div>
+    <div class="ctl"><div class="seg">${CHANNELS.map(([k, l]) => { const has = rows().some(r => r.id === 'data-' + k); return `<button data-ch="${k}" class="${channel === k ? 'on' : ''}" ${has ? '' : 'disabled'}>${l}${has ? '' : '<small>준비 중</small>'}</button>`; }).join('')}</div>
       <div class="seg">${D ? [['yday', '어제 ' + md(D.yday)], ['today', '오늘 ' + md(D.today) + ' (진행 중)']].map(([k, l]) => `<button data-day="${k}" class="${dayKey === k ? 'on' : ''}">${l}</button>`).join('') : ''}</div>
       <label><input type="checkbox" id="stopChk" ${showStopped ? 'checked' : ''}> 최근 멈춘 소재도 보기</label>
       <span class="upd">${D ? '자료 갱신 ' + esc(D.updated) + ' · 매시간 40분에 자동 반영' : ''}</span></div>
-    ${DATA.ad_campaigns === undefined ? '' : !D ? '<div class="nodata">아직 틱톡 자료가 들어오지 않았습니다. 대표 PC 의 자동 반영(매시간 40분)을 기다려 주세요.</div>'
+    ${DATA.ad_campaigns === undefined ? '' : !D ? `<div class="nodata">아직 ${chName()} 자료가 들어오지 않았습니다. 대표 PC 의 자동 반영(매시간 40분)을 기다려 주세요.</div>`
       : D.brands.filter(b => brand === '전체' || b.brand === brand).map(b => brandHtml(b, D)).join('')}
     ${FIELDS.map(([f]) => `<datalist id="dl-${f}">${opts(f).map(o => `<option value="${esc(o)}">`).join('')}</datalist>`).join('')}
-    <div class="foot"><b>보는 법</b> — <b>운영 중</b>(초록 점)은 어제나 오늘 노출이 있던 캠페인·소재입니다. 광고비·구매·ROAS는 위에서 고른 하루의 틱톡 광고관리자 기준(광고비 부가세 별도, 구매는 픽셀이 추적한 결제)입니다.
-    캠페인·광고그룹·소재 이름과 예산·지면·입찰은 틱톡에서 자동으로 읽어 옵니다.
-    <b>타겟팅·오디언스·최적화 이벤트</b>는 틱톡이 아직 읽기 권한을 주지 않아 이 화면에서 직접 적습니다. 칸을 누르고 적은 뒤 Enter(취소는 Esc). 광고그룹 단위로 저장되고 다음 갱신 때도 그대로 남습니다.</div>
+    <div class="foot"><b>보는 법</b> — 광고비·구매·CPA·ROAS는 위에서 고른 하루의 ${chName()} 광고관리자 기준입니다(광고비 부가세 별도, 구매는 ${channel === 'google' ? '입찰에 쓰는 구매 전환' : '픽셀이 추적한 결제'}, CPA = 광고비 ÷ 구매 수).
+    ${channel === 'google' ? `<b>운영 중</b>(초록 점)은 캠페인·광고그룹·광고가 모두 켜진 것입니다. 꺼졌어도 최근 7일 노출이 있으면 '최근 멈춘 소재도 보기'로 볼 수 있습니다.
+    나이·성별·오디언스·지면·전환 목표·입찰은 모두 구글애즈에서 자동으로 읽어 옵니다. '일부 제한'은 구글 정책 검토에서 노출이 제한된 소재입니다.`
+    : `<b>운영 중</b>(초록 점)은 어제나 오늘 노출이 있던 캠페인·소재입니다. 캠페인·광고그룹·소재 이름과 예산·지면·입찰은 틱톡에서 자동으로 읽어 옵니다.
+    <b>타겟팅·오디언스·최적화 이벤트</b>는 틱톡이 아직 읽기 권한을 주지 않아 이 화면에서 직접 적습니다. 칸을 누르고 적은 뒤 Enter(취소는 Esc). 광고그룹 단위로 저장되고 다음 갱신 때도 그대로 남습니다.`}</div>
   </main>`;
   bindHeader(b => { brand = b; renderApp(); }, null, null);
+  document.querySelectorAll('[data-ch]:not(:disabled)').forEach(b => b.onclick = () => { channel = b.dataset.ch; LS.set('cps_ch', channel); editing = null; renderApp(); });
   document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { dayKey = b.dataset.day; LS.set('cps_day', dayKey); renderApp(); });
   $('#stopChk').onchange = e => { showStopped = e.target.checked; LS.set('cps_stopped', showStopped ? '1' : '0'); renderApp(); };
   document.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { editing = { gid: b.dataset.ed, field: b.dataset.f }; renderApp(); });
