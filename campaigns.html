@@ -36,6 +36,11 @@
   .cps tr.cend td{border-bottom:1px solid var(--line2)}
   .cname{font-weight:700;display:flex;gap:6px;align-items:flex-start}
   .cmeta{margin-top:6px;display:flex;flex-direction:column;gap:2px;color:var(--fg2);font-size:12px;font-variant-numeric:tabular-nums}
+  .cmeta span{white-space:nowrap}
+  .cpa-box{margin-top:8px;border-top:1px solid var(--line);padding-top:6px;font-size:12px;font-variant-numeric:tabular-nums}
+  .cpa-h{color:var(--fg3);font-size:11px;margin-bottom:2px}
+  .cpa-r{display:flex;justify-content:space-between;gap:10px;color:var(--fg2);line-height:1.6}
+  .cpa-r b{color:var(--fg);font-weight:600}
   .dot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:5px;background:var(--fg3)}
   .dot.on{background:var(--green)}
   .cr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
@@ -103,6 +108,17 @@ function setCell(g, field){
   return `<button class="ed-cell${v ? '' : ' empty'}" data-ed="${esc(gid)}" data-f="${field}" title="눌러서 직접 입력">${esc(v)}</button>`;
 }
 
+/* 캠페인 CPA: 고른 하루 + 최근 5일 + 최근 2주 (기간은 어제까지 꽉 찬 날, data.win) */
+function cpaBox(c, ct, D){
+  const W = D.win || {}, w = c.win || {};
+  const rng = k => W[k] ? `${md(W[k][0])}~${md(W[k][1])}` : '';
+  const line = (label, v, title) => `<div class="cpa-r" title="${esc(title)}"><span>${label}</span><b>${v[1] > 0 ? fmt(v[0] / v[1]) + '원' : '–'}</b></div>`;
+  return `<div class="cpa-box"><div class="cpa-h">CPA (전환당 비용)</div>
+    ${line(md(D[dayKey]) + (dayKey === 'today' ? ' (진행 중)' : ''), ct, '광고비 ' + fmt(ct[0]) + '원 ÷ 구매 ' + fmt(ct[1]))}
+    ${w.d5 ? line('최근 5일', w.d5, rng('d5') + ' · 광고비 ' + fmt(w.d5[0]) + '원 ÷ 구매 ' + fmt(w.d5[1])) : ''}
+    ${w.d14 ? line('최근 2주', w.d14, rng('d14') + ' · 광고비 ' + fmt(w.d14[0]) + '원 ÷ 구매 ' + fmt(w.d14[1])) : ''}</div>`;
+}
+
 function brandHtml(b, D){
   const all = b.campaigns.flatMap(c => c.groups.flatMap(g => g.creatives));
   const t = sum(all, D);
@@ -115,8 +131,9 @@ function brandHtml(b, D){
       const last = gi === c.groups.length - 1 && i === g.creatives.length - 1, v = dayVal(x, D);
       body += `<tr class="${x.running ? '' : 'stopped'}${last ? ' cend' : ''}">`;
       if (gi === 0 && i === 0) body += `<td class="camp" rowspan="${n}"><div class="cname"><span class="dot${c.running ? ' on' : ''}" title="${c.running ? '운영 중' : '최근 멈춤'}"></span><span>${esc(c.name)}</span></div>
-        <div class="cmeta"><span>${esc(c.objective)} · 예산 ${c.budget ? fmt(c.budget) + '원' : '광고그룹 단위'}</span>
-        <span>${md(D[dayKey])} 광고비 ${man(ct[0])} · 구매 ${fmt(ct[1])} · CPA ${cpa(ct[0], ct[1]) || '–'} · ROAS ${roas(ct[2], ct[0])}</span></div></td>`;
+        <div class="cmeta"><span>${esc(c.objective)}</span><span>예산 ${c.budget ? fmt(c.budget) + '원' : '광고그룹 단위'}</span>
+        <span>${md(D[dayKey])} 광고비 ${man(ct[0])}원</span><span>${md(D[dayKey])} 구매 ${fmt(ct[1])}</span><span>${md(D[dayKey])} ROAS ${roas(ct[2], ct[0])}</span></div>
+        ${cpaBox(c, ct, D)}</td>`;
       const tags = [x.date ? `<span class="tg dt">${esc(x.date)} 등록</span>` : '',
         x.kind !== '영상' ? `<span class="tg cat">${esc(x.kind)}</span>` : '',
         x.variants ? `<span class="tg var" title="틱톡이 음악·편집을 바꿔 자동으로 만든 변형을 이 줄에 합침">자동 변형 ${x.variants}개 포함</span>` : (x.n > 1 ? `<span class="tg var">같은 소재 ${x.n}개</span>` : ''),
@@ -157,7 +174,7 @@ function render(){
     ${DATA.ad_campaigns === undefined ? '' : !D ? `<div class="nodata">아직 ${chName()} 자료가 들어오지 않았습니다. 대표 PC 의 자동 반영(매시간 40분)을 기다려 주세요.</div>`
       : D.brands.filter(b => brand === '전체' || b.brand === brand).map(b => brandHtml(b, D)).join('')}
     ${FIELDS.map(([f]) => `<datalist id="dl-${f}">${opts(f).map(o => `<option value="${esc(o)}">`).join('')}</datalist>`).join('')}
-    <div class="foot"><b>보는 법</b> — 광고비·구매·CPA·ROAS는 위에서 고른 하루의 ${chName()} 광고관리자 기준입니다(광고비 부가세 별도, 구매는 ${channel === 'google' ? '입찰에 쓰는 구매 전환' : '픽셀이 추적한 결제'}, CPA = 광고비 ÷ 구매 수).
+    <div class="foot"><b>보는 법</b> — 캠페인 칸의 CPA 는 고른 하루와 최근 5일·최근 2주(어제까지 꽉 찬 날, 숫자에 마우스를 올리면 기간·계산이 보임)입니다. 그 밖의 광고비·구매·CPA·ROAS는 위에서 고른 하루의 ${chName()} 광고관리자 기준입니다(광고비 부가세 별도, 구매는 ${channel === 'google' ? '입찰에 쓰는 구매 전환' : '픽셀이 추적한 결제'}, CPA = 광고비 ÷ 구매 수).
     ${channel === 'google' ? `<b>운영 중</b>(초록 점)은 캠페인·광고그룹·광고가 모두 켜진 것입니다. 꺼졌어도 최근 7일 노출이 있으면 '최근 멈춘 소재도 보기'로 볼 수 있습니다.
     나이·성별·오디언스·지면·전환 목표·입찰은 모두 구글애즈에서 자동으로 읽어 옵니다. '일부 제한'은 구글 정책 검토에서 노출이 제한된 소재입니다.`
     : `<b>운영 중</b>(초록 점)은 어제나 오늘 노출이 있던 캠페인·소재입니다. 캠페인·광고그룹·소재 이름과 예산·지면·입찰은 틱톡에서 자동으로 읽어 옵니다.
