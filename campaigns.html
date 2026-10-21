@@ -24,14 +24,15 @@
   .bh .stats{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--fg2);font-size:13px;font-variant-numeric:tabular-nums}
   .bh .stats b{color:var(--fg)}
   .cps-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
-  .cps{border-collapse:collapse;width:100%;min-width:1420px;font-size:13px}
+  .cps{border-collapse:collapse;width:100%;min-width:1600px;font-size:13px}
   .cps th{background:var(--bg3);text-align:left;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap;font-size:12px;color:var(--fg2)}
   .cps td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
   .cps th.num,.cps td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   .cps td.camp{border-right:1px solid var(--line);background:var(--bg2);vertical-align:top;width:230px;min-width:220px}
   .cps td.set{border-left:1px solid var(--line);text-align:center;min-width:110px}
   .cps td.aud{min-width:200px;max-width:280px}
-  .cps td.crc{min-width:340px}   /* 소재 이름이 한 줄에 시원하게 보이도록 */
+  .cps td.crc{min-width:340px}
+  .cps td.grpc{border-right:1px solid var(--line);vertical-align:top;min-width:170px;width:180px}   /* 소재 이름이 한 줄에 시원하게 보이도록 */
   .cps th.dayh{color:var(--fg)}
   .cps tr.cend td{border-bottom:1px solid var(--line2)}
   .cname{font-weight:700;display:flex;gap:6px;align-items:flex-start}
@@ -89,6 +90,7 @@ let editing = null;   // 지금 입력 중인 칸 { gid, field }
 const fmt = n => Math.round(n || 0).toLocaleString('ko-KR');
 const man = n => n >= 1e4 ? fmt(n / 1e4) + '만' : fmt(n);
 const roas = (v, s) => s > 0 ? Math.round(v / s * 100) + '%' : '–';
+const newer = (x, y) => { try { const X = BigInt(x), Y = BigInt(y); return X > Y ? 1 : X < Y ? -1 : 0; } catch { return String(x).localeCompare(String(y)); } };
 const cpa = (s, n) => n > 0 ? fmt(s / n) : (s > 0 ? '–' : '');   // 전환당 비용 = 광고비 ÷ 구매 수
 const md = d => d ? (+d.slice(5, 7)) + '/' + (+d.slice(8, 10)) : '';
 const rows = () => DATA.ad_campaigns || [];
@@ -122,7 +124,8 @@ function cpaBox(c, ct, D){
 function brandHtml(b, D){
   const all = b.campaigns.flatMap(c => c.groups.flatMap(g => g.creatives));
   const t = sum(all, D);
-  const camps = b.campaigns.map(c => ({ ...c, groups: c.groups.map(g => ({ ...g, creatives: g.creatives.filter(x => showStopped || x.running) })).filter(g => g.creatives.length) })).filter(c => c.groups.length);
+  const camps = b.campaigns.map(c => ({ ...c, groups: c.groups.map(g => ({ ...g, creatives: g.creatives.filter(x => showStopped || x.running) })).filter(g => g.creatives.length) })).filter(c => c.groups.length)
+    .sort((a, b) => newer(b.id, a.id));   // 최근 생성 캠페인이 위로 (틱톡·구글 캠페인 번호는 만든 순서대로 커짐)
   let body = '';
   camps.forEach(c => {
     const n = c.groups.reduce((a, g) => a + g.creatives.length, 0), multi = c.groups.length > 1;
@@ -139,13 +142,17 @@ function brandHtml(b, D){
         x.variants ? `<span class="tg var" title="틱톡이 음악·편집을 바꿔 자동으로 만든 변형을 이 줄에 합침">자동 변형 ${x.variants}개 포함</span>` : (x.n > 1 ? `<span class="tg var">같은 소재 ${x.n}개</span>` : ''),
         x.note ? `<span class="tg stop" title="구글 정책 검토 결과. 일부 제한이면 노출이 줄 수 있음">${esc(x.note)}</span>` : '',
         x.running ? '' : `<span class="tg stop">${x.last_day ? md(x.last_day) + ' 이후 ' : ''}멈춤</span>`].join('');
+      if (i === 0) {   // 광고그룹 칸: 이름 + 고른 하루의 그룹 광고비·구매·CPA (논타겟/타겟 그룹 비교용)
+        const gt = sum(g.creatives, D), gon = g.creatives.some(x => x.running);
+        body += `<td class="grpc" rowspan="${g.creatives.length}"><div class="cname"><span class="dot${gon ? ' on' : ''}" title="${gon ? '운영 중' : '최근 멈춤'}"></span><span>${esc(g.name)}</span></div>
+          <div class="cmeta"><span>${md(D[dayKey])} 광고비 ${man(gt[0])}원</span><span>${md(D[dayKey])} 구매 ${fmt(gt[1])}</span><span>${md(D[dayKey])} CPA ${cpa(gt[0], gt[1]) || '–'}${gt[1] > 0 ? '원' : ''}</span></div></td>`;
+      }
       body += `<td class="crc"><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>
         <td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${cpa(v[0], v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
       if (i === 0) {
         const rs = g.creatives.length, s = setOf(g.id);
-        const gname = (multi || g.name !== c.name) ? `<span class="grp">그룹 · ${esc(g.name)}</span>` : '';
         const by = s && s.updated_by ? `<span class="ed-by">${esc(s.updated_by)} · ${md(String(s.updated_at || '').slice(0, 10))}</span>` : '';
-        body += `<td class="set" rowspan="${rs}">${gname}${setCell(g, 'target')}</td>
+        body += `<td class="set" rowspan="${rs}">${setCell(g, 'target')}</td>
           <td class="set aud" rowspan="${rs}">${setCell(g, 'audience')}</td>
           <td class="set" rowspan="${rs}">${esc(g.placement)}</td>
           <td class="set" rowspan="${rs}">${setCell(g, 'event')}${g.auto ? '' : by}</td>
@@ -157,7 +164,7 @@ function brandHtml(b, D){
   const runC = b.campaigns.filter(c => c.running).length, runA = all.filter(x => x.running).length;
   return `<section class="bsec"><div class="bh"><h2>${esc(b.brand)}</h2><div class="stats"><span>운영 캠페인 <b>${runC}</b></span><span>운영 소재 <b>${runA}</b></span>
     <span>${md(D[dayKey])} 광고비 <b>${man(t[0])}원</b></span><span>구매 <b>${fmt(t[1])}</b></span><span>CPA <b>${cpa(t[0], t[1]) || '–'}${t[1] > 0 ? '원' : ''}</b></span><span>ROAS <b>${roas(t[2], t[0])}</b></span></div></div>
-    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고 소재</th><th class="num dayh" title="${esc(dayKey === 'today' ? '오늘 지금까지' : '어제 하루')} 기준">${md(D[dayKey])} 광고비</th><th class="num dayh">${md(D[dayKey])} 구매</th><th class="num dayh" title="전환당 비용 = 광고비 ÷ 구매 수">${md(D[dayKey])} CPA</th><th class="num dayh">${md(D[dayKey])} ROAS</th>
+    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고그룹</th><th>광고 소재</th><th class="num dayh" title="${esc(dayKey === 'today' ? '오늘 지금까지' : '어제 하루')} 기준">${md(D[dayKey])} 광고비</th><th class="num dayh">${md(D[dayKey])} 구매</th><th class="num dayh" title="전환당 비용 = 광고비 ÷ 구매 수">${md(D[dayKey])} CPA</th><th class="num dayh">${md(D[dayKey])} ROAS</th>
     <th>타겟팅</th><th>오디언스</th><th>지면</th><th>최적화 이벤트</th><th>입찰</th></tr></thead><tbody>${body}</tbody></table></div>` : '<div class="nodata">운영 중인 캠페인이 없습니다.</div>'}</section>`;
 }
 
