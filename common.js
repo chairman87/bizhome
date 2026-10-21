@@ -144,6 +144,8 @@ async function reload(){
 let schemaWarn = '';
 const warnHtml = () => schemaWarn ? `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;font-size:13px;text-align:center">⚠ ${esc(schemaWarn)}</div>` : '';
 /* 메뉴 접근 권한: 홈의 메뉴 편집에서 "볼 수 있는 사람"이 정해진 화면은 그 사람과 관리자만 (주소를 직접 쳐도 막힘) */
+/* 관리자 전용 화면: '볼 수 있는 사람'이 비어 있어도 관리자만. 체크한 담당자는 추가로 볼 수 있음 (index.html 메뉴 표시도 같은 목록을 씀) */
+const ADMIN_ONLY_PAGES = ['campaigns.html'];
 let accessState = null;   // null=아직 확인 안 함, 'checking', 'ok', 'denied'
 async function checkAccess(){
   accessState = 'checking';
@@ -154,8 +156,9 @@ async function checkAccess(){
     const key = location.pathname.split('/').pop() + (qs ? '?' + qs : '');
     const row = rows.find(r => decodeURIComponent(r.href || '') === key);
     const allowed = row && Array.isArray(row.allowed) ? row.allowed : [];
-    accessState = (allowed.length && !isAdmin() && !allowed.includes(me)) ? 'denied' : 'ok';
-  } catch { accessState = 'ok'; }
+    const locked = allowed.length || ADMIN_ONLY_PAGES.includes(location.pathname.split('/').pop());
+    accessState = (locked && !isAdmin() && !allowed.includes(me)) ? 'denied' : 'ok';
+  } catch { accessState = (ADMIN_ONLY_PAGES.includes(location.pathname.split('/').pop()) && !isAdmin()) ? 'denied' : 'ok'; }   // 메뉴를 못 읽으면 관리자 전용 화면만 막음
   renderApp();
 }
 function renderApp(){
