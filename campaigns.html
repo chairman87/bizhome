@@ -24,13 +24,15 @@
   .bh .stats{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--fg2);font-size:13px;font-variant-numeric:tabular-nums}
   .bh .stats b{color:var(--fg)}
   .cps-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
-  .cps{border-collapse:collapse;width:100%;min-width:1280px;font-size:13px}
+  .cps{border-collapse:collapse;width:100%;min-width:1420px;font-size:13px}
   .cps th{background:var(--bg3);text-align:left;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap;font-size:12px;color:var(--fg2)}
   .cps td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
   .cps th.num,.cps td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .cps td.camp{border-right:1px solid var(--line);background:var(--bg2);vertical-align:top;width:230px}
+  .cps td.camp{border-right:1px solid var(--line);background:var(--bg2);vertical-align:top;width:230px;min-width:220px}
   .cps td.set{border-left:1px solid var(--line);text-align:center;min-width:110px}
-  .cps td.aud{min-width:200px}
+  .cps td.aud{min-width:200px;max-width:280px}
+  .cps td.crc{min-width:340px}   /* 소재 이름이 한 줄에 시원하게 보이도록 */
+  .cps th.dayh{color:var(--fg)}
   .cps tr.cend td{border-bottom:1px solid var(--line2)}
   .cname{font-weight:700;display:flex;gap:6px;align-items:flex-start}
   .cmeta{margin-top:6px;display:flex;flex-direction:column;gap:2px;color:var(--fg2);font-size:12px;font-variant-numeric:tabular-nums}
@@ -120,7 +122,7 @@ function brandHtml(b, D){
         x.variants ? `<span class="tg var" title="틱톡이 음악·편집을 바꿔 자동으로 만든 변형을 이 줄에 합침">자동 변형 ${x.variants}개 포함</span>` : (x.n > 1 ? `<span class="tg var">같은 소재 ${x.n}개</span>` : ''),
         x.note ? `<span class="tg stop" title="구글 정책 검토 결과. 일부 제한이면 노출이 줄 수 있음">${esc(x.note)}</span>` : '',
         x.running ? '' : `<span class="tg stop">${x.last_day ? md(x.last_day) + ' 이후 ' : ''}멈춤</span>`].join('');
-      body += `<td><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>
+      body += `<td class="crc"><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>
         <td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${cpa(v[0], v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
       if (i === 0) {
         const rs = g.creatives.length, s = setOf(g.id);
@@ -138,7 +140,7 @@ function brandHtml(b, D){
   const runC = b.campaigns.filter(c => c.running).length, runA = all.filter(x => x.running).length;
   return `<section class="bsec"><div class="bh"><h2>${esc(b.brand)}</h2><div class="stats"><span>운영 캠페인 <b>${runC}</b></span><span>운영 소재 <b>${runA}</b></span>
     <span>${md(D[dayKey])} 광고비 <b>${man(t[0])}원</b></span><span>구매 <b>${fmt(t[1])}</b></span><span>CPA <b>${cpa(t[0], t[1]) || '–'}${t[1] > 0 ? '원' : ''}</b></span><span>ROAS <b>${roas(t[2], t[0])}</b></span></div></div>
-    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고 소재</th><th class="num">광고비</th><th class="num">구매</th><th class="num" title="전환당 비용 = 광고비 ÷ 구매 수">CPA</th><th class="num">ROAS</th>
+    ${body ? `<div class="cps-scroll"><table class="cps"><thead><tr><th>캠페인</th><th>광고 소재</th><th class="num dayh" title="${esc(dayKey === 'today' ? '오늘 지금까지' : '어제 하루')} 기준">${md(D[dayKey])} 광고비</th><th class="num dayh">${md(D[dayKey])} 구매</th><th class="num dayh" title="전환당 비용 = 광고비 ÷ 구매 수">${md(D[dayKey])} CPA</th><th class="num dayh">${md(D[dayKey])} ROAS</th>
     <th>타겟팅</th><th>오디언스</th><th>지면</th><th>최적화 이벤트</th><th>입찰</th></tr></thead><tbody>${body}</tbody></table></div>` : '<div class="nodata">운영 중인 캠페인이 없습니다.</div>'}</section>`;
 }
 
