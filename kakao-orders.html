@@ -54,6 +54,9 @@ const BRANDS = {
   '흑생마':   { 1: 29800, 2: 56500, 4: 108800, 6: 156800 },
 };
 const QTY_LABEL = { 1: '1박스', 2: '2박스', 4: '3+1박스', 6: '4+2박스' };
+const SHOP_EXTRA = { '흑생마': { email: 'phbeauty1@naver.com', message: '부재시 문앞에 놔주시고 문자주세요.' } };   // 주문서에 함께 채울 값 (2026-09-16 흑생마 확정)
+// 즐겨찾기 막대에 끌어다 놓는 '카톡주문 채우기' 단추. 누를 때마다 최신 ko-fill.js 를 불러 실행
+const FILL_BM = "javascript:(function(){var s=document.createElement('script');s.src='" + new URL('ko-fill.js', location.href).href + "?'+Date.now();document.body.appendChild(s);})()";
 const STATUSES = ['접수', '주문완료', '보류', '주문아님'];
 const TOKEN_KEY = 'think_token';   // 메모장과 같은 출입증을 씀 (think_token_<사람id>)
 let ROWS = null, loadErr = '', tab = '접수', brand = '', days = 14, openRaw = new Set(), loading = false;
@@ -135,7 +138,11 @@ function render(){
       ${loadErr ? `<div class="hint warn">⚠ ${esc(loadErr)}</div>` : ''}
       ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${tab === '접수' ? '처리할 카톡 주문이 없습니다. 👍' : '해당하는 주문이 없습니다.'}</div>`}`;
   }
-  $('#app').innerHTML = headerHtml({ icon: '💬', title: '카톡 주문' }) + `<main class="wrap" style="max-width:900px">${body}
+  $('#app').innerHTML = headerHtml({ icon: '💬', title: '카톡 주문' }) + `<main class="wrap" style="max-width:900px">
+    <div class="hint" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+      <b>처음 한 번:</b> 이 단추 → <a href="${esc(FILL_BM)}" style="display:inline-block;background:#15803d;color:#fff;border-radius:6px;padding:3px 10px;font-weight:700;text-decoration:none" onclick="alert('누르지 말고, 즐겨찾기 막대(Ctrl+Shift+B)로 끌어다 놓으세요');return false;">📋 카톡주문 채우기</a> 를 브라우저 <b>즐겨찾기 막대로 끌어다 놓으세요.</b><br>
+      쓰는 법: [주문하러 가기] → 상품 페이지에서 <b>카톡주문 채우기</b> 클릭(옵션 자동 선택) → 구매하기 → 주문서에서 한 번 더 <b>카톡주문 채우기</b>(이름·휴대폰·무통장·입금자명 채움, 주소는 복사됨 → 주소 검색에 붙여넣기) → 결제는 직접.</div>
+    ${body}
     <div class="hint" style="margin-top:12px">대표 PC 가 10분마다 레모너리·서리맥스·흑생마 카톡 채널의 주문 메시지를 읽어 여기에 올립니다(카톡 '안 읽음' 표시는 그대로 둠).
     칸을 누르면 복사됩니다. <b>주문하러 가기</b> → 옵션 고르고 구매하기 → <b>비회원 구매</b> → 붙여넣기 → 무통장입금(입금자명 = 받는 분) → 주문번호를 적고 <b>주문 완료</b>.
     ⚠ 표시는 프로그램이 못 찾은 칸이니 카톡 원문을 보고 채워 주세요.</div></main>`;
@@ -157,8 +164,9 @@ function render(){
   document.querySelectorAll('[data-go]').forEach(el => el.onclick = () => {
     const r = get(el.dataset.go);
     if (!r.name || !r.phone || !r.address || !r.qty) { if (!confirm('비어 있는 칸이 있습니다. 그래도 열까요?')) return; }
-    window.open(r.product_url, '_blank', 'noopener');
-    if (r.name) copy(r.name, '이름');
+    // 주문 정보를 주소 뒤(#ko=)에 실어 보냄 → 쇼핑몰에서 '카톡주문 채우기' 즐겨찾기 단추(ko-fill.js)가 읽어 옵션·주문서를 채움
+    const info = { name: r.name, phone: r.phone, address: r.address, qty: r.qty, ...(SHOP_EXTRA[r.brand] || {}) };
+    window.open(r.product_url + '#ko=' + btoa(unescape(encodeURIComponent(JSON.stringify(info)))), '_blank', 'noopener');
   });
   document.querySelectorAll('[data-doneb]').forEach(el => el.onclick = () => {
     const r = get(el.dataset.doneb);
