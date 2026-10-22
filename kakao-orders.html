@@ -29,6 +29,9 @@
   .f label{font-size:11px;color:var(--fg3)}
   .cp{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--bg2);cursor:copy;font-size:14px;word-break:break-all;min-height:32px}
   .cp:hover{border-color:var(--fg2)}
+  .cpw{display:flex;gap:4px;align-items:stretch}.cpw .cp{flex:1;min-width:0}
+  .ed{flex:none;border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:0 9px;cursor:pointer;color:var(--fg2);font-size:14px}
+  .ed:hover{border-color:var(--fg2);color:var(--fg)}
   .cp.empty{color:#b91c1c;background:#fef2f2}
   .w{display:inline-block;font-size:11px;background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 6px;margin-right:4px}
   .raw{white-space:pre-wrap;font-size:12.5px;color:var(--fg2);background:var(--bg2);border-radius:6px;padding:8px;margin-top:8px;display:none}
@@ -99,7 +102,7 @@ async function copy(text, label){
 }
 const fmt = n => n == null ? '' : Number(n).toLocaleString('ko-KR') + '원';
 const when = s => { if (!s) return ''; const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-const cp = (r, key, label, val) => `<div class="cp ${val ? '' : 'empty'}" data-copy="${esc(r.id)}" data-key="${key}" title="눌러서 복사">${val ? esc(val) : '비어 있음 — 눌러서 적기'}</div>`;
+const cp = (r, key, label, val) => `<div class="cpw"><div class="cp ${val ? '' : 'empty'}" data-copy="${esc(r.id)}" data-key="${key}" title="눌러서 복사">${val ? esc(val) : '비어 있음 — 눌러서 적기'}</div>${val && ['접수', '확인필요', '자동실패'].includes(r.status) ? `<button class="ed" data-edit="${esc(r.id)}" data-key="${key}" title="${label} 고치기">✎</button>` : ''}</div>`;
 
 function cardHtml(r){
   const warn = Array.isArray(r.warn) ? r.warn : [];
@@ -161,6 +164,10 @@ function render(){
     const r = get(el.dataset.copy), k = el.dataset.key, label = { name: '이름', phone: '휴대폰', address: '주소' }[k];
     if (r[k]) return copy(r[k], label);
     const v = prompt(`${label} 적기`, ''); if (v && v.trim()) patch(r.id, { [k]: v.trim(), warn: undefined }, `${label}을(를) 저장했습니다`);
+  });
+  document.querySelectorAll('[data-edit]').forEach(el => el.onclick = () => {   // ✎ 채워진 칸 고치기 (프로그램이 잘못 읽었을 때)
+    const r = get(el.dataset.edit), k = el.dataset.key, label = { name: '이름', phone: '휴대폰', address: '주소' }[k];
+    const v = prompt(`${label} 고치기`, r[k] || ''); if (v !== null && v.trim() !== (r[k] || '')) patch(r.id, { [k]: v.trim() }, `${label}을(를) 고쳤습니다`);
   });
   document.querySelectorAll('[data-qty]').forEach(el => el.onchange = () => {
     const r = get(el.dataset.qty), q = el.value ? Number(el.value) : null;

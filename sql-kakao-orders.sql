@@ -40,6 +40,7 @@ create table if not exists kakao_orders (
   updated_at   timestamptz default now()
 );
 create index if not exists kakao_orders_sent on kakao_orders (sent_at desc);
+alter table kakao_orders add column if not exists staff_edited boolean default false;   -- 직원이 이름·주소·전화·수량을 고쳤는지 (2026-10-22)
 alter table kakao_orders enable row level security;
 revoke all on kakao_orders from anon, authenticated;
 
@@ -59,7 +60,7 @@ begin
   on conflict (id) do update set   -- 읽기 규칙을 고쳐 다시 보낸 경우: 직원이 아직 손대지 않은 '접수' 줄만 새 값으로 (2026-10-22)
     name = excluded.name, address = excluded.address, phone = excluded.phone, qty = excluded.qty, price = excluded.price,
     option_code = excluded.option_code, warn = excluded.warn, raw_text = excluded.raw_text
-  where kakao_orders.status = '접수' and kakao_orders.updated_at <= kakao_orders.created_at + interval '2 seconds';
+  where kakao_orders.status = '접수' and not coalesce(kakao_orders.staff_edited, false);
   get diagnostics n = row_count;
   delete from kakao_orders where sent_at < now() - interval '90 days';
   return jsonb_build_object('ok', true, 'added', n);
@@ -95,6 +96,7 @@ begin
     memo        = case when p_patch ? 'memo'        then left(p_patch->>'memo', 500)    else memo end,
     handled_by  = case when p_patch ? 'status'      then nm  else handled_by end,
     handled_at  = case when p_patch ? 'status'      then now() else handled_at end,
+    staff_edited = staff_edited or p_patch ?| array['name', 'address', 'phone', 'qty'],   -- 직원이 칸을 고친 줄은 PC 가 다시 보내도 덮어쓰지 않음
     updated_at  = now()
   where id = p_id;
   if not found then return jsonb_build_object('ok', false, 'err', 'notfound'); end if;
