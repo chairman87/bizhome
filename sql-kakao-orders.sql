@@ -106,3 +106,11 @@ end $$;
 grant execute on function ko_push(text, jsonb) to anon;
 grant execute on function ko_list(text, int) to anon;
 grant execute on function ko_update(text, text, jsonb) to anon;
+
+-- 홈 CS > 카톡 주문 배지용: 처리할 주문 건수만 돌려줌(개인정보 없음, 공개키로 부를 수 있음) — 2026-10-22
+create or replace function ko_count() returns int
+language sql stable security definer set search_path = public as $$
+  select count(*)::int from kakao_orders
+   where status in ('접수', '확인필요', '자동실패') and sent_at > now() - interval '14 days'
+$$;
+grant execute on function ko_count() to anon;
