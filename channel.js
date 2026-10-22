@@ -76,7 +76,7 @@ function talkHtml(p, top){   // top: 메시지 위에 붙이는 HTML (런칭 일
   const firstNew = from == null ? null : list.find(e => e.by !== me && String(e.at) > from);
   const rows = [...list].reverse().map(e => {   // 2026-10-21 부터 최신 글이 위 (런칭 일정 바로 아래에 최근 소식이 보이도록)
     const day = fmtDateTime(e.at).slice(0, 10); let head = day === last ? '' : `<div class="tday"><span>${dayLabel(day.replace(/\//g, '-'))}</span></div>`; last = day;
-    const body = e.type === 'msg' ? `${e.log.body ? `<div class="mt">${linkify(e.log.body)}</div>` : ''}${filesHtml(e.log.files)}`
+    const body = e.type === 'msg' ? `${e.log.body ? `<div class="mt">${linkify(e.log.body)}</div>` : ''}${filesHtml(e.log.files)}${repliesHtml(e.log, from)}`
       : e.type === 'card' ? `${e.card.memo ? `<div class="mt">${linkify(e.card.memo)}</div>` : ''}${cardChip(e.card, e.rev)}`
       : e.type === 'rev' ? `<div class="mt sys">${e.rev.no}차 수정본을 올렸습니다${e.rev.memo ? ' — ' + esc(e.rev.memo) : ''}</div>${cardChip(e.card, e.rev)}`
       : e.type === 'cmt' ? `<div class="mt"><span class="re" data-card="${e.card.id}">↳ ${esc(e.card.title)}</span> ${linkify(e.cmt.text || '')}</div>`
@@ -96,11 +96,46 @@ function talkHtml(p, top){   // top: 메시지 위에 붙이는 HTML (런칭 일
     <div class="tfeed">${rows || `<div class="slempty"><div class="big"># ${esc(p.name)}</div></div>`}
       ${all.length > list.length ? `<button class="btn sm" id="talkMore">이전 기록 더 보기 (${all.length - list.length}건)</button>` : ''}</div></div>`;
 }
+/* ---------- 메시지 답글 (2026-10-22): 메시지(project_logs) 바로 아래에 댓글처럼 달림. 저장은 project_logs.comments ---------- */
+let replyOpen = '';          // 지금 답글 입력칸이 열려 있는 메시지 id (한 번에 하나)
+const replyDraft = {};       // 메시지 id → 쓰다 만 답글 (화면이 다시 그려져도 남김)
+function repliesHtml(l, from){
+  const cm = Array.isArray(l.comments) ? l.comments : [];
+  const rows = cm.map(m => { const mine = m.by === me || isAdmin(), nw = from != null && m.by !== me && String(m.at) > from;
+    return `<div class="rp">${avatar(m.by)}<div class="rb"><div class="rh"><b>${esc(fullName(m.by || ''))}</b><span class="tm">${fmtDateTime(m.at).slice(5)}</span>${nw ? '<span class="nw">새</span>' : ''}${mine ? `<button class="mx" data-xdel="lcmt|${l.id}|${m.id}" title="답글 삭제">✕</button>` : ''}</div><div class="tx">${linkify(m.text || '')}</div></div></div>`; }).join('');
+  const input = replyOpen === l.id
+    ? `<div class="rpbox"><input id="rpIn" data-rpin="${l.id}" maxlength="1000" placeholder="답글 입력 후 Enter (Esc 닫기)" value="${esc(replyDraft[l.id] || '')}"></div>`
+    : `<button type="button" class="rbtn" data-reply="${l.id}">${cm.length ? `💬 답글 ${cm.length}개 · ` : ''}답글 달기</button>`;
+  return `<div class="rpl ${cm.length ? '' : 'none'}">${rows}${input}</div>`;
+}
+/* 저장 직전에 서버의 최신 메시지를 다시 읽음: 두 사람이 동시에 답글을 달아도 서로의 답글이 지워지지 않게 */
+async function freshLog(id){
+  try { if (store.client) { const { data } = await store.client.from('project_logs').select('*').eq('id', id).single(); if (data) return normalize('project_logs', data); } } catch {}
+  return (DATA.project_logs || []).find(x => x.id === id);
+}
+async function sendReply(id, text){
+  const t = String(text || '').trim(); if (!t) return;
+  delete replyDraft[id]; talkStick = false;
+  const l = await freshLog(id); if (!l) { toast('원래 메시지를 찾을 수 없습니다', true); return; }
+  await saveRow('project_logs', { ...l, comments: [...(l.comments || []), { id: uid(), by: me, text: t, at: nowIso() }], updated_by: me });
+  const again = $('#rpIn'); if (again) again.focus();
+}
+function bindReplies(){
+  document.querySelectorAll('[data-reply]').forEach(b => b.onclick = e => { e.stopPropagation(); replyOpen = b.dataset.reply; talkStick = false; render(); const i = $('#rpIn'); if (i) i.focus(); });
+  const i = $('#rpIn'); if (!i) return;
+  i.oninput = () => { replyDraft[i.dataset.rpin] = i.value; };
+  i.onkeydown = e => {
+    if (e.key === 'Escape') { delete replyDraft[i.dataset.rpin]; replyOpen = ''; talkStick = false; render(); return; }
+    if (e.key !== 'Enter' || e.isComposing) return;   // 한글 조합 중 Enter 는 무시
+    e.preventDefault(); const t = i.value; i.value = ''; sendReply(i.dataset.rpin, t);
+  };
+}
 /* 대화 줄의 ✕ 삭제 */
 async function talkDelete(key){
   const [kind, id, sub] = key.split('|'); talkStick = false;
   if (kind === 'msg') { if (confirm('이 메시지를 삭제할까요?')) await removeRow('project_logs', id); return; }
   if (kind === 'dec') { if (confirm('이 결정 기록을 삭제할까요?')) await removeRow('project_decisions', id); return; }
+  if (kind === 'lcmt') { if (!confirm('이 답글을 삭제할까요?')) return; const l = await freshLog(id); if (l) await saveRow('project_logs', { ...l, comments: (l.comments || []).filter(m => m.id !== sub), updated_by: me }); return; }
   const c = await freshCard(id); if (!c) return;
   if (kind === 'cmt') { if (confirm('이 댓글을 삭제할까요?')) await saveRow('project_cards', { ...c, comments: (c.comments || []).filter(m => m.id !== sub), updated_by: me }); return; }
   if (kind === 'rev') { const r = revsOf(c).find(x => String(x.no) === sub); if (!r || r.no !== lastRev(c).no || r.no < 2) return;
@@ -141,6 +176,7 @@ function bindTalk(p){
   document.querySelectorAll('#tscroll [data-card]').forEach(el => el.onclick = () => openCard(el.dataset.card, Number(el.dataset.rv) || undefined));
   bindQuickDec();
   document.querySelectorAll('[data-xdel]').forEach(b => b.onclick = e => { e.stopPropagation(); talkDelete(b.dataset.xdel); });
+  bindReplies();
   if (typeof bindTalkExtra === 'function') bindTalkExtra(p);
 }
 
@@ -150,7 +186,7 @@ const AGENDA = '__agenda';   // 왼쪽 목록의 '회의 안건'을 고른 상�
 function slRender(p){
   if (tab !== 'cards' && tab !== 'decs') tab = 'talk';   // 채널 첫 화면 = 런칭 일정 + 그 아래 메시지 (2026-10-21 두 탭을 합침. 예전에 저장된 'plan' 도 여기로)
   const sc0 = $('#tscroll'), prev = sc0 ? { top: sc0.scrollTop, tab: sc0.dataset.tab, id: sc0.dataset.pid } : null;
-  const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ'].includes(ae.id) ? '#' + ae.id : '';
+  const ae = document.activeElement, keep = ae && ['cBody', 'tkTitle', 'cardQ', 'rpIn'].includes(ae.id) ? '#' + ae.id : '';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
   const act = P().filter(x => x.status !== '완료').sort(byName), done = P().filter(x => x.status === '완료').sort(byName);
   const item = x => { const un = unreadOf(x.id), pend = cardsOf(x.id).filter(c => c.status === '결정 대기').length, d = daysAgo(projLastAt(x.id)); return `<button class="slch ${p && x.id === p.id ? 'on' : ''} ${un ? 'unread' : ''}" data-open="${x.id}" title="${d == null ? '아직 기록 없음' : '마지막 기록 ' + (d === 0 ? '오늘' : d + '일 전')}${pend ? ' · 결정 대기 ' + pend + '건' : ''}"><span class="hash">#</span><span class="nm">${esc(x.name)}</span>${d != null && d >= 7 && x.status !== '완료' ? '<span class="stale" title="7일 넘게 기록이 없습니다">●</span>' : ''}${un ? `<span class="bd" title="안 읽은 새 글 ${un}건">${un}</span>` : pend ? `<span class="pd" title="결정 대기 ${pend}건">⏳${pend}</span>` : ''}</button>`; };
@@ -512,7 +548,8 @@ function unreadOf(pid){
   if (!READS) return 0;
   const p = P().find(x => x.id === pid); if (!p) return 0;
   const from = seenOf(pid)._channel || '';
-  return talkEvents(p).filter(e => e.by !== me && String(e.at) > from).length;
+  const replies = (DATA.project_logs || []).filter(l => l.project_id === pid).flatMap(l => Array.isArray(l.comments) ? l.comments : []);   // 메시지 답글 (2026-10-22)
+  return talkEvents(p).filter(e => e.by !== me && String(e.at) > from).length + replies.filter(m => m.by !== me && String(m.at) > from).length;
 }
 /* 카드의 새 글: 내가 그 카드를 마지막으로 연 뒤(연 적 없으면 채널 기준 시각 뒤)에 다른 사람이 올린 수정본·댓글·결정이 있는가 */
 function cardUnread(c){
@@ -822,6 +859,25 @@ document.head.insertAdjacentHTML('beforeend', `<style>
   .sl .msg:hover .mx{visibility:visible}
   .sl .msg .mx:hover{color:#e01e5a;border-color:#e01e5a}
   @media (hover:none){ .sl .msg .mx{visibility:visible;border:0;background:transparent;color:#aaa} }
+  /* 메시지 답글 (2026-10-22) */
+  .msg .rpl{margin-top:6px;border-left:2px solid #e3e3e3;padding-left:10px}
+  .msg .rpl.none{border-left-color:transparent;padding-left:0;margin-top:2px}
+  .msg .rp{display:flex;gap:8px;padding:4px 0}
+  .msg .rp > .av{width:24px;height:24px;font-size:11px;border-radius:5px;flex:none;margin-top:1px}
+  .msg .rp .rb{flex:1;min-width:0}
+  .msg .rp .rh{display:flex;align-items:baseline;gap:6px;font-size:13px}
+  .msg .rp .rh b{font-weight:800;color:#1d1c1d}
+  .msg .rp .rh .tm{font-size:11px;color:#616061}
+  .msg .rp .tx{white-space:pre-wrap;word-break:break-word;line-height:1.5;font-size:14px;color:#1d1c1d}
+  .sl .msg:hover .rp .mx{visibility:hidden}
+  .sl .msg .rp:hover .mx{visibility:visible}
+  .msg .rbtn{border:0;background:transparent;color:#1264a3;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0;visibility:hidden}
+  .msg:hover .rbtn,.msg .rpl:not(.none) .rbtn{visibility:visible}
+  .msg .rbtn:hover{text-decoration:underline}
+  .msg .rpbox{margin-top:4px}
+  .msg #rpIn{width:100%;max-width:520px;border:1px solid #ccc;border-radius:8px;padding:6px 10px;font-size:14px;font-family:inherit}
+  .msg #rpIn:focus{outline:none;border-color:#1264a3;box-shadow:0 0 0 2px rgba(18,100,163,.15)}
+  @media (hover:none){ .msg .rbtn{visibility:visible} .sl .msg .rp .mx{visibility:visible} .msg #rpIn{font-size:16px} }
   .mfile{display:inline-block;max-width:380px;margin-top:6px;border:1px solid #ddd;border-radius:10px;overflow:hidden;cursor:pointer;background:#fff;vertical-align:top}
   .mfile:hover{border-color:#1264a3}
   .mfile.unread{border-color:#e01e5a}
