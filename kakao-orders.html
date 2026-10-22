@@ -152,7 +152,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '💬', title: '카톡 주문' }) + `<main class="wrap" style="max-width:900px">
     ${body}
     <div class="hint" style="margin-top:12px">대표 PC 가 20분마다 레모너리·서리맥스·흑생마 카톡 채널의 주문 메시지를 읽어 여기에 올립니다(카톡 '안 읽음' 표시는 그대로 둠).
-    <b>🤖 자동 주문</b>을 누르면 대표 PC 가 다음 실행 때(최대 20분) 홈페이지에 비회원 무통장 주문을 넣고 주문번호를 적습니다. 자동 주문이 안 되는 건은 칸을 눌러 복사해 <b>직접 주문하러 가기</b>로 넣고 <b>주문 완료</b>를 눌러 주세요.
+    <b>🤖 자동 주문</b>을 누르면 대표 PC 가 5분 안에 홈페이지에 비회원 무통장 주문을 넣고 주문번호를 적습니다. 자동 주문이 안 되는 건은 칸을 눌러 복사해 <b>직접 주문하러 가기</b>로 넣고 <b>주문 완료</b>를 눌러 주세요.
     ⚠ 표시는 프로그램이 못 찾은 칸이니 카톡 원문을 보고 채워 주세요.</div></main>`;
   bindHeader(() => {}, null, () => ROWS ? `처리할 카톡 주문 ${ROWS.filter(r => r.status === '접수').length}건` : '');
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
