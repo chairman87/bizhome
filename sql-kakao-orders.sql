@@ -43,7 +43,7 @@ create index if not exists kakao_orders_sent on kakao_orders (sent_at desc);
 alter table kakao_orders enable row level security;
 revoke all on kakao_orders from anon, authenticated;
 
--- 대표 PC → 새 주문 넣기. 이미 있는 줄은 건드리지 않음(직원이 고친 내용 보존)
+-- 대표 PC → 새 주문 넣기. 이미 있는 줄은 직원이 고치지 않은 '접수' 줄만 새로 읽은 값으로 바꿈(직원이 고친 내용 보존)
 create or replace function ko_push(p_token text, p_rows jsonb) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare n int;
@@ -56,7 +56,10 @@ begin
          left(r->>'name', 50), left(r->>'address', 300), left(r->>'phone', 30), nullif(r->>'qty', '')::int, nullif(r->>'price', '')::int,
          r->>'option_code', r->>'product_url', coalesce(r->'warn', '[]'::jsonb)
     from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) r
-  on conflict (id) do nothing;
+  on conflict (id) do update set   -- 읽기 규칙을 고쳐 다시 보낸 경우: 직원이 아직 손대지 않은 '접수' 줄만 새 값으로 (2026-10-22)
+    name = excluded.name, address = excluded.address, phone = excluded.phone, qty = excluded.qty, price = excluded.price,
+    option_code = excluded.option_code, warn = excluded.warn, raw_text = excluded.raw_text
+  where kakao_orders.status = '접수' and kakao_orders.updated_at <= kakao_orders.created_at + interval '2 seconds';
   get diagnostics n = row_count;
   delete from kakao_orders where sent_at < now() - interval '90 days';
   return jsonb_build_object('ok', true, 'added', n);
