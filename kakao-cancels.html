@@ -141,6 +141,7 @@ function cardHtml(r){
       <button class="btn" data-memo="${esc(r.id)}">메모</button>
     </div>
     ${r.memo ? `<div class="who" style="margin-top:6px">📝 ${esc(r.memo)}</div>` : ''}
+    ${(Array.isArray(r.warn) ? r.warn : []).filter(w => !/^주문 못 찾음/.test(w)).map(w => `<div class="w" style="margin-top:8px;display:block">⚠ ${esc(w)}</div>`).join('')}
   </div>`;
 }
 
