@@ -32,6 +32,7 @@
   table.q .diff.up{color:var(--red)}
   table.q a.f{font-size:12px;white-space:nowrap}
   .cost{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#f8fafc;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:13px}
+  .cost[hidden]{display:none}
   .cost div{display:grid;gap:2px}
   .cost .l{font-size:11px;color:var(--fg3)}
   .cost b{font-size:15px;font-variant-numeric:tabular-nums}
@@ -44,6 +45,12 @@
   .cmp .c .s{font-size:11px;color:var(--fg3)}
   .co{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap;background:var(--bg3);color:var(--fg2)}
   .co.a{background:#dcfce7;color:#166534}.co.b{background:#fce7f3;color:#9d174d}
+  .ty{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap;background:var(--bg3);color:var(--fg2);font-weight:600}
+  .ty.scm{background:#dbeafe;color:#1e40af}.ty.log{background:#ffedd5;color:#9a3412}.ty.mkt{background:#ede9fe;color:#5b21b6}
+  .seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:var(--bg);padding:8px 12px;font-size:13px;color:var(--fg2);cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--fg);color:#fff}
 </style>
 </head>
 <body>
@@ -54,7 +61,7 @@
 <script>
 /* ================================================================
    견적서 관리: 제조사(거래처)가 보낸 제품 견적을 제품별로 모아 두고, 최신·최종 견적과 단가 변화를 한눈에 봄
-   한 줄 = { company(회사: 식이해법연구소 / (주)피에이치뷰티), supplier(거래처), product(제품), spec(규격), quote_date(견적일), qty(발주량), unit_price(최종 협의단가),
+   한 줄 = { category(유형: SCM / 물류 / 마케팅), company(회사: 식이해법연구소 / (주)피에이치뷰티), supplier(거래처), product(제품), spec(규격), quote_date(견적일), qty(발주량), unit_price(최종 협의단가),
              list_price(조정 전 원가 합계), cost_material(원료비), cost_packaging(부자재비), cost_labor(가공비 외), one_time(1회성 비용),
              vat(VAT별도 여부), valid_until(유효기간), terms(결제조건), change(변경 내용), memo, files, is_final(최종 확정), status,
              created_by, created_at, updated_by, updated_at }
@@ -75,49 +82,62 @@ const CO_CLS = { '식이해법연구소': 'a', '(주)피에이치뷰티': 'b' };
 const coShort = c => String(c || '').replace('(주)', '');
 const guessCo = product => product === '흑생마' ? '(주)피에이치뷰티' : '식이해법연구소';   // 회사 칸이 비어 있던 예전 견적용
 const coTag = c => `<span class="co ${CO_CLS[c] || ''}">${esc(coShort(c))}</span>`;
-const sameGroup = (a, b) => a.product === b.product && a.company === b.company;
+/* 유형 구분 (2026-10-23): SCM(제조·원부자재) / 물류 / 마케팅. 운영계정관리의 구분 탭처럼 위쪽 탭으로 거름 */
+const TYPES = ['SCM', '물류', '마케팅'];
+const TY_CLS = { 'SCM': 'scm', '물류': 'log', '마케팅': 'mkt' };
+const tyTag = t => `<span class="ty ${TY_CLS[t] || ''}">${esc(t)}</span>`;
+const sameGroup = (a, b) => a.product === b.product && a.company === b.company && a.category === b.category;
 const groupOf = x => Q().filter(y => sameGroup(x, y));
+const keyOf = x => [x.company, x.category, x.product].join('|');
 
-let view = LS.get('quotes_view') || 'all';
+let view = LS.get('quotes_view') || 'all';   // 보기 방식: all(제품별) / list(전체 목록) / expire(유효기간 확인)
+if (!['all', 'list', 'expire'].includes(view)) view = 'all';
 let co = LS.get('quotes_co') || '';   // 회사 탭 ('' = 전체 회사)
 if (co && !COMPANIES.includes(co)) co = '';
+let ty = LS.get('quotes_ty') || '';   // 유형 탭 ('' = 전체)
+if (ty && !TYPES.includes(ty)) ty = '';
 let q = '';
 
-function normalize(table, r){ return { ...r, company: COMPANIES.includes(r.company) ? r.company : guessCo(r.product), files: Array.isArray(r.files) ? r.files : [], is_final: !!r.is_final, qty: Number(r.qty) || 0, unit_price: Number(r.unit_price) || 0 }; }
-const inCo = x => !co || x.company === co;
-const VIEWS = () => [{ key: 'co:', label: '전체 회사' }, ...COMPANIES.map(c => ({ key: 'co:' + c, label: coShort(c) })), null,
-  { key: 'all', label: '제품별 견적' }, { key: 'list', label: '전체 목록' }, null, { key: 'expire', label: '유효기간 확인', badge: Q().filter(x => inCo(x) && expCls(x) && (currentOf(groupOf(x)) || {}).id === x.id).length }];
+function normalize(table, r){ return { ...r, company: COMPANIES.includes(r.company) ? r.company : guessCo(r.product), category: TYPES.includes(r.category) ? r.category : 'SCM', files: Array.isArray(r.files) ? r.files : [], is_final: !!r.is_final, qty: Number(r.qty) || 0, unit_price: Number(r.unit_price) || 0 }; }
+const inSel = x => (!co || x.company === co) && (!ty || x.category === ty);
+const expireCount = () => Q().filter(x => inSel(x) && expCls(x) && (currentOf(groupOf(x)) || {}).id === x.id).length;
+const VIEWS = () => [{ key: 't:', label: '전체' }, ...TYPES.map(t => ({ key: 't:' + t, label: t, badge: Q().filter(x => x.category === t && (!co || x.company === co)).length || '' })), null,
+  { key: 'co:', label: '전체 회사' }, ...COMPANIES.map(c => ({ key: 'co:' + c, label: coShort(c) }))];
+const MODES = [['all', '제품별 견적'], ['list', '전체 목록'], ['expire', '유효기간 확인']];
 
 function render(){
-  $('#app').innerHTML = headerHtml({ icon: '📑', title: '견적서 관리', tabs: VIEWS(), active: view })
+  const sel = Q().filter(inSel);
+  $('#app').innerHTML = headerHtml({ icon: '📑', title: '견적서 관리', tabs: VIEWS(), active: 't:' + ty })
     + `<main class="wrap wrap-wide" style="max-width:1400px">${!DATA.quotes ? `<div class="empty">견적서 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-quotes.sql)을 실행하세요.' : ''}</div>` : `
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 견적서 등록</button>
-      <input type="search" id="fq" placeholder="검색 (제품, 거래처, 변경 내용)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
-      <span class="count">${co ? coShort(co) + ' ' : ''}${Q().filter(inCo).length}건 · 제품 ${new Set(Q().filter(inCo).map(x => x.company + '|' + x.product)).size}개</span></div>
+      <span class="seg">${MODES.map(([k, l]) => `<button data-mode="${k}" class="${view === k ? 'on' : ''}">${l}${k === 'expire' && expireCount() ? `<span class="badge">${expireCount()}</span>` : ''}</button>`).join('')}</span>
+      <input type="search" id="fq" placeholder="검색 (품목, 거래처, 변경 내용)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
+      <span class="count">${[ty, co && coShort(co)].filter(Boolean).join(' · ')}${ty || co ? ' ' : ''}${sel.length}건 · 품목 ${new Set(sel.map(keyOf)).size}개</span></div>
     ${view === 'list' ? listHtml() : view === 'expire' ? expireHtml() : productsHtml()}`}</main>`;
-  bindHeader(k => { if (k.startsWith('co:')) { co = k.slice(3); LS.set('quotes_co', co); } else { view = k; LS.set('quotes_view', k); } render(); }, null, m => `등록한 견적 ${Q().filter(x => x.created_by === m.name).length}건`);
+  bindHeader(k => { if (k.startsWith('co:')) { co = k.slice(3); LS.set('quotes_co', co); } else if (k.startsWith('t:')) { ty = k.slice(2); LS.set('quotes_ty', ty); } render(); }, null, m => `등록한 견적 ${Q().filter(x => x.created_by === m.name).length}건`);
   const coTab = document.querySelector(`.tab[data-view="co:${co}"]`); if (coTab) coTab.classList.add('on');   // 회사 탭도 켜진 표시
-  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openQuote(null, co ? { company: co } : {});
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { view = b.dataset.mode; LS.set('quotes_view', view); render(); });
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openQuote(null, { ...(co ? { company: co } : {}), ...(ty ? { category: ty } : {}) });
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('tr.row[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('a, button')) return; openQuote(tr.dataset.id); });
   document.querySelectorAll('[data-final]').forEach(b => b.onclick = e => { e.stopPropagation(); setFinal(b.dataset.final); });
-  document.querySelectorAll('[data-addfor]').forEach(b => b.onclick = e => { e.stopPropagation(); const [c, p] = b.dataset.addfor.split('|'); const cur = currentOf(Q().filter(x => x.company === c && x.product === p)); openQuote(null, cur ? { company: cur.company, supplier: cur.supplier, product: cur.product, spec: cur.spec, qty: cur.qty, terms: cur.terms } : { company: c, product: p }); });
+  document.querySelectorAll('[data-addfor]').forEach(b => b.onclick = e => { e.stopPropagation(); const [c, t, p] = b.dataset.addfor.split('|'); const cur = currentOf(Q().filter(x => keyOf(x) === b.dataset.addfor)); openQuote(null, cur ? { company: cur.company, category: cur.category, supplier: cur.supplier, product: cur.product, spec: cur.spec, qty: cur.qty, terms: cur.terms } : { company: c, category: t, product: p }); });
 }
-const filtered = () => Q().filter(x => inCo(x) && (!q || [x.product, x.supplier, x.spec, x.change, x.memo].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
+const filtered = () => Q().filter(x => inSel(x) && (!q || [x.product, x.supplier, x.spec, x.change, x.memo].some(v => (v || '').toLowerCase().includes(q.toLowerCase()))));
 
-/* 제품별: 현재 견적 카드 + 이력 표 (단가 변화 표시). 묶음 = 회사 + 제품 */
+/* 제품별: 현재 견적 카드 + 이력 표 (단가 변화 표시). 묶음 = 회사 + 유형 + 품목 */
 function productsHtml(){
   const list = filtered();
-  const keys = [...new Set(list.map(x => x.company + '|' + x.product))].sort((a, b) => { const [ca, pa] = a.split('|'), [cb, pb] = b.split('|'); return COMPANIES.indexOf(ca) - COMPANIES.indexOf(cb) || products().indexOf(pa) - products().indexOf(pb); });
-  if (!keys.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : `${co ? esc(coShort(co)) + ' ' : ''}견적서가 아직 없습니다.<br>위 <b>＋ 견적서 등록</b>으로 제조사 견적서를 올려 두세요.`}</div>`;
+  const keys = [...new Set(list.map(keyOf))].sort((a, b) => { const [ca, ta, pa] = a.split('|'), [cb, tb, pb] = b.split('|'); return TYPES.indexOf(ta) - TYPES.indexOf(tb) || COMPANIES.indexOf(ca) - COMPANIES.indexOf(cb) || products().indexOf(pa) - products().indexOf(pb); });
+  if (!keys.length) return `<div class="empty">${q ? '검색 결과가 없습니다.' : `${[ty, co && coShort(co)].filter(Boolean).map(esc).join(' · ')} 견적서가 아직 없습니다.<br>위 <b>＋ 견적서 등록</b>으로 견적서를 올려 두세요.`}</div>`;
   return keys.map(k => {
-    const [c, p] = k.split('|');
-    const rows = list.filter(x => x.company === c && x.product === p).sort(byDateDesc), cur = currentOf(rows);
+    const [c, t, p] = k.split('|');
+    const rows = list.filter(x => keyOf(x) === k).sort(byDateDesc), cur = currentOf(rows);
     const first = rows[rows.length - 1];
     const diff = rows.length > 1 && first.unit_price ? cur.unit_price - first.unit_price : 0;
     return `<section class="prod">
-      <div class="hd"><h2>${esc(p)}</h2>${co ? '' : coTag(c)}<span class="spec">${esc(cur.spec || '')}</span><span class="sup">${esc(cur.supplier || '')}</span><span class="sp"></span>
-        <span class="now">현재 단가 <b>${won(cur.unit_price)}원</b> <span class="hint">(${cur.vat === false ? '부가세 포함' : '부가세별도'}) / ${won(cur.qty)}개 기준</span>${diff ? `<span class="${diff < 0 ? 'dn' : 'up'}">${diff < 0 ? '▼' : '▲'} ${won(Math.abs(diff))}원 (처음 견적 대비)</span>` : ''}</span>
+      <div class="hd"><h2>${esc(p)}</h2>${ty ? '' : tyTag(t)}${co ? '' : coTag(c)}<span class="spec">${esc(cur.spec || '')}</span><span class="sup">${esc(cur.supplier || '')}</span><span class="sp"></span>
+        <span class="now">현재 단가 <b>${won(cur.unit_price)}원</b> <span class="hint">(${cur.vat === false ? '부가세 포함' : '부가세별도'})${cur.qty ? ` / ${won(cur.qty)}개 기준` : ''}</span>${diff ? `<span class="${diff < 0 ? 'dn' : 'up'}">${diff < 0 ? '▼' : '▲'} ${won(Math.abs(diff))}원 (처음 견적 대비)</span>` : ''}</span>
         <button class="btn sm" data-addfor="${esc(k)}">＋ 새 견적</button></div>
       <div class="tablewrap"><table class="q"><thead><tr><th>견적일</th><th class="n">발주량</th><th class="n">최종 단가<br><span class="hint">(부가세별도)</span></th><th class="n">조정 전</th><th class="n">총 금액<br><span class="hint">(부가세별도)</span></th><th class="n">원료비</th><th class="n">부자재비</th><th class="n">가공비</th><th>변경 내용</th><th>유효기간</th><th>파일</th><th></th></tr></thead><tbody>
         ${rows.map((x, i) => { const prev = rows[i + 1]; const d = prev && prev.unit_price ? x.unit_price - prev.unit_price : 0; return `<tr class="row ${x.id === cur.id ? 'final' : 'old'}" data-id="${x.id}">
@@ -134,15 +154,15 @@ function productsHtml(){
 function listHtml(){
   const rows = filtered().sort(byDateDesc);
   if (!rows.length) return '<div class="empty">등록한 견적서가 없습니다.</div>';
-  return `<div class="tablewrap"><table class="q"><thead><tr><th>견적일</th>${co ? '' : '<th>회사</th>'}<th>거래처</th><th>제품</th><th>규격</th><th class="n">발주량</th><th class="n">최종 단가</th><th class="n">총 금액</th><th>변경 내용</th><th>유효기간</th><th>등록</th><th>파일</th></tr></thead><tbody>
-    ${rows.map(x => `<tr class="row ${x.is_final ? 'final' : ''}" data-id="${x.id}"><td>${fmtDate(x.quote_date)}${x.is_final ? ' <span class="fin">최종</span>' : ''}</td>${co ? '' : `<td>${coTag(x.company)}</td>`}<td>${esc(x.supplier || '')}</td><td><b>${esc(x.product)}</b></td><td class="hint">${esc(x.spec || '')}</td><td class="n">${won(x.qty)}</td><td class="n"><b>${won(x.unit_price)}</b></td><td class="n">${x.qty && x.unit_price ? won(x.qty * x.unit_price) : ''}</td><td>${esc(x.change || '')}</td><td><span class="exp ${expCls(x)}">${expText(x)}</span></td><td class="hint">${esc(x.created_by || '')}</td><td>${x.files.map(f => `<a class="f" href="${esc(f.url)}?download=${encodeURIComponent(f.name)}" download="${esc(f.name)}">📕</a>`).join(' ')}</td></tr>`).join('')}
+  return `<div class="tablewrap"><table class="q"><thead><tr><th>견적일</th>${ty ? '' : '<th>유형</th>'}${co ? '' : '<th>회사</th>'}<th>거래처</th><th>품목</th><th>규격</th><th class="n">발주량</th><th class="n">최종 단가</th><th class="n">총 금액</th><th>변경 내용</th><th>유효기간</th><th>등록</th><th>파일</th></tr></thead><tbody>
+    ${rows.map(x => `<tr class="row ${x.is_final ? 'final' : ''}" data-id="${x.id}"><td>${fmtDate(x.quote_date)}${x.is_final ? ' <span class="fin">최종</span>' : ''}</td>${ty ? '' : `<td>${tyTag(x.category)}</td>`}${co ? '' : `<td>${coTag(x.company)}</td>`}<td>${esc(x.supplier || '')}</td><td><b>${esc(x.product)}</b></td><td class="hint">${esc(x.spec || '')}</td><td class="n">${won(x.qty)}</td><td class="n"><b>${won(x.unit_price)}</b></td><td class="n">${x.qty && x.unit_price ? won(x.qty * x.unit_price) : ''}</td><td>${esc(x.change || '')}</td><td><span class="exp ${expCls(x)}">${expText(x)}</span></td><td class="hint">${esc(x.created_by || '')}</td><td>${x.files.map(f => `<a class="f" href="${esc(f.url)}?download=${encodeURIComponent(f.name)}" download="${esc(f.name)}">📕</a>`).join(' ')}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function expireHtml(){
-  const rows = Q().filter(x => inCo(x) && (currentOf(groupOf(x)) || {}).id === x.id).sort((a, b) => String(a.valid_until || '9').localeCompare(String(b.valid_until || '9')));
-  return `<div class="hint" style="margin-bottom:8px">제품별 현재 견적의 유효기간입니다. 지났으면 제조사에 새 견적을 요청하세요.</div>
-    <div class="tablewrap"><table class="q"><thead><tr><th>제품</th>${co ? '' : '<th>회사</th>'}<th>거래처</th><th>견적일</th><th class="n">단가</th><th>유효기간</th></tr></thead><tbody>
-    ${rows.map(x => `<tr class="row" data-id="${x.id}"><td><b>${esc(x.product)}</b></td>${co ? '' : `<td>${coTag(x.company)}</td>`}<td>${esc(x.supplier || '')}</td><td>${fmtDate(x.quote_date)}</td><td class="n">${won(x.unit_price)}</td><td><span class="exp ${expCls(x)}">${expText(x) || '<span class="hint">유효기간 없음</span>'}</span></td></tr>`).join('') || `<tr><td colspan="${co ? 5 : 6}" class="hint" style="text-align:center;padding:16px">견적이 없습니다</td></tr>`}
+  const rows = Q().filter(x => inSel(x) && (currentOf(groupOf(x)) || {}).id === x.id).sort((a, b) => String(a.valid_until || '9').localeCompare(String(b.valid_until || '9')));
+  return `<div class="hint" style="margin-bottom:8px">품목별 현재 견적의 유효기간입니다. 지났으면 거래처에 새 견적을 요청하세요.</div>
+    <div class="tablewrap"><table class="q"><thead><tr><th>품목</th>${ty ? '' : '<th>유형</th>'}${co ? '' : '<th>회사</th>'}<th>거래처</th><th>견적일</th><th class="n">단가</th><th>유효기간</th></tr></thead><tbody>
+    ${rows.map(x => `<tr class="row" data-id="${x.id}"><td><b>${esc(x.product)}</b></td>${ty ? '' : `<td>${tyTag(x.category)}</td>`}${co ? '' : `<td>${coTag(x.company)}</td>`}<td>${esc(x.supplier || '')}</td><td>${fmtDate(x.quote_date)}</td><td class="n">${won(x.unit_price)}</td><td><span class="exp ${expCls(x)}">${expText(x) || '<span class="hint">유효기간 없음</span>'}</span></td></tr>`).join('') || `<tr><td colspan="${5 + (ty ? 0 : 1) + (co ? 0 : 1)}" class="hint" style="text-align:center;padding:16px">견적이 없습니다</td></tr>`}
   </tbody></table></div>`;
 }
 
@@ -157,22 +177,26 @@ async function setFinal(id){
 /* 등록·수정 창 */
 function openQuote(id, preset = {}){
   const x0 = id ? Q().find(r => r.id === id) : null;
-  const x = x0 || { company: co || COMPANIES[0], supplier: suppliers()[0] || '', product: '', spec: '', quote_date: todayStr(), qty: '', unit_price: '', list_price: '', cost_material: '', cost_packaging: '', cost_labor: '', one_time: '', vat: true, valid_until: '', terms: '발주 시 50%, 출고 시 50%', change: '', memo: '', files: [], is_final: false, ...preset };
+  const cat0 = preset.category || ty || 'SCM';
+  const x = x0 || { company: co || COMPANIES[0], category: cat0, supplier: cat0 === 'SCM' ? suppliers()[0] || '' : '', product: '', spec: '', quote_date: todayStr(), qty: '', unit_price: '', list_price: '', cost_material: '', cost_packaging: '', cost_labor: '', one_time: '', vat: true, valid_until: '', terms: cat0 === 'SCM' ? '발주 시 50%, 출고 시 50%' : '', change: '', memo: '', files: [], is_final: false, ...preset };
   const at = attachBox('qFiles', x.files, 'quotes', { rename: isAdmin() });
   openModal(`${modalHead(x0 ? '견적서 내용' : '견적서 등록', x0 && x0.is_final ? tag('최종 확정', '#dcfce7', '#15803d', true) : '')}
     <div class="mb">
-      <div class="f"><label>회사 (어느 회사가 발주하는 견적인지) *</label><select id="qCo">${COMPANIES.map(c => `<option value="${esc(c)}" ${x.company === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
       <div class="f3">
-        <div class="f"><label>거래처 (제조사) *</label><input id="qSup" list="supList" value="${esc(x.supplier || '')}" placeholder="예: 비에스바이오"><datalist id="supList">${suppliers().map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
-        <div class="f"><label>제품 *</label><input id="qProd" list="prodList" value="${esc(x.product || '')}" placeholder="예: 레모너리"><datalist id="prodList">${products().map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+        <div class="f"><label>유형 *</label><select id="qCat">${TYPES.map(t => `<option ${x.category === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="f" style="grid-column:span 2"><label>회사 (어느 회사 견적인지) *</label><select id="qCo">${COMPANIES.map(c => `<option value="${esc(c)}" ${x.company === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+      </div>
+      <div class="f3">
+        <div class="f"><label>거래처 *</label><input id="qSup" list="supList" value="${esc(x.supplier || '')}" placeholder="예: 비에스바이오, 동아물류"><datalist id="supList">${suppliers().map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+        <div class="f"><label>품목 (제품·서비스) *</label><input id="qProd" list="prodList" value="${esc(x.product || '')}" placeholder="예: 레모너리, 택배 출고, 광고 촬영"><datalist id="prodList">${products().map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div class="f"><label>규격</label><input id="qSpec" value="${esc(x.spec || '')}" placeholder="예: 500mg × 60정"></div>
       </div>
       <div class="f3">
         <div class="f"><label>견적일 *</label><input type="date" id="qDate" value="${esc(x.quote_date || '')}"></div>
-        <div class="f"><label>발주량 (개) *</label><input id="qQty" inputmode="numeric" value="${x.qty ? won(x.qty) : ''}" placeholder="예: 10,000"></div>
-        <div class="f"><label>최종 협의 단가 (원/개) *</label><input id="qPrice" inputmode="numeric" value="${x.unit_price ? won(x.unit_price) : ''}" placeholder="예: 2,300"></div>
+        <div class="f"><label>수량 (개) <span id="qQtyReq">*</span></label><input id="qQty" inputmode="numeric" value="${x.qty ? won(x.qty) : ''}" placeholder="예: 10,000"></div>
+        <div class="f"><label>최종 협의 단가·금액 (원) *</label><input id="qPrice" inputmode="numeric" value="${x.unit_price ? won(x.unit_price) : ''}" placeholder="예: 2,300"></div>
       </div>
-      <div class="cost">
+      <div class="cost" id="qCost">
         <div><span class="l">원료비</span><input id="qMat" inputmode="numeric" value="${x.cost_material ? won(x.cost_material) : ''}" placeholder="예: 1,277"></div>
         <div><span class="l">부자재비</span><input id="qPack" inputmode="numeric" value="${x.cost_packaging ? won(x.cost_packaging) : ''}" placeholder="예: 468"></div>
         <div><span class="l">가공비 외</span><input id="qLab" inputmode="numeric" value="${x.cost_labor ? won(x.cost_labor) : ''}" placeholder="예: 780"></div>
@@ -187,29 +211,32 @@ function openQuote(id, preset = {}){
       <div class="f"><label>견적서 파일 (PDF) *</label>${at.html}</div>
       <div class="f"><label>메모</label><textarea id="qMemo">${esc(x.memo || '')}</textarea></div>
       <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qVat" ${x.vat !== false ? 'checked' : ''}> VAT 별도</label>
-      ${x0 ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qFinal" ${x.is_final ? 'checked' : ''}> 이 견적을 <b>현재 단가(최종 확정)</b>로 표시 (같은 회사·제품의 다른 견적은 해제됨)</label>` : '<div class="hint">새로 등록하는 견적이 그 회사·제품의 <b>현재 단가</b>가 됩니다. 이전 견적은 이력으로 남습니다.</div>'}
+      ${x0 ? `<label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="qFinal" ${x.is_final ? 'checked' : ''}> 이 견적을 <b>현재 단가(최종 확정)</b>로 표시 (같은 회사·유형·품목의 다른 견적은 해제됨)</label>` : '<div class="hint">새로 등록하는 견적이 그 회사·유형·품목의 <b>현재 단가</b>가 됩니다. 이전 견적은 이력으로 남습니다.</div>'}
       ${x0 ? `<div class="hint">등록: ${esc(x0.created_by || '')} ${fmtDateTime(x0.created_at)}</div>` : ''}
     </div>
     <div class="mf">${x0 && (x0.created_by === me || isAdmin()) ? '<button class="btn danger left" id="qDelete">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="qSave">${x0 ? '저장' : '등록'}</button></div>`, { wide: true });
   at.bind();
   $('#qProd').focus();
+  const syncCat = () => { const scm = $('#qCat').value === 'SCM'; $('#qCost').hidden = !scm && !(x.cost_material || x.cost_packaging || x.cost_labor); $('#qQtyReq').hidden = !scm; };   // 원가 내역·수량 필수는 SCM(제조) 견적에만
+  $('#qCat').onchange = syncCat; syncCat();
   ['qQty', 'qPrice', 'qMat', 'qPack', 'qLab', 'qOne'].forEach(i => { const el = $('#' + i); el.oninput = () => { const n = num(el.value); el.value = n ? won(n) : ''; const sum = num($('#qMat').value) + num($('#qPack').value) + num($('#qLab').value); $('#qList').textContent = sum ? won(sum) : '-'; }; });
   $('#qValidHint').onclick = () => { const d = $('#qDate').value; if (d) { const t = new Date(d); t.setDate(t.getDate() + 30); $('#qValid').value = ymd(t); } };
   $('#qSave').onclick = async () => {
-    const product = $('#qProd').value.trim(), supplier = $('#qSup').value.trim(), company = $('#qCo').value;
-    if (!product) { $('#qProd').focus(); toast('제품을 입력하세요', true); return; }
+    const product = $('#qProd').value.trim(), supplier = $('#qSup').value.trim(), company = $('#qCo').value, category = $('#qCat').value;
+    if (!product) { $('#qProd').focus(); toast('품목을 입력하세요', true); return; }
     if (!supplier) { $('#qSup').focus(); toast('거래처를 입력하세요', true); return; }
     const qty = num($('#qQty').value), price = num($('#qPrice').value);
-    if (!qty || !price) { toast('발주량과 최종 단가를 입력하세요', true); return; }
+    if (category === 'SCM' && !qty) { $('#qQty').focus(); toast('발주 수량을 입력하세요', true); return; }
+    if (!price) { $('#qPrice').focus(); toast('최종 단가(금액)를 입력하세요', true); return; }
     if (!at.files.length && !confirm('견적서 파일이 없습니다. 그래도 저장할까요?')) return;
     const sum = num($('#qMat').value) + num($('#qPack').value) + num($('#qLab').value);
-    const row = { id: x0 ? x0.id : uid(), company, supplier, product, spec: $('#qSpec').value.trim() || null, quote_date: $('#qDate').value || todayStr(), qty, unit_price: price,
+    const row = { id: x0 ? x0.id : uid(), company, category, supplier, product, spec: $('#qSpec').value.trim() || null, quote_date: $('#qDate').value || todayStr(), qty, unit_price: price,
       list_price: sum || null, cost_material: num($('#qMat').value) || null, cost_packaging: num($('#qPack').value) || null, cost_labor: num($('#qLab').value) || null, one_time: num($('#qOne').value) || null,
       vat: $('#qVat').checked, valid_until: $('#qValid').value || null, terms: $('#qTerms').value.trim() || null, change: $('#qChange').value.trim() || null, memo: $('#qMemo').value.trim() || null,
       files: at.files, is_final: x0 ? $('#qFinal').checked : true, created_by: x0 ? x0.created_by : me, created_at: x0 ? x0.created_at : nowIso(), updated_by: me };
     closeModal();
-    if (row.is_final) for (const o of Q().filter(r => sameGroup(r, row) && r.is_final && r.id !== row.id)) await saveRow('quotes', { ...o, is_final: false });   // 같은 회사·제품은 현재 견적 하나만
-    await saveRow('quotes', row); toast(x0 ? '저장했습니다' : `${coShort(company)} ${product} 견적서를 등록했습니다`);
+    if (row.is_final) for (const o of Q().filter(r => sameGroup(r, row) && r.is_final && r.id !== row.id)) await saveRow('quotes', { ...o, is_final: false });   // 같은 회사·유형·품목은 현재 견적 하나만
+    await saveRow('quotes', row); toast(x0 ? '저장했습니다' : `${category} · ${coShort(company)} ${product} 견적서를 등록했습니다`);
   };
   const del = $('#qDelete'); if (del) del.onclick = async () => {
     if (!confirm(`${x0.product} ${fmtDate(x0.quote_date)} 견적서를 삭제할까요? 첨부 파일도 지워집니다.`)) return;
