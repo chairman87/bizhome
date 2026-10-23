@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>페이스북 페이지</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610231252">
+<script src="common.js?v=202610231252"></script>
+<style>
+  /* 페이스북 페이지 모식도: 맨 위 묶음 → 브랜드 → 브랜드별 페이지 */
+  .fbm{display:flex;flex-direction:column;align-items:center;max-width:1100px;margin:10px auto 30px}
+  .fbm .root{background:#1877f2;color:#fff;font-weight:700;font-size:16px;padding:10px 22px;border-radius:12px;display:flex;align-items:center;gap:8px}
+  .fbm .v{width:2px;height:20px;background:var(--line2)}
+  .fbm .bar{height:2px;background:var(--line2);width:calc(100% - 100% / 3)}
+  .fbm .brands{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%}
+  .fbm .brand{display:flex;flex-direction:column;align-items:center}
+  .fbm .bn{color:#fff;font-weight:700;font-size:15px;padding:8px 20px;border-radius:999px;white-space:nowrap}
+  .fbm .bn .c{font-weight:400;opacity:.85;font-size:12px;margin-left:4px}
+  .fbm .pages{display:flex;flex-direction:column;gap:8px;width:100%;padding:12px;border:1px dashed var(--line2);border-radius:12px;box-sizing:border-box}
+  .fbm .pg{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-left:4px solid;border-radius:8px;background:var(--bg)}
+  .fbm .pg .f{width:26px;height:26px;border-radius:50%;background:#1877f2;color:#fff;font:700 16px/26px Arial,sans-serif;text-align:center;flex:none}
+  .fbm .pg .nm{font-weight:600;font-size:14px}
+  .fbm .pg .sub{font-size:12px;color:var(--fg3)}
+  .fbm .pg .ar{font-family:Tahoma,'Segoe UI',sans-serif;font-size:16px;text-align:left}
+  .fbm .note{margin-top:16px;font-size:12px;color:var(--fg3);text-align:center}
+  @media (max-width:760px){
+    .fbm .brands{grid-template-columns:1fr}
+    .fbm .bar{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<script>
+/* 브랜드별 페이스북 페이지 목록. 페이지가 늘거나 바뀌면 여기만 고칩니다.
+   lang: 'ar' 이면 아랍어(오른쪽에서 왼쪽으로 쓰는 글자), ko 는 우리말 뜻 */
+const FB_BRANDS = [
+  { name: '레모너리', color: '#e0a800', pages: [{ name: 'Dietbeauty' }, { name: 'Easydiet' }, { name: '식이해법연구소' }] },
+  { name: '서리맥스', color: '#2563eb', pages: [{ name: 'Moplus' }, { name: 'Modouble' }, { name: 'Hairtips77' }] },
+  { name: '흑생마', color: '#374151', pages: [{ name: 'MaxPower' }, { name: 'قطرة ضوء', lang: 'ar', ko: '빛 한 방울' }, { name: 'حصان بري قوي', lang: 'ar', ko: '힘센 야생마' }] },
+];
+
+function render(){
+  const total = FB_BRANDS.reduce((s, b) => s + b.pages.length, 0);
+  const page = (p, color) => `<div class="pg" style="border-left-color:${color}"><span class="f">f</span><div>
+      <div class="nm ${p.lang === 'ar' ? 'ar' : ''}" ${p.lang === 'ar' ? 'dir="rtl"' : ''}>${esc(p.name)}</div>
+      ${p.lang === 'ar' ? `<div class="sub">아랍어 페이지${p.ko ? ' · 뜻: ' + esc(p.ko) : ''}</div>` : ''}
+    </div></div>`;
+  $('#app').innerHTML = headerHtml({ icon: '📘', title: '페이스북 페이지' }) + `<main class="wrap">
+    <div class="fbm">
+      <div class="root"><span class="f" style="background:#fff;color:#1877f2;border-radius:50%;width:24px;height:24px;font:700 16px/24px Arial,sans-serif;text-align:center">f</span>페이스북 페이지 <span style="font-weight:400;opacity:.85;font-size:13px">${FB_BRANDS.length}개 브랜드 · ${total}개 페이지</span></div>
+      <div class="v"></div>
+      <div class="bar"></div>
+      <div class="brands">${FB_BRANDS.map(b => `<div class="brand">
+        <div class="v"></div>
+        <div class="bn" style="background:${b.color}">${esc(b.name)}<span class="c">${b.pages.length}개</span></div>
+        <div class="v"></div>
+        <div class="pages">${b.pages.map(p => page(p, b.color)).join('')}</div>
+      </div>`).join('')}</div>
+      <div class="note">페이지가 새로 생기거나 이름이 바뀌면 관리자에게 알려 주세요.</div>
+    </div>
+  </main>`;
+  bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
+}
+
+boot({ icon: '📘', title: '페이스북 페이지', tables: [], render });
+</script>
+</body>
+</html>
