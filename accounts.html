@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>운영계정</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610231318">
-<script src="common.js?v=202610231318"></script>
+<link rel="stylesheet" href="common.css?v=202610231338">
+<script src="common.js?v=202610231338"></script>
 <style>
   .wrap-wide{max-width:1800px}
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -98,7 +98,7 @@ const DEPT = new URLSearchParams(location.search).get('dept') === '마케팅' ? 
 const PURPOSE_LABEL = DEPT === '마케팅' ? '매체' : '사업자';   // purpose 칸의 화면 이름 (운영계정=사업자, 마케팅계정=매체)
 const COMPANIES = ['식이해법연구소', '피에이치뷰티', '공용'];   // 마케팅계정의 사업자 선택지
 const COMP_CLS = { '식이해법연구소': 'c1', '피에이치뷰티': 'c3', '공용': 'c9' };
-const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];
+const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정', '페이스북 페이지', '페이스북 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
 /* 사업자주소지 탭(총무 > 운영계정에만): 사업자별로 사업자등록증·홈페이지·식품영업신고지·단상자에 적힌 주소와 기한을 한눈에.
    저장은 팀 공용 settings 표 id 'biz_addresses' 한 줄 (value = { companies:[{ name, note, items:[{ label, address, until, memo }] }] }).
@@ -123,7 +123,10 @@ if (ADDR_MODE) document.title = '사업자주소지 관리';
 /* 구분 이름마다 정해진 색 (목록에 없으면 이름 글자로 색을 정함) */
 const GRP_COLOR = { '운영': 'c0', '재무': 'c1', '총무': 'c2', '고객센터': 'c3', '물류': 'c4', '법무': 'c5', '이메일·협업': 'c6', '광고 계정': 'c8', '레모너리': 'c2', '서리맥스': 'c1', '흑생마': 'c9', '기타': 'c9' };
 const grpCls = g => { if (!g) return 'c9'; if (GRP_COLOR[g]) return GRP_COLOR[g]; let h = 0; for (const ch of g) h = (h * 31 + ch.charCodeAt(0)) % 10; return 'c' + h; };
-const inDept = a => DEPT === '마케팅' ? MARKETING_GROUPS.includes(a.group_name) : !MARKETING_GROUPS.includes(a.group_name);
+/* 마케팅 쪽 구분 = 위 목록 + 사업자 칸이 채워진 계정의 구분(사업자 칸은 마케팅계정 화면에만 있음).
+   마케팅 화면에서 구분을 직접 새로 적어도 운영계정으로 넘어가지 않게 (2026-10-23, 'عالم الليمون' 이 운영 쪽으로 간 일) */
+const mktGroups = () => new Set([...MARKETING_GROUPS, ...(DATA.accounts || []).filter(a => a.company && a.group_name).map(a => a.group_name)]);
+const inDept = a => DEPT === '마케팅' ? mktGroups().has(a.group_name) : !mktGroups().has(a.group_name);
 const VIS = () => (DATA.accounts || []).filter(a => (isAdmin() || !a.admin_only) && inDept(a));   // 관리자만 보기 항목은 관리자에게만
 const ALL = () => VIS().filter(a => !a.unused);   // 지금 쓰는 계정 (전체·구분 탭)
 const OFF = () => VIS().filter(a => a.unused);    // 사용안함으로 빼 둔 계정 ('사용안함' 탭에만 보임, 원래 구분은 그대로 남음)
@@ -312,6 +315,7 @@ function openEdit(id, preset = {}){
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
     if ($('#aCompany')) row.company = $('#aCompany').value || null;   // 사업자 칸은 마케팅계정에서만
     else if (a && a.company) row.company = a.company;
+    if (DEPT === '마케팅' && !row.company && !mktGroups().has(row.group_name)) { $('#aCompany').focus(); toast('새 구분은 사업자를 골라야 마케팅계정에 남습니다 (안 고르면 운영계정으로 넘어감)', true); return; }
     closeModal(); await saveRow('accounts', row); toast(a ? '저장했습니다' : '계정을 추가했습니다');
   };
   const del = $('#aDel'); if (del) del.onclick = async () => { if (confirm(`"${a.service}" 계정을 목록에서 삭제할까요?`)) { closeModal(); await removeRow('accounts', a.id); toast('삭제했습니다'); } };
