@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>카톡 주문</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610231252">
-<script src="common.js?v=202610231252"></script>
+<link rel="stylesheet" href="common.css?v=202610231313">
+<script src="common.js?v=202610231313"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -88,7 +88,7 @@ async function call(name, args, retry = true){
 async function load(){
   if (loading || store !== SupabaseStore || !myMember()) return;
   loading = true;
-  try { ROWS = (await call('ko_list', { p_days: days })).rows || []; loadErr = ''; }
+  try { ROWS = ((await call('ko_list', { p_days: days })).rows || []).filter(r => (r.kind || '주문') !== '취소'); loadErr = ''; }   // 취소 카드는 kakao-cancels.html
   catch (e) { loadErr = e.message || String(e); }
   loading = false; render();
 }

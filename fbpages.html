@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>페이스북 페이지</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610231252">
-<script src="common.js?v=202610231252"></script>
+<link rel="stylesheet" href="common.css?v=202610231313">
+<script src="common.js?v=202610231313"></script>
 <style>
   /* 페이스북 페이지 모식도: 맨 위 묶음 → 브랜드 → 브랜드별 페이지 */
   .fbm{display:flex;flex-direction:column;align-items:center;max-width:1100px;margin:10px auto 30px}
@@ -23,6 +23,13 @@
   .fbm .pg .nm{font-weight:600;font-size:14px}
   .fbm .pg .sub{font-size:12px;color:var(--fg3)}
   .fbm .pg .ar{font-family:Tahoma,'Segoe UI',sans-serif;font-size:16px;text-align:left}
+  .fbm .pg{cursor:pointer;align-items:flex-start}
+  .fbm .pg:hover{background:var(--bg2);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .fbm .pg .bd{flex:1;min-width:0}
+  .fbm .pg .ig{font-size:12px;color:#c13584;margin-top:3px;word-break:break-all}
+  .fbm .pg .ig.none{color:var(--fg3)}
+  .fbm .pg .memo{font-size:12px;color:var(--fg2);margin-top:4px;white-space:pre-wrap;word-break:break-all;line-height:1.5;background:var(--bg2);border-radius:6px;padding:5px 7px}
+  .fbm .pg .ed{font-size:11px;color:var(--fg3);flex:none}
   .fbm .note{margin-top:16px;font-size:12px;color:var(--fg3);text-align:center}
   @media (max-width:760px){
     .fbm .brands{grid-template-columns:1fr}
@@ -42,12 +49,23 @@ const FB_BRANDS = [
   { name: '흑생마', color: '#374151', pages: [{ name: 'MaxPower' }, { name: 'قطرة ضوء', lang: 'ar', ko: '빛 한 방울' }, { name: 'حصان بري قوي', lang: 'ar', ko: '힘센 야생마' }] },
 ];
 
+/* 페이지별 인스타그램 아이디·메모: settings 표에 페이지마다 한 줄(id 'fbpage:<페이지 이름>') → value { ig, memo }
+   한 줄에 몰아 두면 두 사람이 동시에 고칠 때 한쪽이 지워지므로 나눔 */
+const infoId = name => 'fbpage:' + name;
+const infoOf = name => ((DATA.settings || []).find(r => r.id === infoId(name)) || {});
+const igList = s => String(s || '').split(/[\s,]+/).map(x => x.trim().replace(/^@/, '')).filter(Boolean);
+
 function render(){
   const total = FB_BRANDS.reduce((s, b) => s + b.pages.length, 0);
-  const page = (p, color) => `<div class="pg" style="border-left-color:${color}"><span class="f">f</span><div>
+  const page = (p, color) => {
+    const r = infoOf(p.name), v = r.value || {}, igs = igList(v.ig);
+    return `<div class="pg" style="border-left-color:${color}" data-page="${esc(p.name)}" title="눌러서 인스타그램 아이디·메모 적기"><span class="f">f</span><div class="bd">
       <div class="nm ${p.lang === 'ar' ? 'ar' : ''}" ${p.lang === 'ar' ? 'dir="rtl"' : ''}>${esc(p.name)}</div>
       ${p.lang === 'ar' ? `<div class="sub">아랍어 페이지${p.ko ? ' · 뜻: ' + esc(p.ko) : ''}</div>` : ''}
-    </div></div>`;
+      <div class="ig ${igs.length ? '' : 'none'}">${igs.length ? igs.map(i => '📷 @' + esc(i)).join('<br>') : '📷 인스타그램 아이디 없음'}</div>
+      ${v.memo ? `<div class="memo">${esc(v.memo)}</div>` : ''}
+    </div><span class="ed">✎</span></div>`;
+  };
   $('#app').innerHTML = headerHtml({ icon: '📘', title: '페이스북 페이지' }) + `<main class="wrap">
     <div class="fbm">
       <div class="root"><span class="f" style="background:#fff;color:#1877f2;border-radius:50%;width:24px;height:24px;font:700 16px/24px Arial,sans-serif;text-align:center">f</span>페이스북 페이지 <span style="font-weight:400;opacity:.85;font-size:13px">${FB_BRANDS.length}개 브랜드 · ${total}개 페이지</span></div>
@@ -59,13 +77,35 @@ function render(){
         <div class="v"></div>
         <div class="pages">${b.pages.map(p => page(p, b.color)).join('')}</div>
       </div>`).join('')}</div>
-      <div class="note">페이지가 새로 생기거나 이름이 바뀌면 관리자에게 알려 주세요.</div>
+      <div class="note">페이지 이름을 누르면 연결된 인스타그램 아이디와 메모를 적을 수 있습니다. 페이지가 새로 생기거나 이름이 바뀌면 관리자에게 알려 주세요.</div>
     </div>
   </main>`;
   bindHeader(() => {}, null, m => `${m.role === 'admin' ? '관리자' : '팀원'}`);
+  document.querySelectorAll('[data-page]').forEach(el => el.onclick = () => openInfo(el.dataset.page));
 }
 
-boot({ icon: '📘', title: '페이스북 페이지', tables: [], render });
+function openInfo(name){
+  const r = infoOf(name), v = r.value || {};
+  const p = FB_BRANDS.flatMap(b => b.pages.map(x => ({ ...x, brand: b.name }))).find(x => x.name === name) || {};
+  openModal(`${modalHead(`📘 ${esc(name)}`)}
+    <div class="mb">
+      <div class="hint" style="margin-bottom:8px">${esc(p.brand || '')} 페이스북 페이지${p.ko ? ' · 뜻: ' + esc(p.ko) : ''}</div>
+      <div class="f"><label>연결된 인스타그램 아이디</label><input id="fiIg" value="${esc(v.ig || '')}" placeholder="예: @lemonery_official (여러 개면 쉼표로)" maxlength="200"></div>
+      <div class="f"><label>메모</label><textarea id="fiMemo" style="min-height:140px" maxlength="3000" placeholder="예: 광고 계정 연결, 관리자 권한 가진 사람, 주의할 점 등">${esc(v.memo || '')}</textarea></div>
+      ${r.updated_by ? `<div class="hint">마지막 수정: ${esc(r.updated_by)}${r.updated_at ? ' · ' + fmtDateTime(r.updated_at) : ''}</div>` : ''}
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="fiSave">저장</button></div>`);
+  $('#fiIg').focus();
+  $('#fiSave').onclick = async () => {
+    const ig = igList($('#fiIg').value).map(i => '@' + i).join(', ');
+    const memo = $('#fiMemo').value.trim();
+    closeModal();
+    await saveRow('settings', { id: infoId(name), value: { ig, memo }, updated_by: me, updated_at: nowIso() });
+    toast(`${name} 저장했습니다`);
+  };
+}
+
+boot({ icon: '📘', title: '페이스북 페이지', tables: ['settings'], render });
 </script>
 </body>
 </html>
