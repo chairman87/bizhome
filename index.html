@@ -208,7 +208,7 @@ const SCREENS = [
   ['accounts.html?dept=마케팅', '마케팅계정 (마케팅)'],
   ['accounts.html?tab=addr', '사업자주소지 관리 (운영계정 안의 탭)'],
   ['subscriptions.html', '구독관리 (매월 지출)'],
-  ['payments.html', '결재 (지출 결재·이체)'],
+  ['payments.html', '결재 (기안결재 → 자금결제 → 이체)'],
   ['docs.html', '회사 서류함'],
   ['trademarks.html', '상표관리 (상표 현황·등록증 보관)'],
   ['tmcheck.html', '상표 점검 (새 이름 등록 가능성·침해 위험 로봇 점검)'],
@@ -416,7 +416,7 @@ function render(){
     'meetings.html': mtNewCount(),   // 남이 새로 올린 회의록 중 아직 안 열어 본 것 (플라우드 자동 등록 포함)
     'tmcheck.html': (DATA.tm_checks || []).filter(t => t.requested_by === me && t.status === '완료' && !t.seen).length,   // 내가 요청한 상표 점검 중 아직 결과를 안 열어 본 것
     'comments.html': (DATA.ad_comments || []).filter(c => c.flag && !c.ok_by && !c.hidden && !c.deleted).length,   // 보이는 상태의 이상 의심 댓글 (숨기거나 '문제없음' 하면 빠짐)
-    'payments.html': isAdmin() ? payments.filter(p => p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 결재·이체 대기, 팀원: 이체할 것
+    'payments.html': isAdmin() ? payments.filter(p => p.status === '기안대기' || p.status === '결재대기' || p.status === '결재완료').length : payments.filter(p => p.status === '결재완료').length,   // 관리자: 승인할 기안 + 결재·이체 대기, 팀원: 이체할 것
   };
   const editBtn = admin ? `<button class="btn ${editing ? 'primary' : ''}" id="editBtn">${editing ? '✓ 편집 끝내기' : '✎ 메뉴 편집'}</button>` : '';
   $('#app').innerHTML = headerHtml({ icon: BRAND.icon, title: BRAND.name, home: false, extra: searchBox() + editBtn }) + `<div id="srchRes" class="srchres" hidden></div><main id="dash" class="wrap ${editing ? 'editing' : ''}" style="max-width:none">
@@ -993,6 +993,7 @@ const SEARCH_DEFS = [
   { table: 'manuals',           page: '업무 매뉴얼',        icon: '📘', menu: ['manuals.html'],  href: r => `manuals.html?open=${r.id}`,                       title: r => r.title,                                   text: r => [r.content, r.category, r.targets] },
   { table: 'docs',              page: '회사 서류함',        icon: '📁', menu: ['docs.html'],     href: r => `docs.html?open=${r.id}`,                          title: r => dash(r.company, r.title),                  text: r => [r.doc_type, r.memo] },
   { table: 'accounts',          page: '운영계정·마케팅계정',  icon: '🔐', menu: ['accounts.html', 'accounts.html?dept=마케팅'], href: r => `accounts.html?${MARKETING_GROUPS.includes(r.group_name) ? 'dept=마케팅&' : ''}open=${r.id}`, title: r => r.service, text: r => [r.purpose, r.memo, r.group_name, r.owner, r.company] },
+  { table: 'payments',          page: '결재',              icon: '💳', menu: ['payments.html'], href: r => `payments.html?open=${r.id}`,                         title: r => (r.kind === '기안' ? '[기안] ' : '') + r.title,          text: r => [r.memo, r.payee, r.category, r.status, r.account, cmts(r.comments)], by: r => r.created_by, at: r => r.date || r.created_at },
   { table: 'subscriptions',     page: '구독관리',          icon: '💸', menu: ['subscriptions.html'], href: r => `subscriptions.html?open=${r.id}`,            title: r => r.name,                                    text: r => [r.vendor, r.category, r.memo, r.owner, r.company] },
   { table: 'trademarks',        page: '상표관리',          icon: '™️', menu: ['trademarks.html'], href: r => `trademarks.html?open=${r.id}`,                  title: r => dash(r.company, r.name),                   text: r => [r.goods, r.memo, r.note, r.app_no, r.reg_no, r.region, r.status, r.next_action, r.classes] },
   { table: 'tm_checks',         page: '상표 점검',          icon: '🔎', menu: ['tmcheck.html'],  href: r => `tmcheck.html?id=${r.id}`,                         title: r => r.name,                                    text: r => [r.alias, r.goods, r.summary, r.memo, r.classes], by: r => r.requested_by },

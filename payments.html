@@ -21,6 +21,7 @@
   .amt{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;font-weight:600}
   .amt.in{color:var(--green)}
   .amt.out{color:var(--fg)}
+  .amt.over{color:var(--red)}
   td.acct{font-size:12px;color:var(--fg2);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .flow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--fg2)}
   .flow .step{padding:3px 10px;border-radius:999px;background:var(--bg3)}
@@ -30,6 +31,16 @@
   .acctbox{display:flex;gap:8px;align-items:center;background:#f8fafc;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:14px}
   .acctbox b{font-size:16px;letter-spacing:.3px}
   .acctbox .sp{flex:1}
+  .planbox{background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);padding:10px 12px;font-size:13px;line-height:1.7;margin-top:6px}
+  .planbox .t{font-weight:700;font-size:14px;cursor:pointer}
+  .planbox .t:hover{text-decoration:underline}
+  .planbox .memo{color:var(--fg2);white-space:pre-wrap;margin-top:4px;max-height:90px;overflow:auto}
+  .linked{margin-top:8px}
+  .linked h4{font-size:13px;margin:10px 0 6px;color:var(--fg2)}
+  .linked table{width:100%;min-width:0;font-size:13px}
+  .linked tr.row{cursor:pointer}
+  .linked tr.row:hover td{background:var(--bg2)}
+  .linked tr.total td{font-weight:700;background:var(--bg2)}
   .sum table{min-width:0;width:100%}
   .sum td.amt,.sum th.r{text-align:right}
   .sum tr.total td{font-weight:700;background:var(--bg2)}
@@ -39,6 +50,9 @@
   .nav-m b{font-size:16px;min-width:110px;text-align:center}
   .radios{display:flex;gap:14px;align-items:center;height:36px;font-size:14px}
   .radios label{display:flex;align-items:center;gap:5px;cursor:pointer}
+  .intro{background:var(--bg2);border-radius:var(--radius);padding:10px 14px;font-size:13px;line-height:1.7;color:var(--fg2);margin-bottom:12px}
+  .intro b{color:var(--fg)}
+  .tab.mode{font-size:15px;font-weight:600}
 </style>
 </head>
 <body>
@@ -48,55 +62,95 @@
 
 <script>
 /* ================================================================
-   결제 (지출·수입 관리)
-   흐름: 팀원이 지출 건 등록(내역·금액·받는 계좌·증빙 첨부)
-         → 관리자(대표)가 [결재] 또는 [반려]
-         → 담당 팀원이 은행 앱에서 이체한 뒤 [이체 완료] 표시
-   한 줄 = { title, date, category, kind(비용/수입), amount, payee(받는 곳), account(계좌), due_date(이체 희망일),
-             memo, files, invoice(세금계산서 필요), status(결재대기/결재완료/이체완료/반려),
-             approved_by/at, paid_by/at, reject_reason, comments, created_by, created_at }
+   결재 — 두 단계 (2026-10-25 개편)
+   ① 기안결재: "무엇을 위해 돈이 이렇게 나갈 계획입니다" → 팀원이 기안 → 대표가 [승인] 또는 [반려]
+   ② 자금결제: "승인된 기안대로 진행했으니 돈을 내보내 주세요" → 팀원이 승인된 기안을 골라 청구 → 대표 [결재] → 은행 앱 이체 → [이체 완료]
+   한 표(payments)에 함께 저장하고 kind 로 구분: '기안' / '비용'(자금결제) / '수입'
+   기안 줄   = { title(기안명), memo(목적·계획), amount(예상 금액), due_date(집행 예정), date(기안일), category, payee, files,
+               status(기안대기/기안승인/종결/반려), approved_by/at, reject_reason, comments, created_by, created_at }
+   자금결제 줄 = { title, date, category, kind(비용/수입), amount, payee, account, due_date(이체 희망일), memo, files, invoice,
+               status(결재대기/결재완료/이체완료/반려), approved_by/at, paid_by/at, reject_reason, comments, created_by, created_at,
+               plan_id(어느 기안으로 올렸는지 — sql-payments-plan.sql 로 칸 추가) }
 ================================================================ */
-const ST = { '결재대기': ['#fbeccc', '#9a6700'], '결재완료': ['#dbeafe', '#1d4ed8'], '이체완료': ['#dcfce7', '#15803d'], '반려': ['#fee2e2', '#b91c1c'] };
-const STATUSES = Object.keys(ST);
-const KINDS = ['비용', '수입'];
+const ST = { '기안대기': ['#fbeccc', '#9a6700'], '기안승인': ['#dbeafe', '#1d4ed8'], '종결': ['#e5e7eb', '#374151'],
+             '결재대기': ['#fbeccc', '#9a6700'], '결재완료': ['#dbeafe', '#1d4ed8'], '이체완료': ['#dcfce7', '#15803d'], '반려': ['#fee2e2', '#b91c1c'] };
+const PLAN_ST = ['기안대기', '기안승인', '종결', '반려'];
+const FUND_ST = ['결재대기', '결재완료', '이체완료', '반려'];
+const KINDS = ['기안', '비용', '수입'];
 const DEFAULT_CATS = ['광고비', '인건비', '외주비', '구독료', '소모품', '식대·회식', '교통비', '세금·공과금', '기타'];
 const P = () => DATA.payments || [];
+const isPlan = p => p.kind === '기안';
+const isIn = p => p.kind === '수입';
+const PLANS = () => P().filter(isPlan);
+const FUNDS = () => P().filter(p => !isPlan(p));
+const planOf = p => (p && p.plan_id) ? PLANS().find(x => x.id === p.plan_id) || null : null;
+const fundsOf = planId => FUNDS().filter(f => f.plan_id === planId);
+const spent = planId => fundsOf(planId).filter(f => f.status !== '반려').reduce((a, f) => a + f.amount, 0);   // 반려 빼고 전부(결재 대기 중인 것도 포함)
+const HAS_LINK = () => !P().length || P().some(p => 'plan_id' in p);   // plan_id 칸이 있는지 (없으면 sql-payments-plan.sql 실행 전)
 const stHtml = s => tag(s, ...(ST[s] || ST['결재대기']), true);
 const won = n => (n == null || n === '' || isNaN(Number(n))) ? '-' : Number(n).toLocaleString('ko-KR') + '원';
 const num = s => { const n = Number(String(s || '').replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; };
 const cats = () => [...new Set([...DEFAULT_CATS, ...P().map(p => p.category).filter(Boolean)])];
-const isIn = p => p.kind === '수입';
 
 let view = LS.get('pay_view') || 'all';
+const isPlanView = () => view.startsWith('p_');
 let filter = { q: '', status: '', inv: '', cat: '', person: '' };
 let sort = { key: 'date', dir: 'desc' };
 let month = todayStr().slice(0, 7);
 
 function normalize(table, p){
-  return { ...p, kind: KINDS.includes(p.kind) ? p.kind : '비용', status: STATUSES.includes(p.status) ? p.status : '결재대기',
+  const kind = KINDS.includes(p.kind) ? p.kind : '비용';
+  const sts = kind === '기안' ? PLAN_ST : FUND_ST;
+  return { ...p, kind, status: sts.includes(p.status) ? p.status : sts[0],
     amount: p.amount != null ? Number(p.amount) : 0, comments: Array.isArray(p.comments) ? p.comments : [], files: Array.isArray(p.files) ? p.files : [] };
 }
 const log = (text, kind = 'log', files) => ({ by: me, text, at: nowIso(), kind, ...(files && files.length ? { files } : {}) });
 
-const waitApprove = () => P().filter(p => p.status === '결재대기').length;
-const waitPay = () => P().filter(p => p.status === '결재완료').length;
-const VIEWS = () => [
+const waitPlan = () => PLANS().filter(p => p.status === '기안대기').length;
+const waitApprove = () => FUNDS().filter(p => p.status === '결재대기').length;
+const waitPay = () => FUNDS().filter(p => p.status === '결재완료').length;
+const MODE_TABS = () => [
+  { key: 'mode_plan', label: '📝 기안결재', badge: isAdmin() ? waitPlan() : 0, badgeTitle: '승인할 기안' },
+  { key: 'mode_fund', label: '💳 자금결제', badge: isAdmin() ? waitApprove() + waitPay() : waitPay(), badgeTitle: isAdmin() ? '결재할 것 + 이체할 것' : '이체할 것' }, null,
+];
+const VIEWS = () => isPlanView() ? [...MODE_TABS(),
+  { key: 'p_all', label: '전체' }, { key: 'p_wait', label: '승인 대기', badge: isAdmin() ? waitPlan() : 0 }, { key: 'p_open', label: '진행 중 (승인됨)' },
+  { key: 'p_done', label: '종결·반려' }, { key: 'p_mine', label: '내가 올린 것' },
+] : [...MODE_TABS(),
   { key: 'all', label: '전체' }, { key: 'approve', label: '결재 대기', badge: isAdmin() ? waitApprove() : 0 }, { key: 'pay', label: '이체 대기', badge: waitPay() },
   { key: 'done', label: '완료' }, { key: 'mine', label: '내가 올린 것' }, null, { key: 'month', label: '월별 합계' },
 ];
 
-/* ---------- 저장 동작 ---------- */
+/* ---------- 저장 동작: 기안 ---------- */
+async function approvePlan(id){
+  const p = PLANS().find(x => x.id === id); if (!p) return;
+  if (!isAdmin()) { toast('관리자만 승인할 수 있습니다', true); return; }
+  await saveRow('payments', { ...p, status: '기안승인', approved_by: me, approved_at: nowIso(), reject_reason: null, comments: [...p.comments, log('기안 승인', 'approve')] });
+  toast('기안을 승인했습니다. 진행한 뒤 이 기안으로 자금결제를 올리면 됩니다');
+}
+async function closePlan(id){
+  const p = PLANS().find(x => x.id === id); if (!p) return;
+  const open = fundsOf(id).filter(f => f.status === '결재대기' || f.status === '결재완료');
+  if (open.length && !confirm(`아직 처리 중인 자금결제가 ${open.length}건 있습니다. 그래도 종결할까요?`)) return;
+  if (!open.length && !confirm('이 기안을 종결할까요? (더 이상 이 기안으로 자금결제를 올리지 않음)')) return;
+  await saveRow('payments', { ...p, status: '종결', comments: [...p.comments, log(`기안 종결 · 집행 ${won(spent(id))} / 예상 ${won(p.amount)}`, 'close')] });
+  toast('기안을 종결했습니다');
+}
+/* ---------- 저장 동작: 자금결제 ---------- */
 async function approve(id){
-  const p = P().find(x => x.id === id); if (!p) return;
+  const p = FUNDS().find(x => x.id === id); if (!p) return;
   if (!isAdmin()) { toast('관리자만 결재할 수 있습니다', true); return; }
+  const pl = planOf(p);
+  if (pl && spent(pl.id) > pl.amount && !confirm(`이 건까지 더하면 기안 예상 금액(${won(pl.amount)})을 넘습니다.\n이 기안으로 나간 돈 합계: ${won(spent(pl.id))}\n그래도 결재할까요?`)) return;
   await saveRow('payments', { ...p, status: '결재완료', approved_by: me, approved_at: nowIso(), reject_reason: null, comments: [...p.comments, log('결재 완료', 'approve')] });
   toast('결재했습니다. 이체 대기로 넘어갑니다');
 }
+/* 반려: 기안·자금결제 공용 */
 function openReject(id){
   const p = P().find(x => x.id === id); if (!p) return;
   if (!isAdmin()) { toast('관리자만 반려할 수 있습니다', true); return; }
   openModal(`${modalHead('반려')}
-    <div class="mb"><div><span class="title">${esc(p.title)}</span><div class="hint">${won(p.amount)} · ${esc(p.created_by || '')} 등록</div></div>
+    <div class="mb"><div><span class="title">${esc(p.title)}</span><div class="hint">${isPlan(p) ? '기안 · 예상 ' : ''}${won(p.amount)} · ${esc(p.created_by || '')} 등록</div></div>
       <div class="f"><label>반려 사유</label><textarea id="rjText" placeholder="왜 반려하는지 적어 주세요"></textarea></div></div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn danger" id="rjSend">반려</button></div>`);
   $('#rjText').focus();
@@ -109,7 +163,7 @@ function openReject(id){
 }
 /* 이체 완료: 은행 앱에서 보낸 뒤 표시 (이체 확인 캡처 첨부 가능) */
 function openPaid(id){
-  const p = P().find(x => x.id === id); if (!p) return;
+  const p = FUNDS().find(x => x.id === id); if (!p) return;
   const at = attachBox('pdFiles', [], 'payments');
   openModal(`${modalHead(isIn(p) ? '입금 확인' : '이체 완료 표시')}
     <div class="mb">
@@ -127,22 +181,35 @@ function openPaid(id){
     toast(isIn(p) ? '입금 확인으로 표시했습니다' : '이체 완료로 표시했습니다');
   };
 }
+/* 되돌리기·다시 올리기: 기안은 '기안대기', 자금결제는 '결재대기'로 */
 async function reopen(id){
   const p = P().find(x => x.id === id); if (!p) return;
-  if (!confirm('다시 결재 대기 상태로 되돌릴까요?')) return;
-  await saveRow('payments', { ...p, status: '결재대기', approved_by: null, approved_at: null, paid_by: null, paid_at: null, reject_reason: null, comments: [...p.comments, log('결재 대기로 되돌림')] });
+  const to = isPlan(p) ? '기안대기' : '결재대기';
+  if (!confirm(`다시 "${to}" 상태로 되돌릴까요?`)) return;
+  await saveRow('payments', { ...p, status: to, approved_by: null, approved_at: null, paid_by: null, paid_at: null, reject_reason: null, comments: [...p.comments, log(`${to}로 되돌림`)] });
 }
 const acctBox = p => `<div class="acctbox"><span>🏦</span><b id="acctText">${esc(p.account)}</b><span class="sp"></span><button type="button" class="btn sm" data-copy="${esc(p.account)}">복사</button></div>`;
 function bindCopy(){ document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('계좌를 복사했습니다'); } catch { toast('복사가 안 됩니다. 직접 선택해 복사하세요', true); } }); }
 
 /* ---------- 화면 ---------- */
 function render(){
-  const actions = `<div class="actions"><button class="btn primary" id="newBtn2">＋ 지출 등록</button>
-    <span class="flow"><span class="step">1 등록</span>→<span class="step">2 대표 결재</span>→<span class="step">3 은행 앱 이체</span>→<span class="step">4 이체 완료 표시</span></span></div>`;
+  const plan = isPlanView();
+  const linkWarn = (isAdmin() && DATA.payments && P().length && !HAS_LINK()) ? `<span class="hint warn">⚠ 기안 연결 칸(plan_id)이 아직 없어 자금결제에 기안을 붙일 수 없습니다 → <b>sql-payments-plan.sql</b> 을 Supabase SQL Editor 에서 실행하세요</span>` : '';
+  const actions = plan
+    ? `<div class="actions"><button class="btn primary" id="newBtn2">＋ 기안 올리기</button>
+        <span class="flow"><span class="step">1 기안 (이런 돈이 나갈 계획)</span>→<span class="step">2 대표 승인</span>→<span class="step">3 진행 후 자금결제 올리기</span>→<span class="step">4 집행 끝나면 종결</span></span></div>`
+    : `<div class="actions"><button class="btn primary" id="newBtn2">＋ 자금결제 올리기</button>
+        <span class="flow"><span class="step">1 승인된 기안 골라 올리기</span>→<span class="step">2 대표 결재</span>→<span class="step">3 은행 앱 이체</span>→<span class="step">4 이체 완료 표시</span></span>${linkWarn}</div>`;
+  const intro = plan
+    ? `<div class="intro"><b>기안결재</b>는 돈이 나가기 <b>전에</b> "무엇을 위해, 얼마가, 어떻게 나갈 계획인지" 올려 대표 승인을 받는 곳입니다. 승인된 기안대로 진행한 뒤에는 <b>자금결제</b> 탭에서 그 기안을 골라 돈을 내보내 달라고 올립니다.</div>`
+    : `<div class="intro"><b>자금결제</b>는 승인된 기안대로 진행을 마친 뒤 "이렇게 진행했으니 돈을 내보내 주세요" 하고 올리는 곳입니다. 올릴 때 어느 기안인지 고르면 대표가 기안과 비교해 결재합니다. 기안이 필요 없는 소액·정기 지출은 기안 없이 올릴 수 있습니다.</div>`;
   $('#app').innerHTML = headerHtml({ icon: '💳', title: '결재', tabs: VIEWS(), active: view })
-    + `<main class="wrap">${!DATA.payments ? `<div class="empty">결재 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-payments.sql)을 실행하세요.' : ''}</div>` : actions + (view === 'month' ? monthHtml() : (view === 'all' ? statsHtml() : '') + toolbarHtml() + `<div id="view">${tableHtml(filtered())}</div>`)}</main>`;
-  bindHeader(k => { view = k; LS.set('pay_view', k); render(); }, null, m => `올린 건 ${P().filter(p => p.created_by === m.name).length}건`);
-  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openPay(null, { kind: '비용' });
+    + `<main class="wrap">${!DATA.payments ? `<div class="empty">결재 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL(sql-payments.sql)을 실행하세요.' : ''}</div>`
+      : intro + actions + (view === 'month' ? monthHtml() : (view === 'all' ? statsHtml() : view === 'p_all' ? planStatsHtml() : '') + toolbarHtml() + `<div id="view">${tableHtml(filtered())}</div>`)}</main>`;
+  const mt = document.querySelector(`.tab[data-view="${plan ? 'mode_plan' : 'mode_fund'}"]`); if (mt) mt.classList.add('on', 'mode');
+  document.querySelectorAll('.tab[data-view^="mode_"]').forEach(b => b.classList.add('mode'));
+  bindHeader(k => { view = k === 'mode_plan' ? 'p_all' : k === 'mode_fund' ? 'all' : k; LS.set('pay_view', view); filter.status = ''; render(); }, null, m => `올린 건 ${P().filter(p => p.created_by === m.name).length}건`);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => plan ? openPlan(null) : openPay(null, { kind: '비용' });
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   ['status', 'inv', 'cat', 'person'].forEach(k => { const el = $('#f_' + k); if (el) el.onchange = () => { filter[k] = el.value; renderView(); }; });
   const mp = $('#mPrev'); if (mp) {
@@ -152,9 +219,9 @@ function render(){
   bindView();
 }
 function statsHtml(){
-  const m = P().filter(p => (p.date || '').startsWith(todayStr().slice(0, 7)));
-  const out = m.filter(p => !isIn(p) && p.status !== '반려').reduce((a, p) => a + p.amount, 0), inn = m.filter(p => isIn(p) && p.status !== '반려').reduce((a, p) => a + p.amount, 0);
-  const wa = P().filter(p => p.status === '결재대기'), wp = P().filter(p => p.status === '결재완료'), needInv = P().filter(p => p.status === '이체완료' && !p.invoice);
+  const m = FUNDS().filter(p => (p.date || '').startsWith(todayStr().slice(0, 7)));
+  const out = m.filter(p => !isIn(p) && p.status !== '반려').reduce((a, p) => a + p.amount, 0);
+  const wa = FUNDS().filter(p => p.status === '결재대기'), wp = FUNDS().filter(p => p.status === '결재완료'), needInv = FUNDS().filter(p => p.status === '이체완료' && !p.invoice);
   return `<div class="stats">
     <div class="stat"><div class="l">결재 대기</div><div class="v ${wa.length ? 'orange' : ''}">${wa.length}</div><div class="s">${won(wa.reduce((a, p) => a + p.amount, 0))}</div></div>
     <div class="stat"><div class="l">이체 대기 (결재 끝남)</div><div class="v ${wp.length ? 'red' : ''}">${wp.length}</div><div class="s">${won(wp.reduce((a, p) => a + p.amount, 0))}</div></div>
@@ -162,50 +229,93 @@ function statsHtml(){
     <div class="stat"><div class="l">세금계산서 수취 필요</div><div class="v ${needInv.length ? 'orange' : ''}">${needInv.length}</div><div class="s">${needInv.length ? '이체 끝난 건 중 계산서 못 받은 것' : '없음'}</div></div>
   </div>`;
 }
+function planStatsHtml(){
+  const wa = PLANS().filter(p => p.status === '기안대기'), op = PLANS().filter(p => p.status === '기안승인');
+  const opAmt = op.reduce((a, p) => a + p.amount, 0), opSpent = op.reduce((a, p) => a + spent(p.id), 0);
+  const m = PLANS().filter(p => (p.date || '').startsWith(todayStr().slice(0, 7)));
+  return `<div class="stats">
+    <div class="stat"><div class="l">승인 대기 기안</div><div class="v ${wa.length ? 'orange' : ''}">${wa.length}</div><div class="s">예상 ${won(wa.reduce((a, p) => a + p.amount, 0))}</div></div>
+    <div class="stat"><div class="l">진행 중 기안 (승인됨)</div><div class="v">${op.length}</div><div class="s">예상 ${won(opAmt)} · 나간 돈 ${won(opSpent)}</div></div>
+    <div class="stat"><div class="l">아직 안 나간 예상 금액</div><div class="v ${opAmt - opSpent > 0 ? 'orange' : ''}">${won(Math.max(opAmt - opSpent, 0))}</div><div class="s">진행 중 기안의 예상 − 나간 돈</div></div>
+    <div class="stat"><div class="l">이번 달 올린 기안</div><div class="v">${m.length}</div><div class="s">예상 ${won(m.filter(p => p.status !== '반려').reduce((a, p) => a + p.amount, 0))}</div></div>
+  </div>`;
+}
 function baseList(){
   switch (view) {
-    case 'approve': return P().filter(p => p.status === '결재대기');
-    case 'pay':     return P().filter(p => p.status === '결재완료');
-    case 'done':    return P().filter(p => p.status === '이체완료' || p.status === '반려');
-    case 'mine':    return P().filter(p => p.created_by === me);
-    default:        return P();
+    case 'p_all':   return PLANS();
+    case 'p_wait':  return PLANS().filter(p => p.status === '기안대기');
+    case 'p_open':  return PLANS().filter(p => p.status === '기안승인');
+    case 'p_done':  return PLANS().filter(p => p.status === '종결' || p.status === '반려');
+    case 'p_mine':  return PLANS().filter(p => p.created_by === me);
+    case 'approve': return FUNDS().filter(p => p.status === '결재대기');
+    case 'pay':     return FUNDS().filter(p => p.status === '결재완료');
+    case 'done':    return FUNDS().filter(p => p.status === '이체완료' || p.status === '반려');
+    case 'mine':    return FUNDS().filter(p => p.created_by === me);
+    default:        return FUNDS();
   }
 }
 function filtered(){
   const q = filter.q.trim().toLowerCase();
-  return baseList().filter(p => (!q || [p.title, p.payee, p.account, p.memo, p.category, p.created_by].some(v => (v || '').toLowerCase().includes(q)))
+  return baseList().filter(p => (!q || [p.title, p.payee, p.account, p.memo, p.category, p.created_by, (planOf(p) || {}).title].some(v => (v || '').toLowerCase().includes(q)))
     && (!filter.status || p.status === filter.status) && (!filter.inv || (filter.inv === 'done') === !!p.invoice) && (!filter.cat || p.category === filter.cat) && (!filter.person || p.created_by === filter.person));
 }
 function toolbarHtml(){
+  const plan = isPlanView(), sts = plan ? PLAN_ST : FUND_ST;
   return `<div class="toolbar">
-    <input type="search" id="fq" placeholder="검색 (내역, 받는 곳, 계좌)" value="${esc(filter.q)}">
-    <select id="f_inv"><option value="">세금계산서: 전체</option><option value="need" ${filter.inv === 'need' ? 'selected' : ''}>수취 필요</option><option value="done" ${filter.inv === 'done' ? 'selected' : ''}>수취 완료</option></select>
+    <input type="search" id="fq" placeholder="${plan ? '검색 (기안명, 내용, 받는 곳)' : '검색 (내역, 받는 곳, 계좌, 기안명)'}" value="${esc(filter.q)}">
+    ${plan ? '' : `<select id="f_inv"><option value="">세금계산서: 전체</option><option value="need" ${filter.inv === 'need' ? 'selected' : ''}>수취 필요</option><option value="done" ${filter.inv === 'done' ? 'selected' : ''}>수취 완료</option></select>`}
     <select id="f_cat"><option value="">카테고리: 전체</option>${cats().map(c => `<option ${filter.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-    ${view === 'all' ? `<select id="f_status"><option value="">상태: 전체</option>${STATUSES.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
-    ${view !== 'mine' ? `<select id="f_person"><option value="">올린 사람: 전체</option>${memberOptions(filter.person)}</select>` : ''}
+    ${view === 'all' || view === 'p_all' ? `<select id="f_status"><option value="">상태: 전체</option>${sts.map(s => `<option ${filter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>` : ''}
+    ${view !== 'mine' && view !== 'p_mine' ? `<select id="f_person"><option value="">올린 사람: 전체</option>${memberOptions(filter.person)}</select>` : ''}
     <span class="count">${countText()}</span></div>`;
 }
-const countText = () => { const l = filtered(); return `${l.length}건 · ${won(l.filter(p => p.status !== '반려').reduce((a, p) => a + (isIn(p) ? 0 : p.amount), 0))}`; };
+const countText = () => { const l = filtered(); return `${l.length}건 · ${isPlanView() ? '예상 ' : ''}${won(l.filter(p => p.status !== '반려').reduce((a, p) => a + (isIn(p) ? 0 : p.amount), 0))}`; };
 function renderView(){ $('#view').innerHTML = tableHtml(filtered()); const c = document.querySelector('.toolbar .count'); if (c) c.textContent = countText(); bindView(); }
 
-function tableHtml(list){
-  if (!list.length) return `<div class="empty">${filter.q || filter.status || filter.inv || filter.cat || filter.person ? '조건에 맞는 건이 없습니다.' : view === 'approve' ? '결재할 건이 없습니다.' : view === 'pay' ? '이체할 건이 없습니다.' : '등록된 건이 없습니다.<br>위 <b>＋ 지출 등록</b>으로 추가하세요.'}</div>`;
+function tableHtml(list){ return isPlanView() ? planTableHtml(list) : fundTableHtml(list); }
+function planTableHtml(list){
+  if (!list.length) return `<div class="empty">${filter.q || filter.status || filter.cat || filter.person ? '조건에 맞는 기안이 없습니다.' : view === 'p_wait' ? '승인할 기안이 없습니다.' : view === 'p_open' ? '진행 중인 기안이 없습니다.' : '올린 기안이 없습니다.<br>위 <b>＋ 기안 올리기</b>로 추가하세요.'}</div>`;
+  const cols = [['date', '기안일'], ['title', '기안명'], ['category', '카테고리'], ['amount', '예상 금액'], ['due_date', '집행 예정'], ['payee', '받는 곳'], ['created_by', '올린 사람'], ['status', '상태'], ['spent', '나간 돈']];
+  const th = cols.map(([k, l]) => `<th data-sort="${k}" ${k === 'amount' || k === 'spent' ? 'class="r"' : ''}>${l}${sortArrow(sort, k)}</th>`).join('') + '<th>처리</th>';
+  const rows = sortBy(list.map(p => ({ ...p, spent: spent(p.id) })), sort, { status: s => PLAN_ST.indexOf(s), amount: a => Number(a) || 0, spent: a => Number(a) || 0 }).map(p => { const n = fundsOf(p.id).length; return `<tr class="row" data-id="${p.id}">
+    <td><span class="date">${fmtDate(p.date) || '-'}</span></td>
+    <td><span class="title">${esc(p.title)}</span>${p.files.length ? ` <span class="cmt">📎 ${p.files.length}</span>` : ''}${p.comments.filter(c => c.kind === 'comment').length ? ` <span class="cmt">💬 ${p.comments.filter(c => c.kind === 'comment').length}</span>` : ''}${p.memo ? `<div class="hint" style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.memo.split('\n')[0])}</div>` : ''}</td>
+    <td><span class="cat">${esc(p.category || '기타')}</span></td>
+    <td class="amt out">${won(p.amount)}</td>
+    <td><span class="date">${fmtDate(p.due_date) || '-'}</span></td>
+    <td class="acct" title="${esc(p.payee || '')}">${esc(p.payee || '')}</td>
+    <td>${who(p.created_by)}</td>
+    <td>${stHtml(p.status)}${p.approved_by && p.status !== '기안대기' ? `<div class="hint">${esc(p.approved_by)} ${fmtDate((p.approved_at || '').slice(0, 10))}</div>` : ''}</td>
+    <td class="amt ${p.spent > p.amount ? 'over' : ''}" title="${n}건">${n ? `${won(p.spent)}<div class="hint" style="font-weight:400">${n}건${p.spent > p.amount ? ' · 예상 초과' : ''}</div>` : '<span class="hint">-</span>'}</td>
+    <td class="act">${planButtons(p)}</td></tr>`; }).join('');
+  return `<div class="tablewrap"><table style="min-width:980px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function fundTableHtml(list){
+  if (!list.length) return `<div class="empty">${filter.q || filter.status || filter.inv || filter.cat || filter.person ? '조건에 맞는 건이 없습니다.' : view === 'approve' ? '결재할 건이 없습니다.' : view === 'pay' ? '이체할 건이 없습니다.' : '등록된 건이 없습니다.<br>위 <b>＋ 자금결제 올리기</b>로 추가하세요.'}</div>`;
   const cols = [['date', '일자'], ['title', '내역'], ['category', '카테고리'], ['amount', '금액'], ['payee', '받는 곳 · 계좌'], ['created_by', '올린 사람'], ['status', '상태'], ['invoice', '세금계산서']];
   const th = cols.map(([k, l]) => `<th data-sort="${k}" ${k === 'amount' ? 'class="r"' : ''}>${l}${sortArrow(sort, k)}</th>`).join('') + '<th>처리</th>';
-  const rows = sortBy(list, sort, { status: s => STATUSES.indexOf(s), amount: a => Number(a) || 0, invoice: v => v ? 1 : 0 }).map(p => `<tr class="row" data-id="${p.id}">
+  const rows = sortBy(list, sort, { status: s => FUND_ST.indexOf(s), amount: a => Number(a) || 0, invoice: v => v ? 1 : 0 }).map(p => { const pl = planOf(p); return `<tr class="row" data-id="${p.id}">
     <td><span class="date">${fmtDate(p.date) || '-'}</span></td>
-    <td><span class="title">${esc(p.title)}</span>${p.files.length ? ` <span class="cmt">📎 ${p.files.length}</span>` : ''}${p.comments.filter(c => c.kind === 'comment').length ? ` <span class="cmt">💬 ${p.comments.filter(c => c.kind === 'comment').length}</span>` : ''}</td>
+    <td><span class="title">${esc(p.title)}</span>${p.files.length ? ` <span class="cmt">📎 ${p.files.length}</span>` : ''}${p.comments.filter(c => c.kind === 'comment').length ? ` <span class="cmt">💬 ${p.comments.filter(c => c.kind === 'comment').length}</span>` : ''}
+      ${pl ? `<div class="hint" title="기안 보기"><a href="#" data-plan="${pl.id}" style="color:#92400e">📝 ${esc(pl.title)}</a></div>` : (!isIn(p) && HAS_LINK() && (p.status === '결재대기' || p.status === '결재완료') ? `<div class="hint">기안 없음</div>` : '')}</td>
     <td><span class="cat ${isIn(p) ? 'in' : ''}">${esc(p.category || (isIn(p) ? '수입' : '기타'))}</span></td>
     <td class="amt ${isIn(p) ? 'in' : 'out'}">${isIn(p) ? '+' : ''}${won(p.amount)}</td>
     <td class="acct" title="${esc((p.payee || '') + ' ' + (p.account || ''))}">${esc(p.payee || '')}${p.account ? ` <span class="hint">${esc(p.account)}</span>` : ''}</td>
     <td>${who(p.created_by)}</td>
     <td>${stHtml(p.status)}${p.status === '이체완료' && p.paid_by ? `<div class="hint">${esc(p.paid_by)} ${fmtDate((p.paid_at || '').slice(0, 10))}</div>` : p.status === '결재완료' && p.due_date ? `<div class="hint">희망 ${fmtDate(p.due_date)}</div>` : ''}</td>
     <td>${invHtml(p)}</td>
-    <td class="act">${actionButtons(p)}</td></tr>`).join('');
+    <td class="act">${actionButtons(p)}</td></tr>`; }).join('');
   return `<div class="tablewrap"><table style="min-width:900px"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 const invHtml = p => p.invoice ? tag('수취 완료', '#dcfce7', '#15803d') : `${tag('수취 필요', '#fee2e2', '#b91c1c')} <button class="btn sm" data-inv="${p.id}" title="세금계산서를 받았으면 누르세요">받음</button>`;
 async function setInvoice(id, v){ const p = P().find(x => x.id === id); if (!p) return; await saveRow('payments', { ...p, invoice: v, comments: [...p.comments, log(v ? '세금계산서 수취 완료' : '세금계산서 수취 필요로 변경', 'log')] }); toast(v ? '세금계산서 수취 완료로 표시했습니다' : '세금계산서 수취 필요로 되돌렸습니다'); }
+function planButtons(p){
+  let h = '';
+  if (p.status === '기안대기' && isAdmin()) h += `<button class="btn sm primary" data-approve-plan="${p.id}">승인</button><button class="btn sm" data-reject="${p.id}">반려</button>`;
+  if (p.status === '기안승인') h += `<button class="btn sm primary" style="background:var(--green);border-color:var(--green)" data-fund="${p.id}" title="이 기안으로 돈을 내보내 달라고 올립니다">자금결제 올리기</button>${(p.created_by === me || isAdmin()) ? `<button class="btn sm" data-close-plan="${p.id}">종결</button>` : ''}`;
+  if (p.status === '반려' && (p.created_by === me || isAdmin())) h += `<button class="btn sm" data-reopen="${p.id}">다시 올리기</button>`;
+  return h;
+}
 function actionButtons(p){
   let h = '';
   if (p.status === '결재대기' && isAdmin()) h += `<button class="btn sm primary" data-approve="${p.id}">결재</button><button class="btn sm" data-reject="${p.id}">반려</button>`;
@@ -215,17 +325,28 @@ function actionButtons(p){
 }
 function bindView(){
   bindSort(sort, renderView, { title: 'asc', category: 'asc', payee: 'asc', created_by: 'asc' });
-  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openPay(tr.dataset.id); });
+  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = e => { if (e.target.closest('button, a')) return; openAny(tr.dataset.id); });
+  document.querySelectorAll('[data-plan]').forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); openPlan(a.dataset.plan); });
+  document.querySelectorAll('[data-approve-plan]').forEach(b => b.onclick = e => { e.stopPropagation(); approvePlan(b.dataset.approvePlan); });
+  document.querySelectorAll('[data-close-plan]').forEach(b => b.onclick = e => { e.stopPropagation(); closePlan(b.dataset.closePlan); });
+  document.querySelectorAll('[data-fund]').forEach(b => b.onclick = e => { e.stopPropagation(); newFundFromPlan(b.dataset.fund); });
   document.querySelectorAll('[data-approve]').forEach(b => b.onclick = e => { e.stopPropagation(); approve(b.dataset.approve); });
   document.querySelectorAll('[data-reject]').forEach(b => b.onclick = e => { e.stopPropagation(); openReject(b.dataset.reject); });
   document.querySelectorAll('[data-paid]').forEach(b => b.onclick = e => { e.stopPropagation(); openPaid(b.dataset.paid); });
   document.querySelectorAll('[data-reopen]').forEach(b => b.onclick = e => { e.stopPropagation(); reopen(b.dataset.reopen); });
   document.querySelectorAll('[data-inv]').forEach(b => b.onclick = e => { e.stopPropagation(); setInvoice(b.dataset.inv, true); });
 }
+function openAny(id){ const p = P().find(x => x.id === id); if (!p) return; isPlan(p) ? openPlan(id) : openPay(id); }
+/* 승인된 기안에서 바로 자금결제 올리기: 기안의 내용을 미리 채워 줌 */
+function newFundFromPlan(planId){
+  const pl = PLANS().find(x => x.id === planId); if (!pl) return;
+  if (!HAS_LINK()) { toast('기안 연결 칸이 아직 없습니다. 관리자가 sql-payments-plan.sql 을 실행해야 합니다', true); return; }
+  openPay(null, { kind: '비용', plan_id: pl.id, title: pl.title, amount: Math.max(pl.amount - spent(pl.id), 0) || pl.amount, payee: pl.payee || '', category: pl.category || '' });
+}
 
-/* 월별 합계: 카테고리별 지출·수입, 순액 */
+/* 월별 합계: 자금결제만 (기안은 계획이므로 제외) 카테고리별 지출 */
 function monthHtml(){
-  const list = P().filter(p => (p.date || '').startsWith(month) && p.status !== '반려');
+  const list = FUNDS().filter(p => (p.date || '').startsWith(month) && p.status !== '반려');
   const byCat = {};
   list.forEach(p => { const k = p.category || (isIn(p) ? '수입' : '기타'); byCat[k] = byCat[k] || { out: 0, inn: 0, n: 0 }; byCat[k][isIn(p) ? 'inn' : 'out'] += p.amount; byCat[k].n++; });
   const out = list.filter(p => !isIn(p)).reduce((a, p) => a + p.amount, 0);
@@ -243,20 +364,123 @@ function monthHtml(){
     </tbody></table></div>`;
 }
 
-/* ---------- 등록·상세 창 ---------- */
+/* ---------- 기안 등록·상세 창 ---------- */
+const KIND_LOG_PLAN = { approve: ['승인', '#dbeafe', '#1d4ed8'], reject: ['반려', '#fee2e2', '#b91c1c'], close: ['종결', '#e5e7eb', '#374151'] };
+function openPlan(id){
+  const p = id ? PLANS().find(x => x.id === id) : null;
+  const d = p || { title: '', date: todayStr(), category: '', amount: '', payee: '', due_date: '', memo: '', files: [], comments: [], status: '기안대기' };
+  const locked = p && p.status !== '기안대기' && !isAdmin();   // 승인·반려가 난 기안은 관리자만 고칠 수 있음
+  const mAt = attachBox('mFiles', d.files, 'payments'), cAt = attachBox('cFiles', [], 'payments');
+  const logs = p ? p.comments : [];
+  const linked = p ? fundsOf(p.id) : [], used = p ? spent(p.id) : 0;
+  const stepCls = (on, done, no) => on ? 'on' : done ? 'done' : no ? 'no' : '';
+  openModal(`${modalHead(p ? '기안 내용' : '기안 올리기', p ? stHtml(p.status) : '')}
+    <div class="mb">
+      ${p ? `<div class="flow"><span class="step done">기안 ${esc(p.created_by || '')}</span>→<span class="step ${stepCls(p.status === '기안대기', p.status === '기안승인' || p.status === '종결', p.status === '반려')}">${p.status === '반려' ? '반려' : '대표 승인'}${p.approved_by && p.status !== '기안대기' ? ' ' + esc(p.approved_by) : ''}</span>→<span class="step ${stepCls(p.status === '기안승인', p.status === '종결')}">진행 · 자금결제 ${linked.length}건</span>→<span class="step ${stepCls(false, p.status === '종결')}">종결</span></div>
+        ${p.status === '반려' && p.reject_reason ? `<div class="hint warn">반려 사유: ${esc(p.reject_reason)}</div>` : ''}`
+      : `<div class="hint">돈이 나가기 <b>전에</b> 올립니다. 대표가 승인하면, 실제로 진행한 뒤 이 기안을 골라 <b>자금결제</b>를 올려 돈을 내보냅니다.</div>`}
+      <div class="f"><label>기안명 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="예: 11월 메타 광고비 충전 (레모너리)" maxlength="200" ${locked ? 'disabled' : ''}></div>
+      <div class="f2">
+        <div class="f"><label>예상 금액 (원) *</label><input id="mAmount" inputmode="numeric" value="${d.amount ? Number(d.amount).toLocaleString('ko-KR') : ''}" placeholder="예: 3,000,000" ${locked ? 'disabled' : ''}></div>
+        <div class="f"><label>집행 예정 (돈이 나갈 때)</label><input type="date" id="mDue" value="${esc(d.due_date || '')}" ${locked ? 'disabled' : ''}></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>카테고리</label><input id="mCat" list="catList" value="${esc(d.category || '')}" placeholder="예: 광고비" ${locked ? 'disabled' : ''}><datalist id="catList">${cats().map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+        <div class="f"><label>받는 곳 (업체·사람)</label><input id="mPayee" value="${esc(d.payee || '')}" placeholder="예: 메타, 하이온넷" ${locked ? 'disabled' : ''}></div>
+      </div>
+      <div class="f2">
+        <div class="f"><label>기안일</label><input type="date" id="mDate" value="${esc(d.date || '')}" ${locked ? 'disabled' : ''}></div>
+        <div></div>
+      </div>
+      <div class="f"><label>목적 · 계획 <b style="color:var(--red)">*</b> (무엇을 위해, 왜 필요한지, 어떻게 쓸 계획인지) · 첨부(견적서 등)</label><textarea id="mMemo" style="min-height:110px" placeholder="예: 11월 레모너리 메타 광고. 10월 ROAS 180%로 유지 중이라 일예산 10만 원 유지, 한 달 약 300만 원 충전 예정. 월초 1회 충전." ${locked ? 'disabled' : ''}>${esc(d.memo || '')}</textarea>${mAt.html}</div>
+      ${p ? `<div class="linked"><h4>이 기안으로 올린 자금결제 ${linked.length ? `(${linked.length}건)` : ''}</h4>
+        ${linked.length ? `<div class="tablewrap"><table><thead><tr><th>일자</th><th>내역</th><th class="r" style="text-align:right">금액</th><th>상태</th><th>올린 사람</th></tr></thead><tbody>
+          ${linked.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(f => `<tr class="row" data-fund-open="${f.id}"><td><span class="date">${fmtDate(f.date) || '-'}</span></td><td>${esc(f.title)}</td><td class="amt">${won(f.amount)}</td><td>${stHtml(f.status)}</td><td>${who(f.created_by)}</td></tr>`).join('')}
+          <tr class="total"><td colspan="2">나간 돈 합계 (반려 제외) / 예상 금액</td><td class="amt ${used > p.amount ? 'over' : ''}">${won(used)} / ${won(p.amount)}</td><td colspan="2">${used > p.amount ? `<span class="hint warn">예상보다 ${won(used - p.amount)} 초과</span>` : `<span class="hint">남은 금액 ${won(p.amount - used)}</span>`}</td></tr>
+        </tbody></table></div>` : `<div class="hint">${p.status === '기안승인' ? '아직 없습니다. 진행을 마쳤으면 아래 <b>자금결제 올리기</b>를 누르세요.' : p.status === '기안대기' ? '대표가 승인하면 이 기안으로 자금결제를 올릴 수 있습니다.' : '없습니다.'}</div>`}</div>
+      <div class="comments"><h4>기록 ${logs.length ? `(${logs.length})` : ''}</h4>
+        ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${KIND_LOG_PLAN[c.kind] ? tag(...KIND_LOG_PLAN[c.kind]) + ' ' : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
+        <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>${cAt.html}
+      </div>
+      <div class="hint">기안: ${esc(p.created_by || '')} ${fmtDateTime(p.created_at)}${p.approved_at && p.status !== '기안대기' ? ` · ${p.status === '반려' ? '반려' : '승인'}: ${esc(p.approved_by || '')} ${fmtDateTime(p.approved_at)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf">
+      ${p && (p.created_by === me || isAdmin()) ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
+      ${p && p.status === '기안대기' && isAdmin() ? `<button class="btn" id="mReject">반려</button><button class="btn" id="mApprove">승인</button>` : ''}
+      ${p && p.status === '기안승인' ? `<button class="btn" id="mFund" style="color:var(--green);border-color:var(--green)">자금결제 올리기</button>${(p.created_by === me || isAdmin()) ? `<button class="btn" id="mClose">종결</button>` : ''}` : ''}
+      ${p && p.status !== '기안대기' && isAdmin() ? `<button class="btn" id="mReopen" title="기안 대기로 되돌리기">되돌리기</button>` : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="mSave">${p ? '저장' : '기안 올리기'}</button>
+    </div>`, { wide: true });
+  mAt.bind(); if (p) cAt.bind();
+  if (!locked) $('#mTitle').focus();
+  const ma = $('#mAmount'); ma.oninput = () => { const n = num(ma.value); ma.value = n ? n.toLocaleString('ko-KR') : ''; };
+  const save = async (extra) => {
+    const n = { ...(p || {}),
+      id: p ? p.id : uid(), kind: '기안', title: $('#mTitle').value.trim(), amount: num($('#mAmount').value), date: $('#mDate').value || null,
+      category: $('#mCat').value.trim() || null, payee: $('#mPayee').value.trim() || null, due_date: $('#mDue').value || null, memo: $('#mMemo').value.trim() || null, files: mAt.files,
+      account: null, invoice: false,
+      status: p ? p.status : '기안대기', comments: p ? [...p.comments] : [], created_by: p ? p.created_by : me, created_at: p ? p.created_at : nowIso(),
+    };
+    if (locked) Object.assign(n, { title: p.title, amount: p.amount, date: p.date, category: p.category, payee: p.payee, due_date: p.due_date, memo: p.memo, files: p.files });
+    if (!n.title) { $('#mTitle').focus(); toast('기안명을 입력하세요', true); return; }
+    if (!n.amount) { $('#mAmount').focus(); toast('예상 금액을 입력하세요', true); return; }
+    if (!n.memo && !locked) { $('#mMemo').focus(); toast('목적 · 계획을 적어 주세요', true); return; }
+    if (p && n.amount !== p.amount) n.comments.push(log(`예상 금액 변경: ${won(p.amount)} → ${won(n.amount)}`));
+    if (extra) n.comments.push(extra);
+    closeModal();
+    await saveRow('payments', n);
+    toast(p ? '저장했습니다' : '기안을 올렸습니다. 대표님이 승인하면 이 기안으로 자금결제를 올릴 수 있습니다');
+  };
+  $('#mSave').onclick = () => save();
+  if (p) {
+    $('#cAdd').onclick = () => { const text = $('#cText').value.trim(); if (!text && !cAt.files.length) { $('#cText').focus(); return; } if (locked) { closeModal(); saveRow('payments', { ...p, comments: [...p.comments, log(text || '첨부 파일', 'comment', cAt.files)] }); } else save(log(text || '첨부 파일', 'comment', cAt.files)); };
+    const md = $('#mDelete'); if (md) md.onclick = async () => {
+      if (linked.length) { toast(`이 기안으로 올린 자금결제가 ${linked.length}건 있어 삭제할 수 없습니다. 대신 종결하세요`, true); return; }
+      if (confirm(`"${p.title}" 기안을 삭제할까요?`)) { closeModal(); await removeRow('payments', p.id); toast('삭제했습니다'); }
+    };
+    const ap = $('#mApprove'); if (ap) ap.onclick = () => { closeModal(); approvePlan(p.id); };
+    const rj = $('#mReject'); if (rj) rj.onclick = () => { closeModal(); openReject(p.id); };
+    const fd = $('#mFund'); if (fd) fd.onclick = () => { closeModal(); newFundFromPlan(p.id); };
+    const cl = $('#mClose'); if (cl) cl.onclick = () => { closeModal(); closePlan(p.id); };
+    const ro = $('#mReopen'); if (ro) ro.onclick = () => { closeModal(); reopen(p.id); };
+    document.querySelectorAll('[data-fund-open]').forEach(tr => tr.onclick = () => { closeModal(); openPay(tr.dataset.fundOpen); });
+  }
+}
+
+/* ---------- 자금결제 등록·상세 창 ---------- */
+/* 기안 고르기: 승인된 기안(진행 중) + 지금 연결된 기안. 내가 올린 기안이 위로 */
+function planOptions(sel){
+  const list = PLANS().filter(x => x.status === '기안승인' || x.id === sel)
+    .sort((a, b) => (b.created_by === me) - (a.created_by === me) || String(b.date || '').localeCompare(String(a.date || '')));
+  return `<option value="">기안 없이 (소액 · 정기 지출 등 기안이 필요 없는 건)</option>` + list.map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.title)} · 예상 ${won(x.amount)} · ${esc(x.created_by || '')}${x.status !== '기안승인' ? ` (${x.status})` : ''}</option>`).join('');
+}
+function planBoxHtml(pl, exceptId){
+  if (!pl) return '';
+  const used = fundsOf(pl.id).filter(f => f.status !== '반려' && f.id !== exceptId).reduce((a, f) => a + f.amount, 0);
+  return `<div class="planbox"><span class="t" data-plan="${pl.id}" title="기안 내용 보기">📝 ${esc(pl.title)}</span> ${stHtml(pl.status)}
+    <div>예상 금액 <b>${won(pl.amount)}</b> · 이미 나간 돈 ${won(used)} · 남은 금액 <b>${won(pl.amount - used)}</b>${pl.approved_by ? ` · 승인 ${esc(pl.approved_by)} ${fmtDate((pl.approved_at || '').slice(0, 10))}` : ''}</div>
+    ${pl.memo ? `<div class="memo">${esc(pl.memo)}</div>` : ''}</div>`;
+}
 function openPay(id, preset = {}){
-  const p = id ? P().find(x => x.id === id) : null;
-  const d = p || { title: '', date: todayStr(), category: '', kind: '비용', amount: '', payee: '', account: '', due_date: '', memo: '', invoice: false, files: [], comments: [], status: '결재대기', ...preset };
+  const p = id ? FUNDS().find(x => x.id === id) : null;
+  const d = p || { title: '', date: todayStr(), category: '', kind: '비용', amount: '', payee: '', account: '', due_date: '', memo: '', invoice: false, files: [], comments: [], status: '결재대기', plan_id: null, ...preset };
   const inn = d.kind === '수입';
   const locked = p && p.status !== '결재대기' && !isAdmin();   // 결재가 시작된 건은 관리자만 고칠 수 있음
   const mAt = attachBox('mFiles', d.files, 'payments'), cAt = attachBox('cFiles', [], 'payments');
   const logs = p ? p.comments : [];
   const KIND_LOG = { approve: ['결재', '#dbeafe', '#1d4ed8'], reject: ['반려', '#fee2e2', '#b91c1c'], paid: [inn ? '입금 확인' : '이체 완료', '#dcfce7', '#15803d'] };
-  openModal(`${modalHead(p ? (inn ? '수입 내용' : '지출 내용') : (inn ? '수입 등록' : '지출 등록'), p ? stHtml(p.status) : '')}
+  const pl0 = planOf(d);
+  const planField = inn ? '' : HAS_LINK()
+    ? `<div class="f"><label>어느 기안으로 올리나요? ${!p ? '<span class="hint">(승인된 기안만 보입니다)</span>' : ''}</label><select id="mPlan" ${locked ? 'disabled' : ''}>${planOptions(d.plan_id)}</select><div id="planBox">${planBoxHtml(pl0, p && p.id)}</div></div>`
+    : `<div class="hint warn">기안 연결 칸이 아직 없어 기안을 붙일 수 없습니다${isAdmin() ? ' → sql-payments-plan.sql 을 Supabase SQL Editor 에서 실행하세요' : ' (관리자에게 알려 주세요)'}</div>`;
+  openModal(`${modalHead(p ? (inn ? '수입 내용' : '자금결제 내용') : (inn ? '수입 등록' : '자금결제 올리기'), p ? stHtml(p.status) : '')}
     <div class="mb">
-      ${p ? `<div class="flow"><span class="step done">등록 ${esc(p.created_by || '')}</span>→<span class="step ${p.status === '결재대기' ? 'on' : p.status === '반려' ? 'no' : 'done'}">${p.status === '반려' ? '반려' : '결재'}${p.approved_by ? ' ' + esc(p.approved_by) : ''}</span>→<span class="step ${p.status === '결재완료' ? 'on' : p.status === '이체완료' ? 'done' : ''}">${inn ? '입금 확인' : '이체'}${p.paid_by ? ' ' + esc(p.paid_by) : ''}</span></div>
-        ${p.status === '반려' && p.reject_reason ? `<div class="hint warn">반려 사유: ${esc(p.reject_reason)}</div>` : ''}` : ''}
-      <div class="f"><label>내역 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="${inn ? '예: 쿠팡 9월 정산 입금' : '예: [대행팀] 9월 메타 광고비 충전'}" maxlength="200" ${locked ? 'disabled' : ''}></div>
+      ${p ? `<div class="flow"><span class="step done">올림 ${esc(p.created_by || '')}</span>→<span class="step ${p.status === '결재대기' ? 'on' : p.status === '반려' ? 'no' : 'done'}">${p.status === '반려' ? '반려' : '대표 결재'}${p.approved_by ? ' ' + esc(p.approved_by) : ''}</span>→<span class="step ${p.status === '결재완료' ? 'on' : p.status === '이체완료' ? 'done' : ''}">${inn ? '입금 확인' : '이체'}${p.paid_by ? ' ' + esc(p.paid_by) : ''}</span></div>
+        ${p.status === '반려' && p.reject_reason ? `<div class="hint warn">반려 사유: ${esc(p.reject_reason)}</div>` : ''}`
+      : inn ? '' : `<div class="hint">승인된 기안대로 진행을 마쳤으면 그 기안을 골라 올립니다. 대표가 결재하면 이체 대기로 넘어갑니다.</div>`}
+      ${planField}
+      <div class="f"><label>내역 *</label><input id="mTitle" value="${esc(d.title)}" placeholder="${inn ? '예: 쿠팡 9월 정산 입금' : '예: 11월 메타 광고비 충전 (레모너리) — 11/1 충전분'}" maxlength="200" ${locked ? 'disabled' : ''}></div>
       <div class="f2">
         <div class="f"><label>금액 (원) *</label><input id="mAmount" inputmode="numeric" value="${d.amount ? Number(d.amount).toLocaleString('ko-KR') : ''}" placeholder="예: 1,500,000" ${locked ? 'disabled' : ''}></div>
         <div class="f"><label>일자</label><input type="date" id="mDate" value="${esc(d.date || '')}" ${locked ? 'disabled' : ''}></div>
@@ -271,12 +495,12 @@ function openPay(id, preset = {}){
       </div>
       <div class="f"><label>${inn ? '입금될 계좌' : '이체할 계좌 (은행 · 계좌번호 · 예금주)'}</label><input id="mAccount" value="${esc(d.account || '')}" placeholder="예: 국민 123456-04-123456 (주)하이온넷" ${locked ? 'disabled' : ''}></div>
       ${p && p.account ? acctBox(p) : ''}
-      <div class="f"><label>메모 · 증빙 (견적서, 세금계산서 등 <b style="color:var(--red)">필수</b>)</label><textarea id="mMemo" ${locked ? 'disabled' : ''}>${esc(d.memo || '')}</textarea>${mAt.html}</div>
+      <div class="f"><label>진행 내용 · 증빙 (${inn ? '메모' : '어떻게 진행했는지, 세금계산서·청구서 등 <b style="color:var(--red)">필수</b>'})</label><textarea id="mMemo" ${locked ? 'disabled' : ''}>${esc(d.memo || '')}</textarea>${mAt.html}</div>
       ${p ? `<div class="comments"><h4>기록 ${logs.length ? `(${logs.length})` : ''}</h4>
         ${logs.slice().reverse().map(c => `<div class="cm ${c.kind || ''}">${avatar(c.by)}<div class="body"><span class="by">${esc(c.by || '')}</span>${KIND_LOG[c.kind] ? tag(...KIND_LOG[c.kind]) + ' ' : ''}${esc(c.text)}<span class="at">${fmtDateTime(c.at)}</span>${filesHtml(c.files)}</div></div>`).join('') || '<div class="hint">아직 기록이 없습니다</div>'}
         <div class="cmadd"><textarea id="cText" placeholder="댓글을 남기면 함께 저장됩니다"></textarea><button class="btn" id="cAdd">댓글 남기기</button></div>${cAt.html}
       </div>
-      <div class="hint">등록: ${esc(p.created_by || '')} ${fmtDateTime(p.created_at)}${p.approved_at ? ` · ${p.status === '반려' ? '반려' : '결재'}: ${esc(p.approved_by || '')} ${fmtDateTime(p.approved_at)}` : ''}${p.paid_at ? ` · ${inn ? '입금 확인' : '이체'}: ${esc(p.paid_by || '')} ${fmtDateTime(p.paid_at)}` : ''}</div>` : ''}
+      <div class="hint">올림: ${esc(p.created_by || '')} ${fmtDateTime(p.created_at)}${p.approved_at ? ` · ${p.status === '반려' ? '반려' : '결재'}: ${esc(p.approved_by || '')} ${fmtDateTime(p.approved_at)}` : ''}${p.paid_at ? ` · ${inn ? '입금 확인' : '이체'}: ${esc(p.paid_by || '')} ${fmtDateTime(p.paid_at)}` : ''}</div>` : ''}
     </div>
     <div class="mf">
       ${p && (p.created_by === me || isAdmin()) ? `<button class="btn danger left" id="mDelete">삭제</button>` : ''}
@@ -287,24 +511,38 @@ function openPay(id, preset = {}){
       <button class="btn primary" id="mSave">${p ? '저장' : '결재 올리기'}</button>
     </div>`, { wide: true });
   mAt.bind(); if (p) cAt.bind(); bindCopy();
+  const bindPlanLink = () => document.querySelectorAll('#planBox [data-plan]').forEach(el => el.onclick = () => { closeModal(); openPlan(el.dataset.plan); });
+  bindPlanLink();
+  const ps = $('#mPlan'); if (ps) ps.onchange = () => {
+    const pl = PLANS().find(x => x.id === ps.value) || null;
+    $('#planBox').innerHTML = planBoxHtml(pl, p && p.id); bindPlanLink();
+    if (pl && !p) {   // 새로 올리는 중이면 비어 있는 칸을 기안 내용으로 채워 줌
+      if (!$('#mTitle').value.trim()) $('#mTitle').value = pl.title;
+      if (!num($('#mAmount').value)) $('#mAmount').value = (Math.max(pl.amount - spent(pl.id), 0) || pl.amount).toLocaleString('ko-KR');
+      if (!$('#mPayee').value.trim() && pl.payee) $('#mPayee').value = pl.payee;
+      if (!$('#mCat').value.trim() && pl.category) $('#mCat').value = pl.category;
+    }
+  };
   if (!locked) $('#mTitle').focus();
   const ma = $('#mAmount'); ma.oninput = () => { const n = num(ma.value); ma.value = n ? n.toLocaleString('ko-KR') : ''; };
   const save = async (extra) => {
     const n = { ...(p || {}),
       id: p ? p.id : uid(), title: $('#mTitle').value.trim(), amount: num($('#mAmount').value), date: $('#mDate').value || null,
-      kind: '비용', category: $('#mCat').value.trim() || null, payee: $('#mPayee').value.trim() || null, account: $('#mAccount').value.trim() || null,
+      kind: p ? p.kind : (d.kind || '비용'), category: $('#mCat').value.trim() || null, payee: $('#mPayee').value.trim() || null, account: $('#mAccount').value.trim() || null,
       due_date: $('#mDue').value || null, invoice: document.querySelector('input[name=mInv]:checked').value === '1', memo: $('#mMemo').value.trim() || null, files: mAt.files,
       status: p ? p.status : '결재대기', comments: p ? [...p.comments] : [], created_by: p ? p.created_by : me, created_at: p ? p.created_at : nowIso(),
     };
-    if (locked) { Object.assign(n, { title: p.title, amount: p.amount, date: p.date, kind: p.kind, category: p.category, payee: p.payee, account: p.account, due_date: p.due_date, memo: p.memo, files: p.files }); }   // 잠긴 건도 세금계산서 상태는 바꿀 수 있음
+    if (HAS_LINK()) n.plan_id = ps ? (ps.value || null) : (p ? p.plan_id || null : null); else delete n.plan_id;   // 연결 칸이 없으면 보내지 않음(저장 오류 방지)
+    if (locked) { Object.assign(n, { title: p.title, amount: p.amount, date: p.date, kind: p.kind, category: p.category, payee: p.payee, account: p.account, due_date: p.due_date, memo: p.memo, files: p.files, plan_id: p.plan_id }); if (!HAS_LINK()) delete n.plan_id; }   // 잠긴 건도 세금계산서 상태는 바꿀 수 있음
     if (p && !!n.invoice !== !!p.invoice) n.comments.push(log(n.invoice ? '세금계산서 수취 완료' : '세금계산서 수취 필요로 변경'));
     if (!n.title) { $('#mTitle').focus(); toast('내역을 입력하세요', true); return; }
     if (!n.amount) { $('#mAmount').focus(); toast('금액을 입력하세요', true); return; }
     if (p && n.amount !== p.amount) n.comments.push(log(`금액 변경: ${won(p.amount)} → ${won(n.amount)}`));
+    if (p && HAS_LINK() && (n.plan_id || null) !== (p.plan_id || null)) { const a = planOf(p), b = PLANS().find(x => x.id === n.plan_id); n.comments.push(log(`기안 연결 변경: ${a ? a.title : '없음'} → ${b ? b.title : '없음'}`)); }
     if (extra) n.comments.push(extra);
     closeModal();
     await saveRow('payments', n);
-    toast(p ? '저장했습니다' : '결재를 올렸습니다. 대표님이 결재하면 이체 대기로 넘어갑니다');
+    toast(p ? '저장했습니다' : `자금결제를 올렸습니다${n.plan_id ? '' : ' (기안 없이)'}. 대표님이 결재하면 이체 대기로 넘어갑니다`);
   };
   const sb = $('#mSave'); if (sb) sb.onclick = () => save();
   if (p) {
@@ -317,7 +555,7 @@ function openPay(id, preset = {}){
   }
 }
 
-boot({ icon: '💳', title: '결재', tables: ['payments'], render, normalize });
+boot({ icon: '💳', title: '결재', tables: ['payments'], render, normalize, open: openAny });
 </script>
 </body>
 </html>
