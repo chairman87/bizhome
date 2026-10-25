@@ -81,15 +81,19 @@ const LocalStore = {
 const SupabaseStore = {
   label: '팀 공유 저장소 연결됨',
   client: null,
+  subscribed: false,
   async init(tables, onChange){
     this.client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
     let ch = this.client.channel('bizhome-changes');
-    tables.forEach(t => { ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => onChange()); });
-    ch.subscribe();
-    setInterval(onChange, 60000);   // 실시간이 끊겼을 때를 대비해 60초마다 새로 읽음
+    tables.forEach(t => { ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => onChange(t)); });   // 바뀐 표 하나만 다시 읽음
+    ch.subscribe(status => { if (status === 'SUBSCRIBED') { if (this.subscribed) onChange(); this.subscribed = true; } });   // 끊겼다 다시 붙으면 놓친 변경이 있을 수 있어 전부 한 번 다시 읽음
+    /* 전송량 절약(2026-10-25): 예전엔 60초마다 화면의 표 전부를 다시 읽어(홈은 한 번에 2MB) Supabase 무료 한도(한 달 5GB)를 넘겼음.
+       이제는 보이는 탭만 10분에 한 번 전부 다시 읽고, 안 보이는 탭은 모아 뒀다가 돌아왔을 때 읽음(scheduleReload 참고) */
+    setInterval(() => { if (document.visibilityState === 'visible') onChange(); }, 600000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flushOnVisible(); });
   },
   async load(table){
-    let q = this.client.from(table).select('*');
+    let q = this.client.from(table).select((APP.columns && APP.columns[table]) || '*');   // 화면이 boot({ columns: { 표: '칸,칸' } }) 로 알려 준 표는 그 칸만 읽음(큰 칸 제외용)
     if (table === 'members') q = q.order('sort_order');
     const { data, error } = await q; if (error) throw error; return data;
   },
@@ -114,23 +118,39 @@ async function boot(app){
   try { await store.init(tables, scheduleReload); } catch (e) { connError = e.message || String(e); }
   await reload();
 }
-let reloadTimer;
-function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 150); }
-async function reload(){
-  const missing = [];
-  for (const t of [...new Set([...APP.tables, 'members'])]) {
+/* 다시 읽기 예약: table 을 주면 그 표만, 안 주면 전부. 안 보이는 탭(최소화·다른 탭)은 읽지 않고 모아 뒀다가 돌아오면 읽음 */
+let reloadTimer, pendingTables = new Set(), pendingAll = false, lastFullReload = 0;
+function scheduleReload(table){
+  if (table) pendingTables.add(table); else pendingAll = true;
+  if (document.visibilityState === 'hidden') return;
+  clearTimeout(reloadTimer); reloadTimer = setTimeout(flushReload, 150);
+}
+function flushReload(){ const only = pendingAll ? null : [...pendingTables]; pendingTables.clear(); pendingAll = false; return reload(only && only.length ? only : null); }
+function flushOnVisible(){   // 탭으로 돌아왔을 때: 모아 둔 변경이 있으면 그것만, 10분 넘게 전부 안 읽었으면 전부
+  if (Date.now() - lastFullReload > 600000) pendingAll = true;
+  if (pendingAll || pendingTables.size) { clearTimeout(reloadTimer); reloadTimer = setTimeout(flushReload, 150); }
+}
+const missingTables = new Set();   // 설정 SQL 이 덜 실행돼 아직 없는 표
+const PROJ_TABLES = ['projects', 'project_logs', 'project_cards', 'project_decisions', 'project_reads', 'tasks', 'decisions'];
+let pnForce = true;   // 프로젝트 소식(왼쪽 위 탭 숫자)을 이번 그리기 때 새로 읽을지
+async function reload(only){   // only: 다시 읽을 표 목록(없으면 전부)
+  const all = [...new Set([...APP.tables, 'members'])];
+  for (const t of only ? all.filter(t => only.includes(t)) : all) {
     try {
       let rows = await store.load(t);
       if (APP.normalize && t !== 'members') rows = rows.map(r => APP.normalize(t, r));
-      DATA[t] = rows;
+      DATA[t] = rows; missingTables.delete(t);
       if (t === 'members') connError = '';
     } catch (e) {
       const msg = e.message || String(e);
       if (t === 'members') connError = msg;                       // 팀원 표를 못 읽으면 진짜 연결 오류
-      else if (/does not exist|not find|schema cache/i.test(msg)) { missing.push(t); DATA[t] = undefined; }   // 표가 아직 없음(설정 SQL 미실행)
+      else if (/does not exist|not find|schema cache/i.test(msg)) { missingTables.add(t); DATA[t] = undefined; }   // 표가 아직 없음(설정 SQL 미실행)
       else { connError = msg; }
     }
   }
+  if (!only) lastFullReload = Date.now();
+  pnForce = !only || only.some(t => PROJ_TABLES.includes(t));
+  const missing = [...missingTables];
   members = DATA.members || [];
   // 설정 SQL 이 덜 실행된 경우 관리자에게 안내
   const warns = [];
@@ -659,7 +679,7 @@ const pnUnreadEv = e => !!(PN && PN.hasReads) && e.by !== me && String(e.at) > (
 const projUnread = () => !PN || !PN.hasReads ? 0 : PN.projects.filter(p => PN.events.some(e => e.pid === p.id && pnUnreadEv(e))).length;   // 새 글이 있는 채널 수 (아직 프로젝트 화면을 한 번도 안 연 사람은 0 — 처음 열 때 그때까지의 글을 읽은 것으로 치는 채널 화면과 같게)
 async function loadProjNews(force){
   if (!store.client || !me) return PN;
-  if (!force && PN && Date.now() - pnAt < 30000) return PN;
+  if (!force && PN && Date.now() - pnAt < 300000) return PN;   // 관련 표가 안 바뀌었으면 5분 안에는 읽어 둔 것을 그대로 씀(전송량 절약, 2026-10-25. 예전 30초)
   if (pnLoading) return pnLoading;
   pnLoading = (async () => {
     try {
@@ -704,7 +724,7 @@ const mtUnread = (m, r) => !!m && m.created_by !== me && new Date(m.created_at |
 async function refreshProjNews(){
   const page = location.pathname.split('/').pop() || 'index.html';
   if (page === 'projects.html' || !store.client || !me) return;
-  await loadProjNews(true);
+  await loadProjNews(pnForce); pnForce = false;   // 관련 표가 바뀌었거나 전부 다시 읽은 직후에만 새로 읽음(그 밖에는 30초 안이면 읽어 둔 것)
   if (!PN) return;
   const sig = JSON.stringify([PN.events.slice(0, 30).map(e => e.at + e.by), Object.values(PN.seen).map(s => s._channel), projUnread()]);
   if (sig === pnSig) return;
