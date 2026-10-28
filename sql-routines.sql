@@ -104,6 +104,6 @@ insert into routines (id, key, title, kind, schedule, description, admin_only, e
   (gen_random_uuid(), 'brand-watch-weekly', '경쟁사 브랜드 검색수(주간)', '클로드', '매주 월 09:00', '감시 회사 8곳의 브랜드·검색수를 조사해 아티팩트 갱신', false, 170, 'C:\Users\PC\.claude\scheduled-tasks', 'brand-watch-weekly 폴더의 SKILL.md 만', 'skill', 220),
   (gen_random_uuid(), 'rocket-growth-daily', '레모너리 로켓그로스 점검 보고', '클로드', '매일 08:00', '로켓그로스 입고 전후의 쿠팡 주문·매출·광고비·이익 비교 보고 (2026-10-28 기준 Bongsu PC 에서 돎)', true, 26, 'C:\Users\PC\.claude\scheduled-tasks', 'rocket-growth-daily 폴더의 SKILL.md 만', 'skill', 230),
   (gen_random_uuid(), 'meta-comment-watcher', '메타 댓글 즉시처리(상시)', '상시', '로그인하면 계속 실행', '메타·인스타 댓글을 7~12초 안에 처리, 30분마다 계정 이상 점검', false, 0, 'C:\Users\PC\Desktop\클로드코드\META-COMMENTS', 'watcher.py·comments.py 와 설정 파일', 'none', 240),
-  (gen_random_uuid(), 'sik-tax-settlement', '식이해법 정산세금', '예정', '(아직 자동작업 없음)', '자리만 미리 둠. 자동작업이 생기면 여기에 연결', true, 0, null, null, 'none', 250),
-  (gen_random_uuid(), 'ph-tax-settlement', '피에이치뷰티 정산세금', '예정', '(아직 자동작업 없음)', '자리만 미리 둠. 자동작업이 생기면 여기에 연결', true, 0, null, null, 'none', 260)
+  (gen_random_uuid(), 'sik-tax-settlement', '식이해법 정산세금', '클로드', '매일 00:30 (손익상황판 작업 끝에)', '손익상황판 숫자로 종합소득세·부가세·광고비 계약 지급을 계산해 ''식이해법_정산_세금'' 아티팩트 갱신 (SIK-DASH 의 dan.py, 손익상황판 작업이 같이 돌림)', true, 26, 'C:\Users\PC\Desktop\클로드코드\SIK-DASH', 'dan.py 만 (세율·지급 완료 달·고정값은 dan.py 위쪽 상수). 다른 파일은 읽기만', 'self', 250),
+  (gen_random_uuid(), 'ph-tax-settlement', '피에이치뷰티 정산세금', '클로드', '매일 00:35 (손익상황판 작업 안에서)', '회계 기준 월별 손익과 법인세 추정 → ''피에이치뷰티_정산_세금'' 아티팩트 갱신 (PH-DASH 의 corp.py, 손익상황판 작업이 같이 돌림)', true, 26, 'C:\Users\PC\Desktop\클로드코드\PH-DASH', 'corp.py 와 settings.json 의 법인세 항목만. 다른 파일은 읽기만', 'self', 260)
 on conflict (key) do nothing;
