@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>자동작업</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610282230">
-<script src="common.js?v=202610282230"></script>
+<link rel="stylesheet" href="common.css?v=202610282234">
+<script src="common.js?v=202610282234"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -146,13 +146,14 @@ function render(){
   bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNew, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { reqTab = b.dataset.tab; render(); });
   bindChat();
-  document.querySelectorAll('tr.r[data-key]').forEach(el => el.onclick = () => openChatFor(el.dataset.key));
+  document.querySelectorAll('tr.r[data-key]').forEach(el => el.onclick = () => openChatModal(el.dataset.key));
   document.querySelectorAll('[data-hist]').forEach(b => b.onclick = e => { e.stopPropagation(); openRoutine(b.dataset.hist); });
   document.querySelectorAll('.a[data-id]').forEach(el => el.onclick = () => openRequest(el.dataset.id));
   document.querySelectorAll('.run[data-run]').forEach(el => el.onclick = () => openRun(el.dataset.run));
   document.querySelectorAll('[data-req-for]').forEach(b => b.onclick = e => { e.stopPropagation(); openNew(b.dataset.reqFor); });
   const fk = $('#frun'); if (fk) fk.onchange = () => { runKey = fk.value; runLimit = 60; refreshRuns(); };
   const mb = $('#moreBtn'); if (mb) mb.onclick = () => { runLimit += 60; refreshRuns(); };
+  if (chatModalOpen()) renderChatModal();   // 작업 현황 위에 뜬 대화 창도 같이 갱신
 }
 
 function boardHtml(){
@@ -205,7 +206,7 @@ async function openRoutine(id){
     </div>
     <div class="mf">${canEdit(r) ? '<button class="btn primary" id="rChat">💬 이 작업과 대화</button>' : ''}<button class="btn" id="rReq">수정요청(글로)</button><button class="btn" data-close>닫기</button></div>`, { wide: true });
   $('#rReq').onclick = () => { closeModal(); openNew(r.key); };
-  const rc = $('#rChat'); if (rc) rc.onclick = () => { closeModal(); openChatFor(r.key); };
+  const rc = $('#rChat'); if (rc) rc.onclick = () => { closeModal(); openChatModal(r.key); };
   if (admin) $('#rEdit').onclick = () => openRoutineEdit(r);
   await loadRuns(r.key, 15);
   const box = $('#rRuns'); if (!box) return;
@@ -332,9 +333,9 @@ function watchChat(id){   // 열린 대화의 메시지 표만 실시간으로 �
   clearInterval(chatPoll); chatPoll = null;
   if (!store.client || !id) return;
   msgCh = store.client.channel('chat-' + id).on('postgres_changes', { event: '*', schema: 'public', table: 'routine_chat_messages', filter: 'chat_id=eq.' + id }, () => refreshThread()).subscribe();
-  chatPoll = setInterval(() => { if (document.visibilityState === 'visible' && view === 'chat' && chatId === id && chatPending()) refreshThread(); }, 8000);
+  chatPoll = setInterval(() => { if (document.visibilityState === 'visible' && (view === 'chat' || chatModalOpen()) && chatId === id && chatPending()) refreshThread(); }, 8000);
 }
-async function refreshThread(){ if (!chatId) return; await loadMsgs(chatId); if (view === 'chat') render(); }
+async function refreshThread(){ if (!chatId) return; await loadMsgs(chatId); if (chatModalOpen()) renderChatModal(); else if (view === 'chat') render(); }
 async function openChat(id){   // 특정 대화(다른 사람 것, 알림 링크)를 엶
   const c = chatOf(id); if (!c) return;
   if (chatId !== id) chatDraft = '';
@@ -350,11 +351,15 @@ async function openChatFor(target){   // 대상을 눌렀을 때: 내 대화가 
 
 function chatHtml(){
   const admin = isAdmin(), targets = CHAT_TARGETS();
-  if (chatId && !chatOf(chatId)) chatId = '';
-  const c = chatId ? chatOf(chatId) : null;
   const side = `<aside class="chatlist">
     ${['인트라넷', ...KINDS].map(k => { const list = targets.filter(t => (t.kind || '스케줄러') === k); if (!list.length) return ''; return `<div class="sec" style="margin:8px 12px 2px">${esc(k)}</div>` + list.map(t => { const mine = myChatFor(t.key), n = chatsOf(t.key).filter(x => x.author !== me).length; return `<div class="ci ${chatTarget === t.key ? 'on' : ''}" data-target="${esc(t.key)}" title="${esc(t.description || '')}"><div class="t">${esc(t.title)}</div><div class="d">${mine ? `${rel(mine.last_message_at || mine.created_at)} ${csTag(mine.status)}` : '<span class="hint">대화 없음</span>'}${admin && n ? ` · 다른 사람 ${n}` : ''}</div></div>`; }).join(''); }).join('')}
   </aside>`;
+  return `<div class="chatwrap">${side}${chatPaneHtml()}</div>`;
+}
+function chatPaneHtml(){   // 오른쪽 대화 창. 대화 탭과 작업 현황의 팝업 창이 같이 씀
+  const admin = isAdmin();
+  if (chatId && !chatOf(chatId)) chatId = '';
+  const c = chatId ? chatOf(chatId) : null;
   let pane;
   if (!chatTarget) {
     pane = `<section class="chatpane"><div class="empty" style="margin:auto;max-width:560px">왼쪽에서 작업(또는 인트라넷 화면)을 누르면 바로 대화가 시작됩니다.<br><br><span class="hint">lemon803 의 클로드와 글로 주고받습니다. "지금 어떻게 되어 있어?"라고 물어도 되고 "이렇게 바꿔 줘"라고 해도 됩니다.<br>${admin ? '관리자가 고치라고 한 것은 <b>바로 반영</b>됩니다(인트라넷은 1~2분 뒤 phb.kr).' : '고친 것은 <b>반영 요청</b>을 눌러야 관리자 승인 뒤 적용됩니다.'}<br>답은 보통 30초~2분 걸리고, lemon803 PC 가 켜져 있어야 합니다.</span></div></section>`;
@@ -383,15 +388,27 @@ function chatHtml(){
            <div class="hint" style="padding:0 12px 8px">Ctrl+Enter 로 보내기 · ${admin ? '고치라고 한 것은 바로 반영됩니다' : '고친 것은 <b>반영 요청</b>을 눌러야 적용됩니다'}${c && c.commits ? ` · 이 대화에서 ${c.commits}번 고침` : ''}</div>`}
     </section>`;
   }
-  return `<div class="chatwrap">${side}${pane}</div>`;
+  return pane;
 }
-function bindChat(){
-  if (view !== 'chat') { if (chatPoll) { clearInterval(chatPoll); chatPoll = null; } return; }
+const chatModalOpen = () => !!$('#chModal');
+async function openChatModal(target){   // 작업 현황에서 줄을 눌렀을 때: 탭을 바꾸지 않고 그 자리에 대화 창
+  if (target !== INTRANET && !canEdit(routineOf(target))) { const r = routineOf(target); if (r) openRoutine(r.id); return; }
+  const c = myChatFor(target);
+  if (chatTarget !== target) chatDraft = '';
+  chatTarget = target; chatId = c ? c.id : '';
+  await loadMsgs(chatId); watchChat(chatId);
+  openModal(`${modalHead('💬 ' + esc(targetLabel(target)))}<div id="chModal" style="margin:-4px -2px 0">${chatPaneHtml()}</div>`, { cls: 'xl' });
+  bindChat(true);
+  const ta = $('#chText'); if (ta) ta.focus();
+}
+function renderChatModal(){ const box = $('#chModal'); if (!box) return; const ta = $('#chText'), focused = ta && document.activeElement === ta; box.innerHTML = chatPaneHtml(); bindChat(true); if (focused) { const t2 = $('#chText'); if (t2) { t2.focus(); t2.selectionStart = t2.selectionEnd = t2.value.length; } } }
+function bindChat(force){
+  if (view !== 'chat' && !force) { if (chatPoll && !chatModalOpen()) { clearInterval(chatPoll); chatPoll = null; } return; }
   document.querySelectorAll('.ci[data-target]').forEach(el => el.onclick = () => openChatFor(el.dataset.target));
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on('#chSend', sendMsg); on('#chApply', applyChat); on('#chClose', closeChat); on('#chDel', delChat);
   on('#chReq', () => { const c = chatOf(chatId); if (c && c.request_id) openRequest(c.request_id); });
-  on('#chHist', () => { const r = routineOf(chatTarget); if (r) openRoutine(r.id); });
+  on('#chHist', () => { const r = routineOf(chatTarget); if (r) { if (chatModalOpen()) closeModal(); openRoutine(r.id); } });
   const so = $('#chOthers'); if (so) so.onchange = () => { if (so.value) openChat(so.value); else openChatFor(chatTarget); };
   const ta = $('#chText'); if (ta) { ta.oninput = () => { chatDraft = ta.value; }; ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMsg(); } }; }
   const th = $('#chThread'); if (th) th.scrollTop = th.scrollHeight;
