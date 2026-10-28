@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>자동작업</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202610252148">
+<script src="common.js?v=202610252148"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .tabs2{display:flex;gap:4px;flex-wrap:wrap}
+  .tabs2 button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--fg2)}
+  .tabs2 button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .sec{margin:18px 0 8px;font-size:13px;font-weight:700;color:var(--fg2);display:flex;align-items:center;gap:8px}
+  .sec .hint{font-weight:400}
+  .tbl{border:1px solid var(--line);border-radius:var(--radius);overflow:auto;background:var(--bg)}
+  table{min-width:860px}
+  tr.r{cursor:pointer}
+  tr.r:hover td{background:var(--bg2)}
+  tr.off td{color:var(--fg3)}
+  td.t{font-weight:500}
+  td.t .d{font-size:12px;color:var(--fg3);font-weight:400;margin-top:1px;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  td.sum{color:var(--fg2);font-size:12.5px;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .late{color:var(--orange);font-weight:600;font-size:12px}
+  .lock{font-size:11px;color:var(--fg3);margin-left:4px}
+  .list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
+  .a{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .a:last-child{border-bottom:0}
+  .a:hover{background:var(--bg2)}
+  .a .mid{flex:1;min-width:0}
+  .a .t{font-weight:500;word-break:break-word}
+  .a .d{font-size:12.5px;color:var(--fg2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .a .m{font-size:12px;color:var(--fg3);white-space:nowrap;flex:none;text-align:right}
+  .a .src{font-size:11px;color:var(--fg3);border:1px solid var(--line2);border-radius:3px;padding:0 5px;margin-right:6px;font-weight:400}
+  .content{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:14px}
+  .box{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg2)}
+  .box h4{margin:0 0 6px;font-size:12px;color:var(--fg2);font-weight:600}
+  .box.ok{background:#f0fdf4;border-color:#bbf7d0}
+  .box.bad{background:#fef2f2;border-color:#fecaca}
+  pre.small{font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all;margin:0;color:var(--fg2);max-height:260px;overflow:auto}
+  .runs{display:grid;gap:4px}
+  .run{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 8px;border-radius:var(--radius);cursor:pointer}
+  .run:hover{background:var(--bg2)}
+  .run .when{color:var(--fg3);white-space:nowrap;font-size:12px;min-width:92px}
+  .run .s{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg2)}
+  .steps{display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--fg3);align-items:center}
+  .steps b{color:var(--fg)}
+  .morebtn{display:block;width:100%;margin-top:10px;padding:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   자동작업 — lemon803 PC 에서 도는 자동작업(윈도우 작업 스케줄러 + Claude 앱 예약작업)의 현황·결과·수정요청
+   · routines         작업 목록 (한 줄 = 작업 하나. 최근 결과 last_* 는 lemon803 의 report.py 가 복사해 둠)
+   · routine_runs     실행 기록 (report.py 가 한 번 돌 때마다 한 줄. 화면에서는 필요한 만큼만 읽음)
+   · routine_requests 수정요청 (요청 → 처리중 → 검토대기 → 승인 → 반영완료 / 반려 / 실패. lemon803 의 process_requests.py 가 10분마다 처리)
+   관리자만 보기(admin_only)인 작업은 관리자가 아니면 목록·기록·요청 어디에도 안 보임. 프로그램 쪽 설명은 클로드코드\ROUTINE-BOARD\README.md
+================================================================ */
+const INTRANET = '인트라넷';
+const KINDS = ['스케줄러', '클로드', '상시', '예정'];
+const KIND_LABEL = { 스케줄러: '윈도우 작업 스케줄러 (Claude 앱이 꺼져 있어도 돎)', 클로드: 'Claude 앱 예약작업 (lemon803 의 Claude 앱이 켜져 있어야 돎)', 상시: '항상 켜져 있는 프로그램', 예정: '아직 자동작업 없음 (자리만)' };
+const OPEN_STATES = ['요청', '처리중', '검토대기', '승인'];
+const ST = { 요청: ['#e0e7ff', '#3730a3'], 처리중: ['#fef3c7', '#92400e'], 검토대기: ['#ffedd5', '#9a3412'], 승인: ['#dbeafe', '#1d4ed8'], 반영완료: ['#dcfce7', '#15803d'], 반려: ['#f3f4f6', '#4b5563'], 실패: ['#fee2e2', '#b91c1c'] };
+const RS = { 성공: ['#dcfce7', '#15803d'], 실패: ['#fee2e2', '#b91c1c'], 경고: ['#fef3c7', '#92400e'] };
+const stTag = s => ST[s] ? tag(s, ST[s][0], ST[s][1]) : tag(s || '?', '#f3f4f6', '#4b5563');
+const runTag = s => RS[s] ? tag(s, RS[s][0], RS[s][1]) : tag('기록 없음', '#f3f4f6', '#9ca3af');
+let view = 'board', reqTab = 'open', runKey = '', runLimit = 60;
+let RUNS = [], runsFor = null;   // 실행 기록은 필요한 만큼만 읽어 여기에 둠 (runsFor: 어떤 조건으로 읽었는지)
+
+const rel = iso => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return '방금'; if (m < 60) return `${m}분 전`; if (m < 48 * 60) return `${Math.round(m / 60)}시간 전`; return `${Math.round(m / 1440)}일 전`; };
+const R = () => (DATA.routines || []).filter(r => isAdmin() || !r.admin_only).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+const routineOf = key => (DATA.routines || []).find(r => r.key === key);
+const visibleKey = key => key === INTRANET || R().some(r => r.key === key);
+const REQS = () => (DATA.routine_requests || []).filter(q => visibleKey(q.target)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const late = r => { if (!r.enabled || !(r.expect_hours > 0) || r.report === 'none') return false; if (!r.last_run_at) return true; return Date.now() - new Date(r.last_run_at) > r.expect_hours * 3600000; };
+const canEdit = r => !!(r && r.repo_path);
+
+function normalize(table, a){
+  if (table === 'routine_requests') return { ...a, comments: Array.isArray(a.comments) ? a.comments : [], changed_files: Array.isArray(a.changed_files) ? a.changed_files : [] };
+  if (table === 'routines') return { ...a, enabled: a.enabled !== false };
+  return a;
+}
+
+/* ---------- 실행 기록 읽기 (전체를 다 읽지 않고 필요한 만큼만) ---------- */
+async function loadRuns(key, limit){
+  if (!store.client) { RUNS = (DATA.routine_runs || []); return; }   // 임시 저장 모드
+  let q = store.client.from('routine_runs').select('id,routine_key,status,summary,started_at,finished_at,created_at').order('created_at', { ascending: false }).limit(limit);
+  if (key) q = q.eq('routine_key', key);
+  const { data, error } = await q;
+  if (error) { if (!/does not exist|schema cache/i.test(error.message)) toast('실행 기록 읽기 실패: ' + error.message, true); RUNS = []; return; }
+  RUNS = data || []; runsFor = `${key}|${limit}`;
+}
+async function runDetail(id){
+  if (!store.client) return (DATA.routine_runs || []).find(r => r.id === id)?.detail || '';
+  const { data } = await store.client.from('routine_runs').select('detail').eq('id', id).single();
+  return (data && data.detail) || '';
+}
+
+/* ---------- 그리기 ---------- */
+function render(){
+  const admin = isAdmin();
+  const reqs = REQS();
+  const nWait = reqs.filter(q => q.status === '검토대기').length, nMine = reqs.filter(q => q.requester === me && OPEN_STATES.includes(q.status)).length;
+  const tabs = [{ key: 'board', label: '작업 현황' }, { key: 'requests', label: '수정요청', badge: admin ? (nWait || '') : (nMine || ''), badgeTitle: admin ? '승인 기다리는 요청' : '진행 중인 내 요청' }, { key: 'runs', label: '실행 기록' }];
+  const missing = !DATA.routines || !DATA.routine_requests;
+  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: '수정요청' }) + `<main class="wrap" style="max-width:1200px">
+    ${missing ? `<div class="empty">자동작업 저장 표가 아직 없습니다.${admin ? '<br>Supabase SQL Editor 에서 <b>sql-routines.sql</b> 을 한 번 실행하세요.' : ''}</div>` : view === 'board' ? boardHtml() : view === 'requests' ? requestsHtml(reqs) : runsHtml()}
+  </main>`;
+  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNew, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { reqTab = b.dataset.tab; render(); });
+  document.querySelectorAll('tr.r[data-id]').forEach(el => el.onclick = () => openRoutine(el.dataset.id));
+  document.querySelectorAll('.a[data-id]').forEach(el => el.onclick = () => openRequest(el.dataset.id));
+  document.querySelectorAll('.run[data-run]').forEach(el => el.onclick = () => openRun(el.dataset.run));
+  document.querySelectorAll('[data-req-for]').forEach(b => b.onclick = e => { e.stopPropagation(); openNew(b.dataset.reqFor); });
+  const fk = $('#frun'); if (fk) fk.onchange = () => { runKey = fk.value; runLimit = 60; refreshRuns(); };
+  const mb = $('#moreBtn'); if (mb) mb.onclick = () => { runLimit += 60; refreshRuns(); };
+}
+
+function boardHtml(){
+  const rows = R();
+  if (!rows.length) return '<div class="empty">아직 등록된 자동작업이 없습니다.</div>';
+  const nLate = rows.filter(late).length, nFail = rows.filter(r => r.last_status === '실패').length;
+  return `<div class="actions"><span class="hint">작업 ${rows.length}개${nFail ? ` · <b style="color:var(--red)">실패 ${nFail}</b>` : ''}${nLate ? ` · <b style="color:var(--orange)">늦음 ${nLate}</b>` : ''} · 줄을 누르면 최근 기록이 보입니다. 결과는 lemon803 PC 가 작업을 끝낼 때마다 올립니다.</span></div>` +
+    KINDS.map(k => { const list = rows.filter(r => (r.kind || '스케줄러') === k); if (!list.length) return ''; return `<div class="sec">${esc(k)} <span class="hint">${esc(KIND_LABEL[k] || '')}</span></div>
+      <div class="tbl"><table><thead><tr><th style="width:34%">작업</th><th>주기</th><th>마지막 실행</th><th>결과</th><th style="width:30%">보고 내용</th><th>담당</th><th></th></tr></thead><tbody>
+      ${list.map(r => `<tr class="r ${r.enabled ? '' : 'off'}" data-id="${r.id}">
+        <td class="t">${esc(r.title)}${r.admin_only ? '<span class="lock" title="관리자만 보는 작업">🔒</span>' : ''}${r.enabled ? '' : ' <span class="hint">(꺼짐)</span>'}<div class="d">${esc(r.description || '')}</div></td>
+        <td class="memo">${esc(r.schedule || '')}</td>
+        <td style="white-space:nowrap">${r.last_run_at ? `<span title="${fmtDateTime(r.last_run_at)}">${rel(r.last_run_at)}</span>` : (r.report === 'none' ? '<span class="hint">보고 안 함</span>' : '<span class="hint">기록 없음</span>')}${late(r) ? ' <span class="late">늦음</span>' : ''}</td>
+        <td>${r.report === 'none' && !r.last_status ? '' : runTag(r.last_status)}</td>
+        <td class="sum" title="${esc(r.last_summary || '')}">${esc(r.last_summary || '')}</td>
+        <td class="memo">${esc(r.owner || '')}</td>
+        <td class="act"><button class="btn sm" data-req-for="${esc(r.key)}">수정요청</button></td></tr>`).join('')}
+      </tbody></table></div>`; }).join('') +
+    `<div class="hint" style="margin-top:14px">🔒 는 관리자만 보는 작업입니다. "늦음"은 평소 주기보다 오래 결과가 안 올라온 것 — lemon803 PC 가 꺼졌거나 Claude 앱이 꺼졌을 수 있습니다. 결과 보고가 연결되지 않은 작업("보고 안 함")은 텔레그램으로만 알립니다.</div>`;
+}
+
+function requestsHtml(all){
+  const list = all.filter(q => reqTab === 'all' || (reqTab === 'mine' ? q.requester === me : OPEN_STATES.includes(q.status)));
+  const nOpen = all.filter(q => OPEN_STATES.includes(q.status)).length;
+  return `<div class="actions"><div class="tabs2"><button data-tab="open" class="${reqTab === 'open' ? 'on' : ''}">진행 중 ${nOpen}</button><button data-tab="mine" class="${reqTab === 'mine' ? 'on' : ''}">내 요청 ${all.filter(q => q.requester === me).length}</button><button data-tab="all" class="${reqTab === 'all' ? 'on' : ''}">전체 ${all.length}</button></div></div>
+    ${list.length ? `<div class="list">${list.map(q => `<div class="a" data-id="${q.id}">${stTag(q.status)}<div class="mid"><div class="t"><span class="src">${esc(q.target_label || q.target || '')}</span>${esc(q.title || '(제목 없음)')}</div><div class="d">${esc(q.requester || '')} · ${esc((q.status === '실패' ? (q.error || q.result) : q.result) || q.body || '')}</div></div><span class="m">${fmtDateTime(q.created_at)}</span></div>`).join('')}</div>`
+      : `<div class="empty">${reqTab === 'open' ? '진행 중인 수정요청이 없습니다.' : reqTab === 'mine' ? '내가 올린 수정요청이 없습니다.' : '아직 수정요청이 없습니다.'}<br><span class="hint">오른쪽 위 <b>+ 수정요청</b> 으로 인트라넷 화면이나 자동작업의 고칠 점을 적어 주세요.</span></div>`}
+    <div class="hint" style="margin-top:12px">흐름: <b>요청</b> → lemon803 의 클로드가 고침(10분 안에 시작) → <b>검토대기</b>(관리자가 바꾼 내용을 보고 승인/반려) → <b>반영완료</b>. 인트라넷은 승인 1~2분 뒤 phb.kr 에 반영됩니다. 승인 전에는 아무것도 바뀌지 않습니다.</div>`;
+}
+
+function runsHtml(){
+  const opts = R().map(r => `<option value="${esc(r.key)}" ${runKey === r.key ? 'selected' : ''}>${esc(r.title)}</option>`).join('');
+  const list = RUNS.filter(x => visibleKey(x.routine_key));
+  return `<div class="actions"><select id="frun" style="border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px"><option value="">작업 전체</option>${opts}</select><span class="hint">최근 ${runLimit}건까지. 줄을 누르면 자세한 내용</span></div>
+    ${list.length ? `<div class="list runs" style="padding:4px">${list.map(x => runRow(x, true)).join('')}</div>${list.length >= runLimit ? '<button class="btn morebtn" id="moreBtn">더 보기</button>' : ''}` : '<div class="empty">아직 실행 기록이 없습니다.</div>'}`;
+}
+const runRow = (x, withTitle) => { const r = routineOf(x.routine_key); return `<div class="run" data-run="${x.id}"><span class="when" title="${fmtDateTime(x.finished_at || x.created_at)}">${fmtDateTime(x.finished_at || x.created_at).slice(5)}</span>${runTag(x.status)}<span class="s">${withTitle ? `<b>${esc(r ? r.title : x.routine_key)}</b> · ` : ''}${esc(x.summary || '')}</span></div>`; };
+async function refreshRuns(){ await loadRuns(runKey, runLimit); if (view === 'runs') render(); }
+
+/* ---------- 작업 하나 보기 (최근 기록 + 관리자 설정) ---------- */
+async function openRoutine(id){
+  const r = (DATA.routines || []).find(x => x.id === id); if (!r) return;
+  const admin = isAdmin();
+  openModal(`${modalHead(esc(r.title), admin ? '<button class="btn sm" id="rEdit">설정</button>' : '')}
+    <div class="mb">
+      <div class="hint">${esc(r.kind || '')} · ${esc(r.schedule || '')}${r.owner ? ` · 담당 ${esc(r.owner)}` : ''}${r.admin_only ? ' · 🔒 관리자만' : ''}${r.enabled ? '' : ' · 꺼짐'}</div>
+      ${r.description ? `<div class="content" style="font-size:13.5px">${esc(r.description)}</div>` : ''}
+      <div class="box"><h4>최근 실행 ${r.last_run_at ? `(마지막 ${fmtDateTime(r.last_run_at)}${late(r) ? ' · <span class="late">늦음</span>' : ''})` : ''}</h4><div class="runs" id="rRuns"><span class="hint">읽는 중…</span></div></div>
+      ${admin && r.repo_path ? `<div class="hint">수정요청 처리 폴더(lemon803): ${esc(r.repo_path)}${r.edit_scope ? ` · 범위: ${esc(r.edit_scope)}` : ''}</div>` : ''}
+    </div>
+    <div class="mf"><button class="btn" id="rReq">이 작업 수정요청</button><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  $('#rReq').onclick = () => { closeModal(); openNew(r.key); };
+  if (admin) $('#rEdit').onclick = () => openRoutineEdit(r);
+  await loadRuns(r.key, 15);
+  const box = $('#rRuns'); if (!box) return;
+  box.innerHTML = RUNS.length ? RUNS.map(x => runRow(x, false)).join('') : `<span class="hint">${r.report === 'none' ? '이 작업은 결과 보고를 하지 않습니다(텔레그램으로만 알림).' : '아직 기록이 없습니다. lemon803 에서 설치(lemon803-설치.cmd)가 끝나면 쌓입니다.'}</span>`;
+  box.querySelectorAll('.run[data-run]').forEach(el => el.onclick = () => openRun(el.dataset.run));
+}
+function openRoutineEdit(r){
+  openModal(`${modalHead('작업 설정 · ' + esc(r.title))}
+    <div class="mb">
+      <div class="f"><label>화면에 보이는 이름</label><input id="eTitle" value="${esc(r.title)}"></div>
+      <div class="f"><label>설명</label><textarea id="eDesc">${esc(r.description || '')}</textarea></div>
+      <div class="f"><label>주기 (사람이 읽는 글)</label><input id="eSched" value="${esc(r.schedule || '')}"></div>
+      <div class="f"><label>담당자</label><select id="eOwner"><option value="">없음</option>${members.map(m => `<option ${r.owner === m.name ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>이 시간 안에 한 번은 돌아야 정상 (시간. 0 = 확인 안 함)</label><input id="eExp" type="number" min="0" value="${r.expect_hours || 0}"></div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="eAdmin" ${r.admin_only ? 'checked' : ''}> 관리자만 보기 (매출·손익·자금 숫자가 들어가는 작업)</label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="eOn" ${r.enabled ? 'checked' : ''}> 사용 중 (끄면 '늦음' 표시를 안 함)</label>
+      <div class="hint">구분 이름(key): ${esc(r.key)} · 보고 방식: ${esc(r.report || '')} — 프로그램이 쓰는 값이라 여기서는 못 바꿉니다. 처리 폴더·범위는 ROUTINE-BOARD\\routines.json 에서.</div>
+    </div>
+    <div class="mf"><button class="btn danger left" id="eDel">삭제</button><button class="btn" data-close>취소</button><button class="btn primary" id="eSave">저장</button></div>`);
+  $('#eSave').onclick = async () => {
+    const title = $('#eTitle').value.trim(); if (!title) { toast('이름을 적어 주세요', true); return; }
+    closeModal();
+    await saveRow('routines', { ...r, title, description: $('#eDesc').value.trim() || null, schedule: $('#eSched').value.trim() || null, owner: $('#eOwner').value || null, expect_hours: Number($('#eExp').value) || 0, admin_only: $('#eAdmin').checked, enabled: $('#eOn').checked });
+    toast('저장했습니다');
+  };
+  $('#eDel').onclick = async () => { if (confirm(`"${r.title}" 작업을 목록에서 지울까요? (실행 기록은 남고, lemon803 의 실제 작업은 그대로입니다)`)) { closeModal(); await removeRow('routines', r.id); toast('지웠습니다'); } };
+}
+async function openRun(id){
+  const x = RUNS.find(r => r.id === id) || (DATA.routine_runs || []).find(r => r.id === id); if (!x) return;
+  const r = routineOf(x.routine_key);
+  openModal(`${modalHead(esc(r ? r.title : x.routine_key))}
+    <div class="mb">
+      <div class="hint">${runTag(x.status)} ${x.started_at ? `시작 ${fmtDateTime(x.started_at)} · ` : ''}끝 ${fmtDateTime(x.finished_at || x.created_at)}</div>
+      <div class="content">${esc(x.summary || '')}</div>
+      <div class="box"><h4>자세한 내용</h4><pre class="small" id="runDetail">읽는 중…</pre></div>
+    </div>
+    <div class="mf"><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  const d = await runDetail(id); const el = $('#runDetail'); if (el) el.textContent = d || '(없음)';
+}
+
+/* ---------- 수정요청 ---------- */
+function targetOptions(sel){
+  const rs = R();
+  return `<option value="${INTRANET}" ${sel === INTRANET ? 'selected' : ''}>인트라넷(비즈홈) 화면</option>` +
+    KINDS.map(k => { const list = rs.filter(r => (r.kind || '스케줄러') === k); return list.length ? `<optgroup label="${esc(k)}">${list.map(r => `<option value="${esc(r.key)}" ${sel === r.key ? 'selected' : ''}>${esc(r.title)}${canEdit(r) ? '' : ' (자동 수정 불가 · 사장님께 전달)'}</option>`).join('')}</optgroup>` : ''; }).join('');
+}
+function openNew(targetKey){
+  const sel = typeof targetKey === 'string' ? targetKey : INTRANET;
+  openModal(`${modalHead('수정요청')}
+    <div class="mb">
+      <div class="f"><label>무엇을 고칠까요</label><select id="nTarget">${targetOptions(sel)}</select></div>
+      <div class="f"><label>제목 (한 줄)</label><input id="nTitle" placeholder="예: 업무 화면에 마감일 지난 건 빨간색으로"></div>
+      <div class="f"><label>내용 — 어느 화면·어느 부분을, 지금은 어떻게 되는데, 어떻게 바꾸고 싶은지</label><textarea id="nBody" style="min-height:140px" placeholder="예) 업무 화면의 '받은 업무' 탭에서 마감일이 지난 업무는 제목을 빨간색으로 보여 주세요. 지금은 회색이라 눈에 안 띕니다."></textarea></div>
+      <div class="hint">올리면 10분 안에 lemon803 의 클로드가 고쳐서 "검토대기"로 올립니다. 관리자가 바꾼 내용을 보고 승인해야 실제로 반영됩니다. 예약작업의 실행 시간(몇 시에 도는지)은 이 방법으로 바꿀 수 없고 사장님이 Claude 앱에서 바꿉니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="nSave">요청 올리기</button></div>`);
+  $('#nTitle').focus();
+  $('#nSave').onclick = async () => {
+    const target = $('#nTarget').value, title = $('#nTitle').value.trim(), body = $('#nBody').value.trim();
+    if (!title) { toast('제목을 적어 주세요', true); $('#nTitle').focus(); return; }
+    if (!body) { toast('내용을 적어 주세요', true); $('#nBody').focus(); return; }
+    const r = routineOf(target);
+    const q = { id: uid(), target, target_label: target === INTRANET ? '인트라넷' : (r ? r.title : target), title, body, requester: me, status: '요청', comments: [], changed_files: [], created_at: nowIso() };
+    closeModal(); view = 'requests'; reqTab = 'open';
+    await saveRow('routine_requests', q);
+    toast(r && !canEdit(r) ? '요청을 올렸습니다. 이 작업은 자동 수정 대상이 아니라 사장님이 직접 봅니다' : '요청을 올렸습니다. 10분 안에 처리가 시작됩니다');
+  };
+}
+function stepsHtml(q){
+  const flow = q.status === '반려' ? ['요청', '검토대기', '반려'] : q.status === '실패' ? ['요청', '처리중', '실패'] : ['요청', '처리중', '검토대기', '승인', '반영완료'];
+  const idx = Math.max(flow.indexOf(q.status), 0);
+  return `<div class="steps">${flow.map((s, i) => `${i ? '›' : ''}<span ${i === idx ? 'style="color:var(--fg);font-weight:700"' : i < idx ? 'style="color:var(--fg2)"' : ''}>${s}</span>`).join(' ')}</div>`;
+}
+function openRequest(id){
+  const q = (DATA.routine_requests || []).find(x => x.id === id); if (!q) return;
+  const admin = isAdmin(), mine = q.requester === me;
+  openModal(`${modalHead(esc(q.title || '(제목 없음)'))}
+    <div class="mb">
+      <div class="hint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(q.status)} <span class="src">${esc(q.target_label || q.target || '')}</span> ${esc(q.requester || '')} · ${fmtDateTime(q.created_at)}${q.reviewer ? ` · ${esc(q.reviewer)} ${q.status === '반려' ? '반려' : '승인'} ${fmtDateTime(q.reviewed_at)}` : ''}</div>
+      ${stepsHtml(q)}
+      <div class="content">${esc(q.body || '')}</div>
+      ${q.result ? `<div class="box ${q.status === '실패' ? '' : 'ok'}"><h4>${q.status === '실패' ? '클로드의 답' : '클로드가 바꾼 내용'}</h4><div class="content" style="font-size:13.5px">${esc(q.result)}</div>${q.changed_files.length ? `<div class="hint" style="margin-top:6px">바뀐 파일: ${q.changed_files.map(esc).join(', ')}${q.commit ? ` · ${esc(q.commit)}` : ''}</div>` : ''}${admin && q.diff_stat ? `<pre class="small" style="margin-top:6px">${esc(q.diff_stat)}</pre>` : ''}</div>` : ''}
+      ${q.error ? `<div class="box bad"><h4>오류</h4><div class="content" style="font-size:13px">${esc(q.error)}</div></div>` : ''}
+      ${q.review_note ? `<div class="box"><h4>${q.status === '반려' ? '반려 사유' : '검토 메모'}</h4><div class="content" style="font-size:13px">${esc(q.review_note)}</div></div>` : ''}
+      ${q.status === '검토대기' ? `<div class="hint">${admin ? '위 "바꾼 내용"을 보고 승인하면 lemon803 이 10분 안에 반영합니다. 인트라넷은 1~2분 뒤 phb.kr 에 보입니다. 미심쩍으면 반려하고 더 자세히 다시 요청하세요.' : '관리자 승인을 기다리는 중입니다.'}</div>` : q.status === '요청' ? '<div class="hint">lemon803 이 10분 안에 집어 갑니다. 그 전에는 취소할 수 있습니다.</div>' : ''}
+      ${commentsHtml(q.comments)}
+    </div>
+    <div class="mf">
+      ${admin ? '<button class="btn danger left" id="qDel">삭제</button>' : ''}
+      ${(admin || mine) && q.status === '요청' ? '<button class="btn" id="qCancel">요청 취소</button>' : ''}
+      ${(admin || mine) && ['실패', '반려', '반영완료'].includes(q.status) ? '<button class="btn" id="qAgain">같은 내용으로 다시 요청</button>' : ''}
+      ${admin && q.status === '검토대기' ? '<button class="btn danger" id="qReject">반려</button><button class="btn primary" id="qApprove">승인 → 반영</button>' : ''}
+      ${admin && q.status === '실패' && q.branch ? '<button class="btn" id="qRetryApply" title="복사본은 남아 있어 다시 반영을 시도합니다">반영 다시 시도</button>' : ''}
+      <button class="btn ${admin && q.status === '검토대기' ? '' : 'primary'}" data-close>닫기</button>
+    </div>`, { wide: true });
+  $('#cAdd').onclick = async () => { const t = $('#cText').value.trim(); if (!t) return; await saveRow('routine_requests', { ...q, comments: [...q.comments, { by: me, text: t, at: nowIso() }] }); openRequest(id); };
+  const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  on('#qDel', async () => { if (confirm('이 수정요청을 삭제할까요?')) { closeModal(); await removeRow('routine_requests', q.id); toast('삭제했습니다'); } });
+  on('#qCancel', async () => { closeModal(); await removeRow('routine_requests', q.id); toast('요청을 취소했습니다'); });
+  on('#qAgain', async () => { closeModal(); const n = { id: uid(), target: q.target, target_label: q.target_label, title: q.title, body: q.body, requester: me, status: '요청', comments: [], changed_files: [], created_at: nowIso() }; await saveRow('routine_requests', n); toast('다시 요청했습니다'); });
+  on('#qApprove', async () => { if (!confirm(`"${q.title}" 을(를) 승인해 반영할까요?${q.target === INTRANET ? '\n(1~2분 뒤 phb.kr 에 반영됩니다)' : ''}`)) return; closeModal(); await saveRow('routine_requests', { ...q, status: '승인', reviewer: me, reviewed_at: nowIso(), error: null }); toast('승인했습니다. lemon803 이 10분 안에 반영합니다'); });
+  on('#qReject', async () => { const note = prompt('반려 사유 (요청한 사람이 봅니다)', ''); if (note === null) return; closeModal(); await saveRow('routine_requests', { ...q, status: '반려', reviewer: me, reviewed_at: nowIso(), review_note: note.trim() || null }); toast('반려했습니다'); });
+  on('#qRetryApply', async () => { closeModal(); await saveRow('routine_requests', { ...q, status: '승인', reviewer: me, reviewed_at: nowIso(), error: null }); toast('반영을 다시 시도합니다'); });
+}
+
+boot({ icon: '🤖', title: '자동작업', tables: ['routines', 'routine_requests'], render, normalize,
+  open: id => { if ((DATA.routine_requests || []).some(q => q.id === id)) { view = 'requests'; render(); openRequest(id); } else if ((DATA.routines || []).some(r => r.id === id)) openRoutine(id); } });   // 텔레그램 알림의 ?open=요청번호 로 들어오면 그 요청을 바로 엶
+</script>
+</body>
+</html>
