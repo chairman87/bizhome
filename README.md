@@ -51,7 +51,7 @@
 ### 자동작업 (`routines.html`, 2026-10-28)
 - lemon803 PC 에서 도는 자동작업(윈도우 작업 스케줄러·Claude 앱 예약작업)의 현황·결과·수정요청. 표: `sql-routines.sql` (routines / routine_runs / routine_requests)
 - 탭: 작업 현황(종류별 표, 마지막 실행·결과·보고 내용, "늦음" 표시) / 대화 / 수정요청 / 실행 기록
-- 대화(2026-10-28): 대상을 하나 고르고 클로드와 글로 주고받으며 고침("지금 어떻게 돼 있어?"도 됨). lemon803 의 chat_worker.py 가 30초~2분 안에 답. 고친 것은 대화마다 복사본에 쌓이고 **반영** 버튼으로 적용(관리자=바로, 직원=관리자 승인 뒤). 표: `sql-routines-chat.sql` (routine_chats / routine_chat_messages)
+- 대화(2026-10-28): 대상을 하나 고르고 클로드와 글로 주고받으며 고침("지금 어떻게 돼 있어?"도 됨). lemon803 의 chat_worker.py 가 30초~2분 안에 답. 관리자가 고치라고 한 것은 즉시 반영되고(지금 Claude 와 대화하듯), 직원 대화는 복사본에 쌓였다가 **반영 요청** → 관리자 승인 뒤 적용. 작업 현황의 줄을 눌러도 바로 그 작업과의 대화가 열림. 표: `sql-routines-chat.sql` (routine_chats / routine_chat_messages)
 - 수정요청 흐름: 요청 → lemon803 의 클로드가 고침(10분 안에) → 검토대기(관리자가 "바꾼 내용"을 보고 승인/반려) → 반영완료. 인트라넷은 승인 1~2분 뒤 phb.kr 반영. 승인 전에는 아무것도 안 바뀜
 - 관리자만 보기(🔒) 작업은 직원에게 목록·기록·요청 어디에도 안 보임. 관리자는 줄을 열어 "설정"에서 담당자·관리자만 보기·설명을 고침
 - lemon803 쪽 프로그램(결과 보고 report.py, 처리기 process_requests.py, 설치)은 `클로드코드\ROUTINE-BOARD\README.md`

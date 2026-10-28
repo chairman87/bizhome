@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>자동작업</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610282219">
-<script src="common.js?v=202610282219"></script>
+<link rel="stylesheet" href="common.css?v=202610282230">
+<script src="common.js?v=202610282230"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -96,7 +96,7 @@ const stTag = s => ST[s] ? tag(s, ST[s][0], ST[s][1]) : tag(s || '?', '#f3f4f6',
 const runTag = s => RS[s] ? tag(s, RS[s][0], RS[s][1]) : tag('기록 없음', '#f3f4f6', '#9ca3af');
 let view = 'board', reqTab = 'open', runKey = '', runLimit = 60;
 let RUNS = [], runsFor = null;   // 실행 기록은 필요한 만큼만 읽어 여기에 둠 (runsFor: 어떤 조건으로 읽었는지)
-let chatId = '', MSGS = [], chatDraft = '', msgCh = null, chatPoll = null;   // 대화 탭: 열린 대화, 그 메시지(필요할 때만 읽음), 적다 만 글, 실시간 구독, 답 기다릴 때의 보조 새로고침
+let chatTarget = '', chatId = '', MSGS = [], chatDraft = '', msgCh = null, chatPoll = null;   // 대화 탭: 고른 대상, 열린 대화,   // 대화 탭: 열린 대화, 그 메시지(필요할 때만 읽음), 적다 만 글, 실시간 구독, 답 기다릴 때의 보조 새로고침
 const CS = { 반영대기: ['#ffedd5', '#9a3412'], 반영완료: ['#dcfce7', '#15803d'], 닫힘: ['#f3f4f6', '#4b5563'] };
 const csTag = s => s && s !== '열림' ? tag(s, ...(CS[s] || ['#f3f4f6', '#4b5563'])) : '';
 
@@ -140,13 +140,14 @@ function render(){
   const nChatWait = CHATS().filter(c => c.status === '반영대기').length;
   const tabs = [{ key: 'board', label: '작업 현황' }, { key: 'chat', label: '대화', badge: admin ? (nChatWait || '') : '', badgeTitle: '반영 승인을 기다리는 대화' }, { key: 'requests', label: '수정요청', badge: admin ? (nWait || '') : (nMine || ''), badgeTitle: admin ? '승인 기다리는 요청' : '진행 중인 내 요청' }, { key: 'runs', label: '실행 기록' }];
   const missing = !DATA.routines || !DATA.routine_requests;
-  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: view === 'chat' ? '새 대화' : '수정요청' }) + `<main class="wrap" style="max-width:1200px">
+  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: view === 'chat' ? '' : '수정요청' }) + `<main class="wrap" style="max-width:1200px">
     ${missing ? `<div class="empty">자동작업 저장 표가 아직 없습니다.${admin ? '<br>Supabase SQL Editor 에서 <b>sql-routines.sql</b> 을 한 번 실행하세요.' : ''}</div>` : view === 'board' ? boardHtml() : view === 'requests' ? requestsHtml(reqs) : view === 'chat' ? chatHtml() : runsHtml()}
   </main>`;
-  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, () => view === 'chat' ? openNewChat() : openNew(), m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
+  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNew, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { reqTab = b.dataset.tab; render(); });
   bindChat();
-  document.querySelectorAll('tr.r[data-id]').forEach(el => el.onclick = () => openRoutine(el.dataset.id));
+  document.querySelectorAll('tr.r[data-key]').forEach(el => el.onclick = () => openChatFor(el.dataset.key));
+  document.querySelectorAll('[data-hist]').forEach(b => b.onclick = e => { e.stopPropagation(); openRoutine(b.dataset.hist); });
   document.querySelectorAll('.a[data-id]').forEach(el => el.onclick = () => openRequest(el.dataset.id));
   document.querySelectorAll('.run[data-run]').forEach(el => el.onclick = () => openRun(el.dataset.run));
   document.querySelectorAll('[data-req-for]').forEach(b => b.onclick = e => { e.stopPropagation(); openNew(b.dataset.reqFor); });
@@ -158,17 +159,17 @@ function boardHtml(){
   const rows = R();
   if (!rows.length) return '<div class="empty">아직 등록된 자동작업이 없습니다.</div>';
   const nLate = rows.filter(late).length, nFail = rows.filter(r => r.last_status === '실패').length;
-  return `<div class="actions"><span class="hint">작업 ${rows.length}개${nFail ? ` · <b style="color:var(--red)">실패 ${nFail}</b>` : ''}${nLate ? ` · <b style="color:var(--orange)">늦음 ${nLate}</b>` : ''} · 줄을 누르면 최근 기록이 보입니다. 결과는 lemon803 PC 가 작업을 끝낼 때마다 올립니다.</span></div>` +
+  return `<div class="actions"><span class="hint">작업 ${rows.length}개${nFail ? ` · <b style="color:var(--red)">실패 ${nFail}</b>` : ''}${nLate ? ` · <b style="color:var(--orange)">늦음 ${nLate}</b>` : ''} · 줄을 누르면 그 작업에 대해 클로드와 바로 대화합니다. "기록"은 최근 실행 결과. 결과는 lemon803 PC 가 작업을 끝낼 때마다 올립니다.</span></div>` +
     KINDS.map(k => { const list = rows.filter(r => (r.kind || '스케줄러') === k); if (!list.length) return ''; return `<div class="sec">${esc(k)} <span class="hint">${esc(KIND_LABEL[k] || '')}</span></div>
       <div class="tbl"><table><thead><tr><th style="width:34%">작업</th><th>주기</th><th>마지막 실행</th><th>결과</th><th style="width:30%">보고 내용</th><th>담당</th><th></th></tr></thead><tbody>
-      ${list.map(r => `<tr class="r ${r.enabled ? '' : 'off'}" data-id="${r.id}">
+      ${list.map(r => `<tr class="r ${r.enabled ? '' : 'off'}" data-key="${esc(r.key)}" data-id="${r.id}" title="누르면 이 작업에 대해 클로드와 대화">
         <td class="t">${esc(r.title)}${r.admin_only ? '<span class="lock" title="관리자만 보는 작업">🔒</span>' : ''}${r.enabled ? '' : ' <span class="hint">(꺼짐)</span>'}<div class="d">${esc(r.description || '')}</div></td>
         <td class="memo">${esc(r.schedule || '')}</td>
         <td style="white-space:nowrap">${r.last_run_at ? `<span title="${fmtDateTime(r.last_run_at)}">${rel(r.last_run_at)}</span>` : (r.report === 'none' ? '<span class="hint">보고 안 함</span>' : '<span class="hint">기록 없음</span>')}${late(r) ? ' <span class="late">늦음</span>' : ''}</td>
         <td>${r.report === 'none' && !r.last_status ? '' : runTag(r.last_status)}</td>
         <td class="sum" title="${esc(r.last_summary || '')}">${esc(r.last_summary || '')}</td>
         <td class="memo">${esc(r.owner || '')}</td>
-        <td class="act"><button class="btn sm" data-req-for="${esc(r.key)}">수정요청</button></td></tr>`).join('')}
+        <td class="act" style="white-space:nowrap"><button class="btn sm" data-hist="${r.id}">기록</button>${canEdit(r) ? '' : ' <span class="hint" title="고칠 폴더가 정해지지 않아 대화·자동 수정 불가">대화 불가</span>'}</td></tr>`).join('')}
       </tbody></table></div>`; }).join('') +
     `<div class="hint" style="margin-top:14px">🔒 는 관리자만 보는 작업입니다. "늦음"은 평소 주기보다 오래 결과가 안 올라온 것 — lemon803 PC 가 꺼졌거나 Claude 앱이 꺼졌을 수 있습니다. 결과 보고가 연결되지 않은 작업("보고 안 함")은 텔레그램으로만 알립니다.</div>`;
 }
@@ -202,8 +203,9 @@ async function openRoutine(id){
       <div class="box"><h4>최근 실행 ${r.last_run_at ? `(마지막 ${fmtDateTime(r.last_run_at)}${late(r) ? ' · <span class="late">늦음</span>' : ''})` : ''}</h4><div class="runs" id="rRuns"><span class="hint">읽는 중…</span></div></div>
       ${admin && r.repo_path ? `<div class="hint">수정요청 처리 폴더(lemon803): ${esc(r.repo_path)}${r.edit_scope ? ` · 범위: ${esc(r.edit_scope)}` : ''}</div>` : ''}
     </div>
-    <div class="mf"><button class="btn" id="rReq">이 작업 수정요청</button><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+    <div class="mf">${canEdit(r) ? '<button class="btn primary" id="rChat">💬 이 작업과 대화</button>' : ''}<button class="btn" id="rReq">수정요청(글로)</button><button class="btn" data-close>닫기</button></div>`, { wide: true });
   $('#rReq').onclick = () => { closeModal(); openNew(r.key); };
+  const rc = $('#rChat'); if (rc) rc.onclick = () => { closeModal(); openChatFor(r.key); };
   if (admin) $('#rEdit').onclick = () => openRoutineEdit(r);
   await loadRuns(r.key, 15);
   const box = $('#rRuns'); if (!box) return;
@@ -311,7 +313,13 @@ function openRequest(id){
   on('#qRetryApply', async () => { closeModal(); await saveRow('routine_requests', { ...q, status: '승인', reviewer: me, reviewed_at: nowIso(), error: null }); toast('반영을 다시 시도합니다'); });
 }
 
-/* ---------- 대화 (클로드와 글로 주고받으며 고치기) ---------- */
+/* ---------- 대화 (클로드와 글로 주고받으며 고치기) ----------
+   왼쪽은 대상 목록(인트라넷 + 자동 수정이 되는 작업). 대상을 누르면 "내" 대화(사람마다 대상 하나에 하나, 닫기 전까지 이어짐)가 열림.
+   관리자는 고치는 즉시 lemon803 이 반영(지금 Claude 와 대화하듯). 직원은 "반영 요청" → 관리자 승인 뒤 반영 */
+const CHAT_TARGETS = () => [{ key: INTRANET, title: '인트라넷(비즈홈) 화면', kind: '인트라넷', description: '업무·회의록·자동작업 등 phb.kr 의 화면들' }, ...R().filter(canEdit)];
+const chatsOf = target => CHATS().filter(c => c.target === target);
+const myChatFor = target => chatsOf(target).find(c => c.author === me && c.status !== '닫힘');   // 최신 것(CHATS 가 최근순)
+const targetLabel = t => t === INTRANET ? '인트라넷' : ((routineOf(t) || {}).title || t);
 async function loadMsgs(id){
   if (!store.client || !id) { MSGS = []; return; }
   const { data, error } = await store.client.from('routine_chat_messages').select('*').eq('chat_id', id).order('created_at');
@@ -327,85 +335,85 @@ function watchChat(id){   // 열린 대화의 메시지 표만 실시간으로 �
   chatPoll = setInterval(() => { if (document.visibilityState === 'visible' && view === 'chat' && chatId === id && chatPending()) refreshThread(); }, 8000);
 }
 async function refreshThread(){ if (!chatId) return; await loadMsgs(chatId); if (view === 'chat') render(); }
-async function openChat(id){ if (chatId !== id) chatDraft = ''; chatId = id; view = 'chat'; await loadMsgs(id); watchChat(id); render(); }
+async function openChat(id){   // 특정 대화(다른 사람 것, 알림 링크)를 엶
+  const c = chatOf(id); if (!c) return;
+  if (chatId !== id) chatDraft = '';
+  chatId = id; chatTarget = c.target; view = 'chat'; await loadMsgs(id); watchChat(id); render();
+}
+async function openChatFor(target){   // 대상을 눌렀을 때: 내 대화가 있으면 그것, 없으면 빈 대화 창(첫 메시지를 보내면 만들어짐)
+  if (target !== INTRANET && !canEdit(routineOf(target))) { const r = routineOf(target); if (r) openRoutine(r.id); return; }   // 자동 수정이 안 되는 작업은 기록 창
+  const c = myChatFor(target);
+  if (chatTarget !== target) chatDraft = '';
+  chatTarget = target; chatId = c ? c.id : ''; view = 'chat';
+  await loadMsgs(chatId); watchChat(chatId); render();
+}
 
 function chatHtml(){
-  const admin = isAdmin(), list = CHATS(), c = chatOf(chatId);
-  const side = `<aside class="chatlist"><div style="padding:10px 12px;border-bottom:1px solid var(--line)"><button class="btn primary" id="chNew" style="width:100%">+ 새 대화</button></div>
-    ${list.length ? list.map(x => `<div class="ci ${x.id === chatId ? 'on' : ''}" data-chat="${x.id}"><div class="t">${esc(x.title || '(제목 없음)')}</div><div class="d"><span class="src">${esc(x.target_label || x.target || '')}</span>${esc(x.author || '')} · ${rel(x.last_message_at || x.created_at)} ${csTag(x.status)}</div></div>`).join('') : '<div class="hint" style="padding:14px">아직 대화가 없습니다.</div>'}</aside>`;
+  const admin = isAdmin(), targets = CHAT_TARGETS();
+  if (chatId && !chatOf(chatId)) chatId = '';
+  const c = chatId ? chatOf(chatId) : null;
+  const side = `<aside class="chatlist">
+    ${['인트라넷', ...KINDS].map(k => { const list = targets.filter(t => (t.kind || '스케줄러') === k); if (!list.length) return ''; return `<div class="sec" style="margin:8px 12px 2px">${esc(k)}</div>` + list.map(t => { const mine = myChatFor(t.key), n = chatsOf(t.key).filter(x => x.author !== me).length; return `<div class="ci ${chatTarget === t.key ? 'on' : ''}" data-target="${esc(t.key)}" title="${esc(t.description || '')}"><div class="t">${esc(t.title)}</div><div class="d">${mine ? `${rel(mine.last_message_at || mine.created_at)} ${csTag(mine.status)}` : '<span class="hint">대화 없음</span>'}${admin && n ? ` · 다른 사람 ${n}` : ''}</div></div>`; }).join(''); }).join('')}
+  </aside>`;
   let pane;
-  if (!c) {
-    pane = `<section class="chatpane"><div class="empty" style="margin:auto;max-width:560px">왼쪽에서 대화를 고르거나 <b>+ 새 대화</b>를 누르세요.<br><br><span class="hint">인트라넷 화면이나 자동작업을 두고 lemon803 의 클로드와 글로 주고받으며 고칩니다. "지금 어떻게 되어 있어?"처럼 물어봐도 되고, "이렇게 바꿔 줘"라고 해도 됩니다.<br>고친 것은 대화마다 따로 쌓이고 <b>반영</b>을 눌러야 실제로 적용됩니다.${admin ? ' 관리자가 누르면 바로, 직원이 누르면 관리자 승인 뒤 반영됩니다.' : ' 관리자 승인 뒤 반영됩니다.'}<br>답은 보통 30초~2분 걸리고, lemon803 PC 가 켜져 있어야 합니다.</span></div></section>`;
+  if (!chatTarget) {
+    pane = `<section class="chatpane"><div class="empty" style="margin:auto;max-width:560px">왼쪽에서 작업(또는 인트라넷 화면)을 누르면 바로 대화가 시작됩니다.<br><br><span class="hint">lemon803 의 클로드와 글로 주고받습니다. "지금 어떻게 되어 있어?"라고 물어도 되고 "이렇게 바꿔 줘"라고 해도 됩니다.<br>${admin ? '관리자가 고치라고 한 것은 <b>바로 반영</b>됩니다(인트라넷은 1~2분 뒤 phb.kr).' : '고친 것은 <b>반영 요청</b>을 눌러야 관리자 승인 뒤 적용됩니다.'}<br>답은 보통 30초~2분 걸리고, lemon803 PC 가 켜져 있어야 합니다.</span></div></section>`;
   } else {
-    const nFiles = c.changed_files.length, mine = c.author === me;
-    const canApply = nFiles > 0 && c.status !== '반영대기' && c.status !== '닫힘' && (admin || mine);
+    const others = chatsOf(chatTarget).filter(x => x.author !== me);
+    const label = targetLabel(chatTarget), r = routineOf(chatTarget);
+    const nFiles = c ? c.changed_files.length : 0, mine = !c || c.author === me;
+    const canApply = c && nFiles > 0 && c.status !== '반영대기' && c.status !== '닫힘' && (admin || mine);
     const bubbles = MSGS.map(m => {
       if (m.role === 'user') return `<div class="bub user">${esc(m.text || '')}<div class="meta" style="text-align:right">${esc(m.author || '')} · ${fmtDateTime(m.created_at).slice(5)}${m.status === '실패' ? ' · <span style="color:var(--red)">답 못 받음</span>' : m.status === '처리중' ? ' · 클로드가 보는 중' : m.status === '대기' ? ' · 기다리는 중' : ''}</div></div>`;
       if (m.role === 'claude') return `<div class="bub claude">${esc(m.text || '')}${m.changed_files.length ? `<div class="files">✏ 고친 파일: ${m.changed_files.map(esc).join(', ')}</div>` : ''}<div class="meta">클로드 · ${fmtDateTime(m.created_at).slice(5)}</div></div>`;
       return `<div class="bub system">${esc(m.text || '')}</div>`;
     }).join('');
     pane = `<section class="chatpane">
-      <div class="chathead"><span class="src">${esc(c.target_label || c.target || '')}</span><span class="t">${esc(c.title || '(제목 없음)')}</span>${csTag(c.status)}<span class="hint">${esc(c.author || '')} · ${fmtDateTime(c.created_at)}</span>
+      <div class="chathead"><span class="t">${esc(label)}${c && !mine ? ` <span class="hint">· ${esc(c.author)}님의 대화</span>` : ''}</span>${c ? csTag(c.status) : ''}
+        ${r ? `<span class="hint">${esc(r.schedule || '')}</span>` : ''}
         ${nFiles ? `<span class="hint" title="${esc(c.changed_files.join(', '))}">반영 전인 파일 ${nFiles}개</span>` : ''}
-        ${c.status === '반영대기' && c.request_id ? '<button class="btn sm" id="chReq">반영 요청 보기</button>' : ''}
+        ${c && c.status === '반영대기' && c.request_id ? '<button class="btn sm" id="chReq">반영 요청 보기</button>' : ''}
         ${canApply ? `<button class="btn sm primary" id="chApply">${admin ? '반영하기' : '반영 요청'}</button>` : ''}
-        ${(admin || mine) && c.status !== '닫힘' ? '<button class="btn sm" id="chClose">대화 닫기</button>' : ''}${admin ? '<button class="btn sm danger" id="chDel">삭제</button>' : ''}</div>
-      <div class="thread" id="chThread">${bubbles || '<div class="hint">아직 메시지가 없습니다.</div>'}${chatPending() ? '<div class="bub wait">⏳ 클로드가 보고 있습니다… (보통 30초~2분. lemon803 이 꺼져 있으면 켜질 때까지 기다립니다)</div>' : ''}</div>
-      ${c.status === '닫힘' ? '<div class="composer"><span class="hint">닫힌 대화입니다. 새 대화를 열어 주세요.</span></div>'
-        : `<div class="composer"><textarea id="chText" placeholder="${c.status === '반영대기' ? '반영 요청이 처리된 뒤에 답합니다. 메시지는 미리 보내 둘 수 있습니다.' : '예) 마감일 지난 건 빨간색으로 보여 줘 / 지금 어떻게 되어 있어?'}">${esc(chatDraft)}</textarea><button class="btn primary" id="chSend">보내기</button></div>
-           <div class="hint" style="padding:0 12px 8px">Ctrl+Enter 로 보내기 · 고친 것은 <b>반영</b>을 눌러야 적용됩니다${c.commits ? ` · 이 대화에서 ${c.commits}번 고침` : ''}</div>`}
+        ${admin && others.length ? `<select id="chOthers" style="border:1px solid var(--line2);border-radius:var(--radius);padding:3px 6px;font-size:12px"><option value="">다른 사람의 대화…</option>${others.map(x => `<option value="${x.id}" ${x.id === chatId ? 'selected' : ''}>${esc(x.author)} · ${esc(x.title || '')}</option>`).join('')}</select>` : ''}
+        ${r ? '<button class="btn sm" id="chHist" title="최근 실행 기록과 설정">기록</button>' : ''}
+        ${c && (admin || mine) && c.status !== '닫힘' ? '<button class="btn sm" id="chClose" title="이 대화를 닫고 다음부터 새로 시작">대화 새로 시작</button>' : ''}${c && admin ? '<button class="btn sm danger" id="chDel">삭제</button>' : ''}</div>
+      <div class="thread" id="chThread">${bubbles || `<div class="hint">${esc(label)}에 대해 물어보거나 고쳐 달라고 적어 보세요.</div>`}${chatPending() ? '<div class="bub wait">⏳ 클로드가 보고 있습니다… (보통 30초~2분. lemon803 이 꺼져 있으면 켜질 때까지 기다립니다)</div>' : ''}</div>
+      ${c && c.status === '닫힘' ? '<div class="composer"><span class="hint">닫힌 대화입니다.</span></div>'
+        : `<div class="composer"><textarea id="chText" placeholder="${c && c.status === '반영대기' ? '반영 요청이 처리된 뒤에 답합니다. 메시지는 미리 보내 둘 수 있습니다.' : '예) 지금 어떻게 되어 있어? / 마감일 지난 건 빨간색으로 보여 줘'}">${esc(chatDraft)}</textarea><button class="btn primary" id="chSend">보내기</button></div>
+           <div class="hint" style="padding:0 12px 8px">Ctrl+Enter 로 보내기 · ${admin ? '고치라고 한 것은 바로 반영됩니다' : '고친 것은 <b>반영 요청</b>을 눌러야 적용됩니다'}${c && c.commits ? ` · 이 대화에서 ${c.commits}번 고침` : ''}</div>`}
     </section>`;
   }
   return `<div class="chatwrap">${side}${pane}</div>`;
 }
 function bindChat(){
   if (view !== 'chat') { if (chatPoll) { clearInterval(chatPoll); chatPoll = null; } return; }
-  document.querySelectorAll('.ci[data-chat]').forEach(el => el.onclick = () => openChat(el.dataset.chat));
+  document.querySelectorAll('.ci[data-target]').forEach(el => el.onclick = () => openChatFor(el.dataset.target));
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
-  on('#chNew', () => openNewChat()); on('#chSend', sendMsg); on('#chApply', applyChat); on('#chClose', closeChat); on('#chDel', delChat);
+  on('#chSend', sendMsg); on('#chApply', applyChat); on('#chClose', closeChat); on('#chDel', delChat);
   on('#chReq', () => { const c = chatOf(chatId); if (c && c.request_id) openRequest(c.request_id); });
+  on('#chHist', () => { const r = routineOf(chatTarget); if (r) openRoutine(r.id); });
+  const so = $('#chOthers'); if (so) so.onchange = () => { if (so.value) openChat(so.value); else openChatFor(chatTarget); };
   const ta = $('#chText'); if (ta) { ta.oninput = () => { chatDraft = ta.value; }; ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMsg(); } }; }
   const th = $('#chThread'); if (th) th.scrollTop = th.scrollHeight;
   if (chatId && !chatPoll) watchChat(chatId);
 }
-function chatTargetOptions(sel){
-  const rs = R().filter(canEdit);
-  return `<option value="${INTRANET}" ${sel === INTRANET ? 'selected' : ''}>인트라넷(비즈홈) 화면</option>` +
-    KINDS.map(k => { const list = rs.filter(r => (r.kind || '스케줄러') === k); return list.length ? `<optgroup label="${esc(k)}">${list.map(r => `<option value="${esc(r.key)}" ${sel === r.key ? 'selected' : ''}>${esc(r.title)}</option>`).join('')}</optgroup>` : ''; }).join('');
-}
-function openNewChat(targetKey){
-  const sel = typeof targetKey === 'string' ? targetKey : INTRANET;
-  openModal(`${modalHead('새 대화')}
-    <div class="mb">
-      <div class="f"><label>무엇을 두고 얘기할까요</label><select id="ncTarget">${chatTargetOptions(sel)}</select></div>
-      <div class="f"><label>첫 메시지</label><textarea id="ncText" style="min-height:120px" placeholder="예) 업무 화면의 '받은 업무' 탭에서 마감일 지난 건 제목을 빨간색으로 보여 줘.&#10;예) 매출 경보기는 지금 어떤 기준으로 알림을 보내?"></textarea></div>
-      <div class="hint">lemon803 의 클로드가 30초~2분 안에 답합니다. 고치기 전에 물어봐도 되고, 답을 보고 "아니 이렇게"라고 이어서 말하면 됩니다. 고친 것은 <b>반영</b>을 눌러야 실제로 적용됩니다.</div>
-    </div>
-    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="ncStart">대화 시작</button></div>`);
-  $('#ncText').focus();
-  $('#ncStart').onclick = async () => {
-    const target = $('#ncTarget').value, text = $('#ncText').value.trim();
-    if (!text) { toast('첫 메시지를 적어 주세요', true); $('#ncText').focus(); return; }
-    if (!store.client) { toast('저장소에 연결돼 있지 않아 대화할 수 없습니다', true); return; }
-    const r = routineOf(target), now = nowIso();
-    const c = { id: uid(), target, target_label: target === INTRANET ? '인트라넷' : (r ? r.title : target), title: text.split('\n')[0].slice(0, 60), author: me, status: '열림', changed_files: [], commits: 0, last_message_at: now, created_at: now };
-    const m = { id: uid(), chat_id: c.id, role: 'user', author: me, text, status: '대기', created_at: now };
-    closeModal();
-    await saveRow('routine_chats', c);
-    const { error } = await store.client.from('routine_chat_messages').insert(m);
-    if (error) { toast('보내기 실패: ' + error.message, true); return; }
-    openChat(c.id);
-  };
-}
 async function sendMsg(){
-  const c = chatOf(chatId), ta = $('#chText'); if (!c || !ta) return;
+  const ta = $('#chText'); if (!ta || !chatTarget) return;
   const text = ta.value.trim(); if (!text) return;
   if (!store.client) { toast('저장소에 연결돼 있지 않아 보낼 수 없습니다', true); return; }
-  const row = { id: uid(), chat_id: c.id, role: 'user', author: me, text, status: '대기', created_at: nowIso() };
+  let c = chatId ? chatOf(chatId) : null;
+  const now = nowIso();
+  if (!c || c.status === '닫힘' || (c.author !== me && !isAdmin())) {   // 내 대화가 아직 없으면 첫 메시지로 만듦
+    c = { id: uid(), target: chatTarget, target_label: targetLabel(chatTarget), title: text.split('\n')[0].slice(0, 60), author: me, status: '열림', changed_files: [], commits: 0, last_message_at: now, created_at: now };
+    chatId = c.id;
+    await saveRow('routine_chats', c);
+    watchChat(c.id);
+  }
+  const row = { id: uid(), chat_id: c.id, role: 'user', author: me, text, status: '대기', created_at: now };
   chatDraft = ''; MSGS.push(row); render();
   const { error } = await store.client.from('routine_chat_messages').insert(row);
   if (error) { toast('보내기 실패: ' + error.message, true); MSGS = MSGS.filter(m => m.id !== row.id); chatDraft = text; render(); return; }
-  await saveRow('routine_chats', { ...c, last_message_at: row.created_at, status: ['반영완료', '닫힘'].includes(c.status) ? '열림' : c.status });
+  await saveRow('routine_chats', { ...c, last_message_at: now, status: c.status === '반영완료' ? '열림' : c.status });
 }
 async function applyChat(){
   const c = chatOf(chatId); if (!c) return;
@@ -419,10 +427,10 @@ async function applyChat(){
   await refreshThread();
   toast(admin ? '반영을 걸었습니다. 10분 안에 적용됩니다' : '반영 요청을 올렸습니다. 관리자가 승인하면 반영됩니다');
 }
-async function closeChat(){ const c = chatOf(chatId); if (!c) return; if (!confirm('이 대화를 닫을까요? (기록은 남고, 반영 안 한 수정은 그대로 둡니다)')) return; await saveRow('routine_chats', { ...c, status: '닫힘' }); toast('닫았습니다'); }
+async function closeChat(){ const c = chatOf(chatId); if (!c) return; if (!confirm('이 대화를 닫고 다음부터 새로 시작할까요? (기록은 남습니다' + (c.changed_files.length ? '. 반영 안 한 수정은 더는 쓰이지 않습니다' : '') + ')')) return; await saveRow('routine_chats', { ...c, status: '닫힘' }); chatId = ''; MSGS = []; watchChat(''); toast('닫았습니다. 다음 메시지부터 새 대화입니다'); render(); }
 async function delChat(){
   const c = chatOf(chatId); if (!c) return;
-  if (!confirm(`"${c.title}" 대화와 메시지를 모두 지울까요?\n(반영 안 한 수정은 lemon803 의 복사본에 남지만 더는 쓰이지 않습니다)`)) return;
+  if (!confirm(`"${c.title}" 대화와 메시지를 모두 지울까요?`)) return;
   if (store.client) await store.client.from('routine_chat_messages').delete().eq('chat_id', c.id);
   chatId = ''; MSGS = []; watchChat('');
   await removeRow('routine_chats', c.id); toast('지웠습니다');
