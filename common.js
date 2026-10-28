@@ -667,7 +667,6 @@ function headerHtml({ icon, title, tabs = [], active, newLabel, home = true, ext
     ${connError ? `<span class="conn bad" title="${esc(connError)}">연결 오류</span>` : store !== SupabaseStore ? `<span class="conn">${esc(store.label)}</span>` : ''}
     ${extra}
     ${newLabel ? `<button class="btn primary" id="newBtn">+ <span class="newtxt">${esc(newLabel)}</span></button>` : ''}
-    ${isAdmin() ? '<button class="btn" id="ccBtn" title="클로드에게 인트라넷 화면을 만들거나 고쳐 달라고 말하기 (관리자)">🤖 클로드</button>' : ''}
     <button class="me" id="meBtn" title="사용자 바꾸기 / 팀원 관리">${avatar(me)}${esc(me)}${isAdmin() ? '<span class="hint" style="font-size:10px">관리자</span>' : ''}</button>
   </header>`;
 }
@@ -738,15 +737,6 @@ function bindHeader(onTab, onNew, counter){
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => onTab(b.dataset.view));
   const nb = $('#newBtn'); if (nb && onNew) nb.onclick = onNew;
   $('#meBtn').onclick = () => openMembers(counter);
-  const cc = $('#ccBtn'); if (cc) cc.onclick = openClaudeChat;
-}
-/* 🤖 클로드 대화 창(관리자): claude-chat.js 를 처음 누를 때 불러서 띄움. 대화 내용·처리는 자동작업 화면(routines.html)의 대화 탭과 같은 표 */
-function openClaudeChat(){
-  if (window.ClaudeChat) { ClaudeChat.open(); return; }
-  const v = ((document.querySelector('script[src*="common.js"]') || {}).src || '').split('?v=')[1] || Date.now();
-  const s = document.createElement('script'); s.src = 'claude-chat.js?v=' + v;
-  s.onload = () => ClaudeChat.open(); s.onerror = () => toast('대화 창 파일(claude-chat.js)을 불러오지 못했습니다', true);
-  document.head.appendChild(s);
 }
 
 /* ---------- 달력(월 단위) ---------- */

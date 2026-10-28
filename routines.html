@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>자동작업</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610282304">
-<script src="common.js?v=202610282304"></script>
+<link rel="stylesheet" href="common.css?v=202610282313">
+<script src="common.js?v=202610282313"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -140,10 +140,10 @@ function render(){
   const nChatWait = CHATS().filter(c => c.status === '반영대기').length;
   const tabs = [{ key: 'board', label: '작업 현황' }, { key: 'chat', label: '대화', badge: admin ? (nChatWait || '') : '', badgeTitle: '반영 승인을 기다리는 대화' }, { key: 'requests', label: '수정요청', badge: admin ? (nWait || '') : (nMine || ''), badgeTitle: admin ? '승인 기다리는 요청' : '진행 중인 내 요청' }, { key: 'runs', label: '실행 기록' }];
   const missing = !DATA.routines || !DATA.routine_requests;
-  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: view === 'chat' ? '' : '수정요청' }) + `<main class="wrap" style="max-width:1200px">
+  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: '대화 생성' }) + `<main class="wrap" style="max-width:1200px">
     ${missing ? `<div class="empty">자동작업 저장 표가 아직 없습니다.${admin ? '<br>Supabase SQL Editor 에서 <b>sql-routines.sql</b> 을 한 번 실행하세요.' : ''}</div>` : view === 'board' ? boardHtml() : view === 'requests' ? requestsHtml(reqs) : view === 'chat' ? chatHtml() : runsHtml()}
   </main>`;
-  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNew, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
+  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNewProject, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { reqTab = b.dataset.tab; render(); });
   bindChat();
   document.querySelectorAll('tr.r[data-key]').forEach(el => el.onclick = () => openChatModal(el.dataset.key));
@@ -180,7 +180,7 @@ function requestsHtml(all){
   const nOpen = all.filter(q => OPEN_STATES.includes(q.status)).length;
   return `<div class="actions"><div class="tabs2"><button data-tab="open" class="${reqTab === 'open' ? 'on' : ''}">진행 중 ${nOpen}</button><button data-tab="mine" class="${reqTab === 'mine' ? 'on' : ''}">내 요청 ${all.filter(q => q.requester === me).length}</button><button data-tab="all" class="${reqTab === 'all' ? 'on' : ''}">전체 ${all.length}</button></div></div>
     ${list.length ? `<div class="list">${list.map(q => `<div class="a" data-id="${q.id}">${stTag(q.status)}<div class="mid"><div class="t"><span class="src">${esc(q.target_label || q.target || '')}</span>${esc(q.title || '(제목 없음)')}</div><div class="d">${esc(q.requester || '')} · ${esc((q.status === '실패' ? (q.error || q.result) : q.result) || q.body || '')}</div></div><span class="m">${fmtDateTime(q.created_at)}</span></div>`).join('')}</div>`
-      : `<div class="empty">${reqTab === 'open' ? '진행 중인 수정요청이 없습니다.' : reqTab === 'mine' ? '내가 올린 수정요청이 없습니다.' : '아직 수정요청이 없습니다.'}<br><span class="hint">오른쪽 위 <b>+ 수정요청</b> 으로 인트라넷 화면이나 자동작업의 고칠 점을 적어 주세요.</span></div>`}
+      : `<div class="empty">${reqTab === 'open' ? '진행 중인 수정요청이 없습니다.' : reqTab === 'mine' ? '내가 올린 수정요청이 없습니다.' : '아직 수정요청이 없습니다.'}<br><span class="hint">고칠 것은 <b>대화</b> 탭에서 클로드에게 바로 말하면 됩니다. 이 탭에는 직원 대화의 반영 요청(승인 대기)만 쌓입니다.</span></div>`}
     <div class="hint" style="margin-top:12px">흐름: <b>요청</b> → lemon803 의 클로드가 고침(10분 안에 시작) → <b>검토대기</b>(관리자가 바꾼 내용을 보고 승인/반려) → <b>반영완료</b>. 인트라넷은 승인 1~2분 뒤 phb.kr 에 반영됩니다. 승인 전에는 아무것도 바뀌지 않습니다.</div>`;
 }
 
@@ -252,6 +252,36 @@ function targetOptions(sel){
   const rs = R();
   return `<option value="${INTRANET}" ${sel === INTRANET ? 'selected' : ''}>인트라넷(비즈홈) 화면</option>` +
     KINDS.map(k => { const list = rs.filter(r => (r.kind || '스케줄러') === k); return list.length ? `<optgroup label="${esc(k)}">${list.map(r => `<option value="${esc(r.key)}" ${sel === r.key ? 'selected' : ''}>${esc(r.title)}${canEdit(r) ? '' : ' (자동 수정 불가 · 사장님께 전달)'}</option>`).join('')}</optgroup>` : ''; }).join('');
+}
+function openNewProject(){   // + 대화 생성: 새 프로젝트(대화) 하나를 만들고 바로 연다
+  if (!store.client) { toast('저장소에 연결돼 있지 않아 대화할 수 없습니다', true); return; }
+  openModal(`${modalHead('대화 생성 · 새 프로젝트')}
+    <div class="mb">
+      <div class="f"><label>프로젝트 이름 (무엇을 만들거나 고칠지 한 줄)</label><input id="npTitle" placeholder="예: 재고 관리 화면 / 업무 화면 마감일 표시"></div>
+      <div class="f"><label>어디를 고칠까요</label><select id="npTarget">${chatTargetOptions(INTRANET)}</select></div>
+      <div class="f"><label>클로드에게 첫 부탁 (자세할수록 좋습니다. 비워 두면 대화 창에서 적습니다)</label><textarea id="npText" style="min-height:120px" placeholder="예) 재고 관리 화면을 새로 만들어 줘. 품목·수량·입고일을 적고, 수량이 10 아래면 노란색으로 보여 줘."></textarea></div>
+      <div class="hint">${isAdmin() ? '관리자가 고치라고 한 것은 바로 반영됩니다(인트라넷은 1~2분 뒤 phb.kr). 새 화면은 만든 뒤 홈 > 메뉴 편집에서 메뉴에 넣어 주세요.' : '고친 것은 반영 요청 → 관리자 승인 뒤 적용됩니다.'} 답은 보통 30초~2분 걸립니다.</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="npStart">시작</button></div>`);
+  $('#npTitle').focus();
+  $('#npStart').onclick = async () => {
+    const title = $('#npTitle').value.trim(), target = $('#npTarget').value, text = $('#npText').value.trim();
+    if (!title) { toast('프로젝트 이름을 적어 주세요', true); $('#npTitle').focus(); return; }
+    const now = nowIso();
+    const c = { id: uid(), target, target_label: targetLabel(target), title, author: me, status: '열림', changed_files: [], commits: 0, last_message_at: now, created_at: now };
+    closeModal();
+    await saveRow('routine_chats', c);
+    if (text) {
+      const { error } = await store.client.from('routine_chat_messages').insert({ id: uid(), chat_id: c.id, role: 'user', author: me, text: `[프로젝트: ${title}]\n${text}`, status: '대기', created_at: now });
+      if (error) toast('첫 부탁 보내기 실패: ' + error.message, true);
+    }
+    openChat(c.id);
+  };
+}
+function chatTargetOptions(sel){
+  const rs = R().filter(canEdit);
+  return `<option value="${INTRANET}" ${sel === INTRANET ? 'selected' : ''}>인트라넷(비즈홈) 화면 — 새 화면 만들기·고치기</option>` +
+    KINDS.map(k => { const list = rs.filter(r => (r.kind || '스케줄러') === k); return list.length ? `<optgroup label="${esc(k)}">${list.map(r => `<option value="${esc(r.key)}" ${sel === r.key ? 'selected' : ''}>${esc(r.title)}</option>`).join('')}</optgroup>` : ''; }).join('');
 }
 function openNew(targetKey){
   const sel = typeof targetKey === 'string' ? targetKey : INTRANET;
@@ -351,8 +381,13 @@ async function openChatFor(target){   // 대상을 눌렀을 때: 내 대화가 
 
 function chatHtml(){
   const admin = isAdmin(), targets = CHAT_TARGETS();
+  const all = CHATS(), mineList = all.filter(x => x.author === me && x.status !== '닫힘'), otherList = all.filter(x => x.author !== me && x.status !== '닫힘'), closedList = all.filter(x => x.status === '닫힘');
+  const item = x => `<div class="ci ${x.id === chatId ? 'on' : ''}" data-chat="${x.id}"><div class="t">${esc(x.title || '(제목 없음)')}</div><div class="d"><span class="src">${esc(x.target_label || x.target || '')}</span>${x.author !== me ? esc(x.author) + ' · ' : ''}${rel(x.last_message_at || x.created_at)} ${csTag(x.status)}</div></div>`;
   const side = `<aside class="chatlist">
-    ${['인트라넷', ...KINDS].map(k => { const list = targets.filter(t => (t.kind || '스케줄러') === k); if (!list.length) return ''; return `<div class="sec" style="margin:8px 12px 2px">${esc(k)}</div>` + list.map(t => { const mine = myChatFor(t.key), n = chatsOf(t.key).filter(x => x.author !== me).length; return `<div class="ci ${chatTarget === t.key ? 'on' : ''}" data-target="${esc(t.key)}" title="${esc(t.description || '')}"><div class="t">${esc(t.title)}</div><div class="d">${mine ? `${rel(mine.last_message_at || mine.created_at)} ${csTag(mine.status)}` : '<span class="hint">대화 없음</span>'}${admin && n ? ` · 다른 사람 ${n}` : ''}</div></div>`; }).join(''); }).join('')}
+    <div style="padding:10px 12px;border-bottom:1px solid var(--line)"><button class="btn primary" id="chNewProj" style="width:100%">+ 대화 생성 (새 프로젝트)</button></div>
+    ${mineList.length ? `<div class="sec" style="margin:8px 12px 2px">내 프로젝트</div>` + mineList.map(item).join('') : '<div class="hint" style="padding:12px">아직 프로젝트가 없습니다. 위 단추로 시작하거나, 작업 현황에서 작업 줄을 누르세요.</div>'}
+    ${admin && otherList.length ? `<div class="sec" style="margin:8px 12px 2px">다른 사람</div>` + otherList.map(item).join('') : ''}
+    ${closedList.length ? `<div class="sec" style="margin:8px 12px 2px">닫힌 대화 ${closedList.length}</div>` + closedList.slice(0, 20).map(item).join('') : ''}
   </aside>`;
   return `<div class="chatwrap">${side}${chatPaneHtml()}</div>`;
 }
@@ -362,7 +397,7 @@ function chatPaneHtml(){   // 오른쪽 대화 창. 대화 탭과 작업 현황�
   const c = chatId ? chatOf(chatId) : null;
   let pane;
   if (!chatTarget) {
-    pane = `<section class="chatpane"><div class="empty" style="margin:auto;max-width:560px">왼쪽에서 작업(또는 인트라넷 화면)을 누르면 바로 대화가 시작됩니다.<br><br><span class="hint">lemon803 의 클로드와 글로 주고받습니다. "지금 어떻게 되어 있어?"라고 물어도 되고 "이렇게 바꿔 줘"라고 해도 됩니다.<br>${admin ? '관리자가 고치라고 한 것은 <b>바로 반영</b>됩니다(인트라넷은 1~2분 뒤 phb.kr).' : '고친 것은 <b>반영 요청</b>을 눌러야 관리자 승인 뒤 적용됩니다.'}<br>답은 보통 30초~2분 걸리고, lemon803 PC 가 켜져 있어야 합니다.</span></div></section>`;
+    pane = `<section class="chatpane"><div class="empty" style="margin:auto;max-width:560px"><b>+ 대화 생성</b>으로 새 프로젝트를 시작하거나, 왼쪽에서 프로젝트를 고르세요. 작업 현황에서 작업 줄을 눌러도 그 작업과의 대화가 열립니다.<br><br><span class="hint">lemon803 의 클로드와 글로 주고받습니다. "지금 어떻게 되어 있어?"라고 물어도 되고 "이렇게 바꿔 줘"라고 해도 됩니다.<br>${admin ? '관리자가 고치라고 한 것은 <b>바로 반영</b>됩니다(인트라넷은 1~2분 뒤 phb.kr).' : '고친 것은 <b>반영 요청</b>을 눌러야 관리자 승인 뒤 적용됩니다.'}<br>답은 보통 30초~2분 걸리고, lemon803 PC 가 켜져 있어야 합니다.</span></div></section>`;
   } else {
     const others = chatsOf(chatTarget).filter(x => x.author !== me);
     const label = targetLabel(chatTarget), r = routineOf(chatTarget);
@@ -404,9 +439,9 @@ async function openChatModal(target){   // 작업 현황에서 줄을 눌렀을 
 function renderChatModal(){ const box = $('#chModal'); if (!box) return; const ta = $('#chText'), focused = ta && document.activeElement === ta; box.innerHTML = chatPaneHtml(); bindChat(true); if (focused) { const t2 = $('#chText'); if (t2) { t2.focus(); t2.selectionStart = t2.selectionEnd = t2.value.length; } } }
 function bindChat(force){
   if (view !== 'chat' && !force) { if (chatPoll && !chatModalOpen()) { clearInterval(chatPoll); chatPoll = null; } return; }
-  document.querySelectorAll('.ci[data-target]').forEach(el => el.onclick = () => openChatFor(el.dataset.target));
+  document.querySelectorAll('.ci[data-chat]').forEach(el => el.onclick = () => openChat(el.dataset.chat));
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
-  on('#chSend', sendMsg); on('#chApply', applyChat); on('#chClose', closeChat); on('#chDel', delChat);
+  on('#chNewProj', openNewProject); on('#chSend', sendMsg); on('#chApply', applyChat); on('#chClose', closeChat); on('#chDel', delChat);
   on('#chReq', () => { const c = chatOf(chatId); if (c && c.request_id) openRequest(c.request_id); });
   on('#chHist', () => { const r = routineOf(chatTarget); if (r) { if (chatModalOpen()) closeModal(); openRoutine(r.id); } });
   const so = $('#chOthers'); if (so) so.onchange = () => { if (so.value) openChat(so.value); else openChatFor(chatTarget); };
