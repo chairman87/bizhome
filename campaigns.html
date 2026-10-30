@@ -47,6 +47,7 @@
   .cr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
   .cr .ct{font-weight:600}
   .cr .ed{color:var(--fg2)}
+  .cr .ct.other{font-weight:400;color:var(--fg3);font-style:italic}
   .tg{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
   .tg.dt{color:var(--fg3);padding:0}
   .tg.var{background:#e7f1fb;color:#1f6fb8}
@@ -123,13 +124,13 @@ function cpaBox(c, ct, D){
 
 function brandHtml(b, D){
   const all = b.campaigns.flatMap(c => c.groups.flatMap(g => g.creatives));
-  const t = sum(all, D);
+  const t = b.campaigns.every(c => c.d) ? sum(b.campaigns, D) : sum(all, D);   // 캠페인 단위 숫자가 있으면 그것으로 (소재 보고서엔 삭제·자동 생성 소재가 빠짐)
   const camps = b.campaigns.map(c => ({ ...c, groups: c.groups.map(g => ({ ...g, creatives: g.creatives.filter(x => showStopped || x.running) })).filter(g => g.creatives.length) })).filter(c => c.groups.length)
     .sort((a, b) => newer(b.id, a.id));   // 최근 생성 캠페인이 위로 (틱톡·구글 캠페인 번호는 만든 순서대로 커짐)
   let body = '';
   camps.forEach(c => {
     const n = c.groups.reduce((a, g) => a + g.creatives.length, 0), multi = c.groups.length > 1;
-    const ct = sum(c.groups.flatMap(g => g.creatives), D);
+    const ct = c.d ? dayVal(c, D) : sum(c.groups.flatMap(g => g.creatives), D);
     c.groups.forEach((g, gi) => g.creatives.forEach((x, i) => {
       const last = gi === c.groups.length - 1 && i === g.creatives.length - 1, v = dayVal(x, D);
       body += `<tr class="${x.running ? '' : 'stopped'}${last ? ' cend' : ''}">`;
@@ -143,12 +144,13 @@ function brandHtml(b, D){
         x.note ? `<span class="tg stop" title="구글 정책 검토 결과. 일부 제한이면 노출이 줄 수 있음">${esc(x.note)}</span>` : '',
         x.running ? '' : `<span class="tg stop">${x.last_day ? md(x.last_day) + ' 이후 ' : ''}멈춤</span>`].join('');
       if (i === 0) {   // 광고그룹 칸: 이름 + 고른 하루의 그룹 광고비·구매·CPA (논타겟/타겟 그룹 비교용)
-        const gt = sum(g.creatives, D), gon = g.creatives.some(x => x.running);
+        const gt = g.d ? dayVal(g, D) : sum(g.creatives, D), gon = g.creatives.some(x => x.running);
         body += `<td class="grpc" rowspan="${g.creatives.length}"><div class="cname"><span class="dot${gon ? ' on' : ''}" title="${gon ? '운영 중' : '최근 멈춤'}"></span><span>${esc(g.name)}</span></div>
           <div class="cmeta"><span>${md(D[dayKey])} 광고비 ${man(gt[0])}원</span><span>${md(D[dayKey])} 구매 ${fmt(gt[1])}</span><span>${md(D[dayKey])} CPA ${cpa(gt[0], gt[1]) || '–'}${gt[1] > 0 ? '원' : ''}</span></div></td>`;
       }
-      body += `<td class="crc"><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>
-        <td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${cpa(v[0], v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
+      if (x.other) body += `<td class="crc"><div class="cr"><span class="ct other" title="소재 단위 보고서에 안 잡히는 광고비(삭제한 소재, 틱톡이 자동으로 만든 변형 등). 광고그룹 합계에서 위 소재들을 뺀 나머지">그 밖의 소재 (삭제·자동 생성)</span></div></td>`;
+      else body += `<td class="crc"><div class="cr"><span class="ct">${esc(x.title)}</span>${x.editor ? `<span class="ed">· ${esc(x.editor)}</span>` : ''}${tags}</div></td>`;
+      body += `<td class="num">${fmt(v[0])}</td><td class="num">${fmt(v[1])}</td><td class="num">${cpa(v[0], v[1])}</td><td class="num">${roas(v[2], v[0])}</td>`;
       if (i === 0) {
         const rs = g.creatives.length, s = setOf(g.id);
         const by = s && s.updated_by ? `<span class="ed-by">${esc(s.updated_by)} · ${md(String(s.updated_at || '').slice(0, 10))}</span>` : '';
