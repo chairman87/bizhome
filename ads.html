@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>광고 영상 리스트</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610300958">
-<script src="common.js?v=202610300958"></script>
+<link rel="stylesheet" href="common.css?v=202610301630">
+<script src="common.js?v=202610301630"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   .wrap-wide{max-width:1800px}
@@ -60,6 +60,7 @@
   .wk .it:hover{background:#fffbea}
   .wk .it b{font-weight:700}
   .p-레{color:#1d4ed8}.p-서{color:#15803d}.p-흑{color:#6d28d9}
+  .wk .it.rev{color:var(--fg3)}                      /* 수정본: 제작 영상 수에 안 셈 */
   .wk .it.del{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
   .wk .it.hit{background:#fde047;font-weight:700}   /* 월별 검색에 걸린 영상: 노랗게 */
   .wk .it.dim{opacity:.3}                          /* 검색 중 안 걸린 영상: 흐리게 */
@@ -135,6 +136,31 @@ const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
 const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑' };
 const STATUSES = ['운영중', 'OFF', '삭제·수정필요'];
 const G = () => DATA.ads || [];
+/* 수정본 (2026-10-30): 이미 있는 영상을 조금 고쳐 다시 올린 것. 타이틀에 "수정"이 붙음 — "40살 넘어가면 수정", "(1호 수정)", "후킹수정", "_디자인 수정"
+   제작 영상 수에는 세지 않고, 새 줄로도 넣지 않음 (메타의 수정 캠페인은 매일 10시 자동 반영이 원본 줄에 붙여 운영여부·예산을 원본 줄에 적음) */
+const isRevTitle = t => /\([^)]*수정[^)]*\)/.test(t || '') || /수정\s*\d{0,4}\s*$/.test(String(t || '').trim());
+/* 개수에서 빼는 것은 "원본 줄이 목록에 따로 있는 수정본"만 (= 같은 영상이 두 번 세지는 경우).
+   예전 시트에서 옮겨 온 "(1호 수정)" 줄은 대부분 원본 줄이 없어 그 줄이 그 영상의 유일한 기록이므로 그대로 셈 */
+let revCache = { src: null, map: new Map() };
+const isRev = a => { if (!isRevTitle(a.title)) return false; if (revCache.src !== DATA.ads) revCache = { src: DATA.ads, map: new Map() };
+  if (!revCache.map.has(a.id)) revCache.map.set(a.id, !!findOriginal(a.product, a.title, a.editor, a.date)); return revCache.map.get(a.id); };
+const revBase = t => String(t || '').replace(/\([^)]*수정[^)]*\)/g, '').replace(/[\s_]*\S*수정\s*\d{0,4}\s*$/, '').trim();
+const normT = t => String(t || '').replace(/\(.*?\)/g, '').replace(/[\s_\-.,!?~·:/'"“”‘’]+/g, '').toLowerCase();
+/* 수정본 타이틀의 원본 줄: 같은 제품, 수정본이 아닌 줄 중 타이틀이 같거나 한쪽이 다른 쪽을 포함. 편집자가 다르면 제외, 게재일이 가까운 것 우선 */
+function findOriginal(product, title, editor, date){
+  const b = normT(revBase(title)); if (b.length < 2) return null;
+  const c = G().filter(a => a.product === product && !isRevTitle(a.title) && !(editor && a.editor && a.editor !== editor)).filter(a => { const t = normT(a.title); return t && (t === b || (b.length >= 4 && (t.includes(b) || b.includes(t)))); });
+  const gap = a => Math.abs(new Date(a.date || '2000-01-01') - new Date(date || todayStr()));
+  return c.sort((x, y) => (normT(y.title) === b) - (normT(x.title) === b) || gap(x) - gap(y))[0] || null;
+}
+/* 새 줄을 넣기 전 확인: 수정본이면 넣지 않고 원본 줄을 알려 줌. 원본을 못 찾으면 물어보고 넣음. true = 넣어도 됨 */
+function revGuard(product, title, editor, date){
+  if (!isRevTitle(title)) return true;
+  const o = findOriginal(product, title, editor, date);
+  if (o) { toast(`수정본은 새 줄로 넣지 않습니다. 원본 "${o.title}" 줄로 셉니다 (메타 운영여부·예산은 내일 10시 자동 반영 때 원본 줄에 붙음)`); return false; }
+  return confirm(`"${title}" 은(는) 수정본처럼 보이는데 원본 영상을 목록에서 찾지 못했습니다.
+새 영상으로 추가할까요? (수정본 줄은 제작 영상 수에 세지 않습니다)`);
+}
 const isPt = a => String(a.title || '').replace(/\s/g, '').includes('파트너스');   // 파트너스 광고 = 영상 타이틀에 "파트너스"가 들어감 (월별 현황·예산 현황 공통)
 let view = 'month';   // 들어오면 항상 월별 현황부터 (예전에는 마지막에 보던 탭을 기억했음)
 const freshFilter = () => ({ q: '', editor: '', meta: '', mstate: '운영중', budget: '', tstate: '', gstate: '', google: '', status: '' });   // 기본: 메타 운영중만
@@ -181,10 +207,11 @@ function normalize(table, a){ if (table !== 'ads') return a; return { ...a, prod
 
 /* ---------- 화면 ---------- */
 function render(){
+  revCache.src = null;   // 수정본 판정은 그릴 때마다 새로 (저장하면 목록이 같은 자리에서 바뀜)
   const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }, { key: 'budget', label: '예산 현황' }];
   $('#app').innerHTML = headerHtml({ icon: '🎬', title: '광고 영상 리스트', tabs, active: view })
     + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : view === 'budget' ? budgetHtml() : productHtml(view)}</main>`;
-  bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name).length}건`);
+  bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name && !isRev(a)).length}건`);
   bindView();
 }
 
@@ -267,6 +294,7 @@ let lastNew = { date: todayStr(), editor: '', meta: '' };
 async function addFromRow(){
   const title = $('#nTitle').value.trim(); if (!title) { $('#nTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
   lastNew = { date: $('#nDate').value || todayStr(), editor: $('#nEditor').value.trim(), meta: $('#nMeta').value.trim() };
+  if (!revGuard(view, title, lastNew.editor, lastNew.date)) { $('#nTitle').value = ''; $('#nTitle').focus(); return; }
   const row = { id: uid(), product: view, date: lastNew.date, title, editor: lastNew.editor || null, meta_account: lastNew.meta || null,
     meta_budget: $('#nBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#nTiktok').value.trim() || null, google: !!$('#nGoogle') && $('#nGoogle').value === '1', status: '운영중', note: $('#nNote').value.trim() || null,
     created_by: me, created_at: nowIso(), updated_by: me };
@@ -313,7 +341,7 @@ function monthHtml(){
   const [y, m] = month.split('-').map(Number);
   const inMonth = G().filter(a => (a.date || '').startsWith(month));
   // 파트너스 광고(타이틀에 "파트너스"가 들어감)는 따로 센다. 예산 현황 탭과 같은 기준(isPt).
-  const own = inMonth.filter(a => !isPt(a)), pt = inMonth.filter(isPt);
+  const own = inMonth.filter(a => !isPt(a) && !isRev(a)), pt = inMonth.filter(a => isPt(a) && !isRev(a)), revN = inMonth.filter(isRev).length;   // 수정본은 세지 않음 (2026-10-30)
   const byP = PRODUCTS.map(p => [p, own.filter(a => a.product === p).length, pt.filter(a => a.product === p).length]);
   const eds = uniq(inMonth.map(a => a.editor));
   const byE = eds.map(e => [e, own.filter(a => a.editor === e).length, pt.filter(a => a.editor === e).length]);
@@ -332,7 +360,7 @@ function monthHtml(){
       const items = inMonth.filter(a => a.date === key).sort((a, b) => PRODUCTS.indexOf(a.product) - PRODUCTS.indexOf(b.product));
       const holi = HOLIDAYS[key];   // 공휴일이면 이름, 아니면 undefined
       cells += `<div class="d ${out ? 'out' : ''} ${key === todayStr() ? 'today' : ''} ${holi ? 'holi' : ''}" data-day="${key}"><div class="dn">${out ? '' : `${m}/${day.getDate()}${holi ? `<small>${esc(holi)}</small>` : ''}`}</div>
-        ${items.map(a => `<div class="it ${a.status === '삭제·수정필요' ? 'del' : ''} ${q ? (hit(a) ? 'hit' : 'dim') : ''}" data-open="${a.id}" title="${esc(a.title)} · ${esc(a.editor || '')} · ${a.status}"><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b>${esc(a.title)}${a.editor ? '_' + esc(a.editor) : ''}</div>`).join('')}</div>`;
+        ${items.map(a => `<div class="it ${a.status === '삭제·수정필요' ? 'del' : ''} ${isRev(a) ? 'rev' : ''} ${q ? (hit(a) ? 'hit' : 'dim') : ''}" data-open="${a.id}" title="${esc(a.title)} · ${esc(a.editor || '')} · ${a.status}${isRev(a) ? ' · 수정본 (원본 줄이 있어 개수에 안 셈)' : ''}"><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b>${esc(a.title)}${a.editor ? '_' + esc(a.editor) : ''}</div>`).join('')}</div>`;
     }
   }
   return `<div class="actions"><button class="btn sm" id="mPrev">‹</button><h2 style="margin:0;font-size:18px">${y}년 ${m}월</h2><button class="btn sm" id="mNext">›</button><button class="btn sm" id="mToday">이번 달</button>
@@ -346,6 +374,7 @@ function monthHtml(){
         <tr><td class="l">당월 컨텐츠 개수<br>(파트너스 제외)</td>${byE.map(([, n]) => `<td>${n}</td>`).join('')}<td>${own.length}</td></tr>
         <tr><td class="l">파트너스 광고</td>${byE.map(([, , n]) => `<td>${n}</td>`).join('')}<td>${pt.length}</td></tr></table>
     </div>
+    ${revN ? `<div class="hint" style="margin:-4px 0 8px">원본 영상이 목록에 따로 있는 수정본 ${revN}개는 위 개수에 세지 않았습니다 (달력에서 흐리게 표시)</div>` : ''}
     <div class="wk">${['MON', 'TUE', 'WED', 'THU', 'FRI'].map(h => `<div class="h">${h}</div>`).join('')}${cells}</div>`;
 }
 
@@ -433,6 +462,7 @@ function openAd(id, preset = {}){
   fAt.bind(); $('#aTitle').focus();
   $('#aSave').onclick = async () => {
     const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
+    if (!a && !revGuard($('#aProduct').value, title, $('#aEditor').value.trim(), $('#aDate').value)) { closeModal(); return; }
     const row = { id: a ? a.id : uid(), product: $('#aProduct').value, date: $('#aDate').value || null, title, editor: $('#aEditor').value.trim() || null, meta_account: $('#aMeta').value.trim() || null,
       meta_budget: $('#aBudget').value.trim().replace(/,/g, '') || null, tiktok: $('#aTiktok').value.trim() || null, google: $('#aGoogle').value === '1', status: $('#aStatus').value, note: $('#aNote').value.trim() || null, files: fAt.files,
       created_by: a ? a.created_by : me, created_at: a ? a.created_at : nowIso(), updated_by: me };
