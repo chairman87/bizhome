@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>구글 이의신청내역 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610282313">
-<script src="common.js?v=202610282313"></script>
+<link rel="stylesheet" href="common.css?v=202610300958">
+<script src="common.js?v=202610300958"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
@@ -53,8 +53,8 @@
    광고 영상 리스트(ads)에 매일 자동 반영되는 구글 "거부됨" 영상 중 아직 안 적은 것은 위에 띄워 바로 기록할 수 있게 함
 ================================================================ */
 const PRODUCTS = ['서리맥스', '흑생마'];
-const STATUSES = ['비승인', '운영제한', '이의신청중', '중복요청', '반려 및 삭제'];
-const ST_COLOR = { '비승인': ['#fee2e2', '#b91c1c'], '운영제한': ['#ffedd5', '#9a3412'], '이의신청중': ['#fef3c7', '#92400e'], '중복요청': ['#e5e7eb', '#4b5563'], '반려 및 삭제': ['#d1d5db', '#1f2937'] };
+const STATUSES = ['비승인', '운영제한', '이의신청중', '승인완료', '중복요청', '반려 및 삭제'];
+const ST_COLOR = { '비승인': ['#fee2e2', '#b91c1c'], '운영제한': ['#ffedd5', '#9a3412'], '이의신청중': ['#fef3c7', '#92400e'], '승인완료': ['#dcfce7', '#15803d'], '중복요청': ['#e5e7eb', '#4b5563'], '반려 및 삭제': ['#d1d5db', '#1f2937'] };
 const TODO_ST = ['비승인', '운영제한'];   // 아직 이의신청 안 한 상태 (탭 빨간 숫자, 이의신청 넣으면 '이의신청중'으로)
 const YT_REQ = 'YouTube 및 디스커버 피드 광고 요건 - ';   // 구글애즈 정책 화면에 나오는 사유 앞부분
 const REASONS = ['일부 제한됨', YT_REQ + '부적절한 콘텐츠', YT_REQ + '부정확하거나 과장된 주장', YT_REQ + '부정적인 영향을 주는 이벤트 및 이미지'];
