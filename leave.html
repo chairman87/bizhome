@@ -62,10 +62,9 @@ const stHtml = s => tag(s, ...(ST[s] || ST['신청']), true);
 /* 종류: [하루당 일수, 연차에서 차감 여부] */
 const TYPES = { '연차': [1, true], '오전 반차': [0.5, true], '오후 반차': [0.5, true], '병가': [1, false], '경조사': [1, false], '기타': [1, false] };
 const DEFAULT_TOTAL = 15;   // 팀원별 연차 총 일수 기본값 (팀원별 현황에서 바꿀 수 있음)
-/* 재택근무자: 연차 해당 없음. 남은 연차·총 일수·입사일 칸을 보이지 않습니다 (2026-11-02). 이름을 여기에 적어 넣거나 뺍니다 */
+/* 재택근무자: 연차 해당 없음. 남은 연차·총 일수·입사일 칸을 아무 말 없이 비웁니다 (2026-11-02). 이름을 여기에 적어 넣거나 뺍니다 */
 const REMOTE = ['안상형', '김홍석'];
 const isRemote = name => REMOTE.includes(name);
-const REMOTE_LABEL = '재택근무 · 연차 해당 없음';
 const L = () => DATA.leaves || [];
 
 let view = LS.get('leave_view') || 'mine';
@@ -156,7 +155,7 @@ function render(){
   if (!VIEWS().some(v => v && v.key === view)) view = 'mine';   // 권한에 없는 탭이 기억돼 있으면 내 신청으로
   $('#app').innerHTML = headerHtml({ icon: '📅', title: '연차/휴가 등록', tabs: VIEWS(), active: view, newLabel: '휴가 신청' })
     + `<main class="wrap">${view === 'mine' ? myStatsHtml() : ''}${['mine', 'all'].includes(view) ? toolbarHtml() : ''}<div id="view">${viewHtml()}</div></main>`;
-  bindHeader(k => { view = k; LS.set('leave_view', k); render(); }, () => openLeave(null), m => isRemote(m.name) ? REMOTE_LABEL : `남은 연차 ${totalDays(m.name) - usedDays(m.name)}일`);
+  bindHeader(k => { view = k; LS.set('leave_view', k); render(); }, () => openLeave(null), m => isRemote(m.name) ? '' : `남은 연차 ${totalDays(m.name) - usedDays(m.name)}일`);
   const fq = $('#fq'); if (fq) fq.oninput = () => { filter.q = fq.value; renderView(); };
   const fa = $('#fa'); if (fa) fa.onchange = () => { filter.person = fa.value; renderView(); };
   const fs = $('#fs'); if (fs) fs.onchange = () => { filter.status = fs.value; renderView(); };
@@ -167,7 +166,6 @@ function myStatsHtml(){
   if (isRemote(me)) {
     const pending = L().filter(l => l.name === me && l.status === '신청').length;
     return `<div class="stats">
-    <div class="stat"><div class="l">내 연차</div><div class="v" style="font-size:16px">${REMOTE_LABEL}</div><div class="s">병가·경조사·기타는 그대로 신청할 수 있습니다</div></div>
     <div class="stat"><div class="l">승인 대기</div><div class="v ${pending ? 'orange' : ''}">${pending}건</div><div class="s">관리자 확인 전</div></div>
   </div>`;
   }
@@ -261,8 +259,7 @@ function membersHtml(){
     const list = mine.slice(0, 8).map(l => `<div class="item" data-id="${l.id}"><span class="t">${esc(l.type)} · ${period(l)}</span><span class="days">${l.days}일</span>${stHtml(l.status)}</div>`).join('') || '<div class="item" style="color:var(--fg3);cursor:default">신청 없음</div>';
     const more = mine.length > 8 ? `<div class="more">외 ${mine.length - 8}건 (전체 탭에서 확인)</div>` : '';
     if (isRemote(m.name)) return `<div class="card">
-      <h3>${avatar(m.name)}${esc(m.name)}<span class="stat" style="color:var(--fg3)">${REMOTE_LABEL}</span></h3>
-      <div class="row2"><span class="hint" style="flex:1">연차·반차 대상이 아닙니다 · 기간 ${fmtDate(info.start)} ~ ${fmtDate(info.end)}</span></div>
+      <h3>${avatar(m.name)}${esc(m.name)}</h3>
       ${list}${more}
     </div>`;
     return `<div class="card">
@@ -338,7 +335,7 @@ function openLeave(id, preset = {}){
     const n = calcDays(t, $('#lStart').value, $('#lEnd').value);
     const nm = $('#lName').value, left = totalDays(nm) - usedDays(nm);
     const deduct = (TYPES[t] || [1, false])[1];
-    $('#lDays').innerHTML = `${n}일 (토·일 제외)${isRemote(nm) ? (deduct ? ` · <span class="warn">${REMOTE_LABEL} → 병가·경조사·기타로 신청해 주세요</span>` : ` · ${REMOTE_LABEL}`) : deduct ? ` · 남은 연차 ${left}일${n > left ? ' <span class="warn">→ 부족합니다</span>' : ''}` : ' · 연차에서 차감되지 않음'}`;
+    $('#lDays').innerHTML = `${n}일 (토·일 제외)${isRemote(nm) ? '' : deduct ? ` · 남은 연차 ${left}일${n > left ? ' <span class="warn">→ 부족합니다</span>' : ''}` : ' · 연차에서 차감되지 않음'}`;
   };
   ['lType', 'lStart', 'lEnd', 'lName'].forEach(i => { const el = $('#' + i); if (el) el.onchange = upd; });
   upd();
