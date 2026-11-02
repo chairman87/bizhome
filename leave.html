@@ -65,6 +65,9 @@ const DEFAULT_TOTAL = 15;   // 팀원별 연차 총 일수 기본값 (팀원별 
 /* 재택근무자: 연차 해당 없음. 남은 연차·총 일수·입사일 칸을 아무 말 없이 비웁니다 (2026-11-02). 이름을 여기에 적어 넣거나 뺍니다 */
 const REMOTE = ['안상형', '김홍석'];
 const isRemote = name => REMOTE.includes(name);
+/* 신청 창 종류 목록: 재택근무자는 연차·반차(차감되는 종류)를 고를 수 없음 */
+const typeList = name => Object.keys(TYPES).filter(t => !isRemote(name) || !TYPES[t][1]);
+const typeOptions = (name, cur) => { const ts = typeList(name); const sel = ts.includes(cur) ? cur : ts[0]; return ts.map(t => `<option ${sel === t ? 'selected' : ''}>${t}</option>`).join(''); };
 const L = () => DATA.leaves || [];
 
 let view = LS.get('leave_view') || 'mine';
@@ -311,7 +314,7 @@ function openLeave(id, preset = {}){
     <div class="mb">
       <div class="f2">
         <div class="f"><label>신청자</label>${isAdmin() ? `<select id="lName" ${editable ? '' : 'disabled'}>${memberOptions(d.name)}</select>` : `<div style="padding:8px 0">${who(d.name)}</div><input type="hidden" id="lName" value="${esc(d.name)}">`}</div>
-        <div class="f"><label>종류</label><select id="lType" ${editable ? '' : 'disabled'}>${Object.keys(TYPES).map(t => `<option ${d.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="f"><label>종류</label><select id="lType" ${editable ? '' : 'disabled'}>${typeOptions(d.name, d.type)}</select></div>
       </div>
       <div class="f2">
         <div class="f"><label>시작일</label><input type="date" id="lStart" value="${esc(d.start_date || '')}" ${editable ? '' : 'disabled'}></div>
@@ -337,10 +340,12 @@ function openLeave(id, preset = {}){
     const deduct = (TYPES[t] || [1, false])[1];
     $('#lDays').innerHTML = `${n}일 (토·일 제외)${isRemote(nm) ? '' : deduct ? ` · 남은 연차 ${left}일${n > left ? ' <span class="warn">→ 부족합니다</span>' : ''}` : ' · 연차에서 차감되지 않음'}`;
   };
-  ['lType', 'lStart', 'lEnd', 'lName'].forEach(i => { const el = $('#' + i); if (el) el.onchange = upd; });
+  ['lType', 'lStart', 'lEnd'].forEach(i => { const el = $('#' + i); if (el) el.onchange = upd; });
+  const ln = $('#lName'); if (ln) ln.onchange = () => { $('#lType').innerHTML = typeOptions(ln.value, $('#lType').value); upd(); };   // 신청자를 바꾸면 고를 수 있는 종류도 바뀜
   upd();
   const sb = $('#lSave'); if (sb) sb.onclick = async () => {
     const type = $('#lType').value, s = $('#lStart').value, e = $('#lEnd').value || s;
+    if (isRemote($('#lName').value) && (TYPES[type] || [1, false])[1]) { toast(`${$('#lName').value}님은 연차·반차 신청 대상이 아닙니다 (재택근무)`, true); return; }
     if (!s) { toast('시작일을 넣어 주세요', true); return; }
     if (e < s) { toast('종료일이 시작일보다 빠릅니다', true); return; }
     const days = calcDays(type, s, e); if (!days) { toast('평일이 하루도 없습니다 (토·일만 선택)', true); return; }
