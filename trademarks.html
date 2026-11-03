@@ -97,7 +97,7 @@ const FILE_RANKS = [
   [/사용권|양도증|양도 증|계약서/, '권리관계'], [/공고결정|공보/, '출원공고'], [/의견제출|의견서|거절|보정/, '심사대응'],
   [/우선심사결정/, '우선심사'], [/출원번호통지|출원서|국제출원서|사본송부|사용의사|위임장/, '출원'],
   [/우선심사신청|납부|영수증/, '납부'], [/청구서|견적|계산서|invoice|fee/i, '비용'] ];
-function fileRank(f){ const n = String(f.name || ''); if (/검토용|참고용|참조용|초안|estimation/i.test(n)) return FILE_RANKS.length + 1; const i = FILE_RANKS.findIndex(([re]) => re.test(n)); return i < 0 ? FILE_RANKS.length : i; }
+function fileRank(f){ const n = String(f.name || ''); if (/검토용|참고용|참조용|초안|estimation/i.test(n)) return FILE_RANKS.length + 1; if (/청구서|견적|계산서/.test(n)) return FILE_RANKS.length - 1;   /* '전용사용권 등록비용 청구서'처럼 서류 이름이 섞여도 청구서는 비용으로 */ const i = FILE_RANKS.findIndex(([re]) => re.test(n)); return i < 0 ? FILE_RANKS.length : i; }
 const fileKind = f => { const r = fileRank(f); return r < FILE_RANKS.length ? FILE_RANKS[r][1] : (r > FILE_RANKS.length ? '초안·참고' : ''); };
 const sortFiles = files => [...(files || [])].map((f, i) => [f, i]).sort((a, b) => fileRank(a[0]) - fileRank(b[0]) || a[1] - b[1]).map(x => x[0]);   // 같은 종류끼리는 원래 순서
 
