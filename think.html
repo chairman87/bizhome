@@ -1517,11 +1517,20 @@
       drawLayout(id);        // 새 탭의 제목을 바로 고칠 수 있게
     }
 
+    // 탭 안에 적은 것이 하나도 없는지 (메모장형: 글 없음 / 생각노트형: 주제·휴지통 모두 비어 있음)
+    function boardIsEmpty(board) {
+      const read = (k) => { try { return JSON.parse(storeGet(k)) || []; } catch (e) { return []; } };
+      if (board.kind === "memo") return !read(board.key).some(it => (it.body || "").trim());
+      return read(board.key).length === 0 && read(board.trashKey).length === 0;
+    }
     function removeBoard(board) {
-      const msg = "'" + board.title + "' 탭을 지울까요?\n" +
-                  (board.kind === "memo" ? "적은 메모가 함께 사라집니다. 되돌릴 수 없습니다.\n" : "안에 적은 주제가 모두 함께 사라집니다. 되돌릴 수 없습니다.\n") +
-                  "(한 시간마다 남는 백업 파일에는 남아 있습니다)";
-      if (!confirm(msg)) return;
+      // 아무것도 안 적은 탭은 묻지 않고 바로 지웁니다 (실수로 만든 탭을 지울 때마다 확인창이 뜨지 않게, 2026-11-03 사장님)
+      if (!boardIsEmpty(board)) {
+        const msg = "'" + board.title + "' 탭을 지울까요?\n" +
+                    (board.kind === "memo" ? "적은 메모가 함께 사라집니다. 되돌릴 수 없습니다.\n" : "안에 적은 주제가 모두 함께 사라집니다. 되돌릴 수 없습니다.\n") +
+                    "(한 시간마다 남는 백업 파일에는 남아 있습니다)";
+        if (!confirm(msg)) return;
+      }
 
       saveBoards(loadBoards().filter(b => b.id !== board.id));
       closeBoard(board.id);
@@ -2184,9 +2193,14 @@
         const all = load();
         const at = all.findIndex(x => x.id === id);
         if (at === -1) return;
-        const bin = loadTrash();
-        bin.unshift(all.splice(at, 1)[0]);   // 최근에 지운 것이 맨 위로
-        saveTrash(bin);
+        const gone = all.splice(at, 1)[0];
+        // 제목도 내용도 없는 주제는 휴지통에 쌓지 않고 바로 지웁니다 (2026-11-03)
+        const blank = !(gone.title || "").trim() && !(gone.body || "").trim();
+        if (!blank) {
+          const bin = loadTrash();
+          bin.unshift(gone);   // 최근에 지운 것이 맨 위로
+          saveTrash(bin);
+        }
         save(all);
         draw();
       }
@@ -2206,7 +2220,8 @@
         const bin = loadTrash();
         const item = bin[i];
         if (!item) return;
-        if (!confirm((item.title || "제목 없음") + " 을(를) 완전히 삭제할까요?\n되돌릴 수 없습니다.")) return;
+        const blank = !(item.title || "").trim() && !(item.body || "").trim();   // 제목도 내용도 없으면 묻지 않음
+        if (!blank && !confirm((item.title || "제목 없음") + " 을(를) 완전히 삭제할까요?\n되돌릴 수 없습니다.")) return;
         bin.splice(i, 1);
         saveTrash(bin);
         drawTrash();
