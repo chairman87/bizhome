@@ -296,6 +296,48 @@
       width: max-content; margin: 0 auto;
     }
 
+    /* ── 격자 보기 (2026-11-03): 탭을 4열 × 2행(8개) 또는 3행(12개) 작은 카드로 한눈에 ──
+       위쪽 '펼침 / 2×4 / 3×4' 단추로 고르고 이 기기에만 기억합니다. 넓은 화면(760px 이상)에서만 켜집니다.
+       카드 높이 = (화면 높이 - 위쪽 여백 - 탭 띠) 를 행 수로 나눈 값. 카드마다 정한 넓이는 무시하고 칸을 똑같이 나눕니다 */
+    body.grid .layout {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;
+      width: 100%; box-sizing: border-box; align-items: stretch;
+    }
+    body.grid .card {
+      width: auto !important; min-height: 200px; padding: 14px 16px 12px;
+      height: calc((100vh - 76px - var(--strip, 0px) - (var(--rows, 2) - 1) * 14px) / var(--rows, 2));
+      height: calc((100dvh - 76px - var(--strip, 0px) - (var(--rows, 2) - 1) * 14px) / var(--rows, 2));
+    }
+    body.grid.g2 { --rows: 2; }
+    body.grid.g3 { --rows: 3; }
+    body.grid .card-grip { display: none; }            /* 칸이 정해져 있으니 넓이 끌기는 끔 */
+    body.grid .card-head { margin-bottom: 8px; }
+    body.grid .card-head h1 { font-size: 15px; }
+    body.grid .notes-add { padding: 6px; font-size: 12px; }
+    body.grid .add-head-row { display: none; }         /* 작은 카드에선 '+ 구분' 줄 숨김 (펼침에서 씀) */
+    body.grid .memo-body { font-size: 12px; line-height: 1.7; padding: 8px 10px; }
+    body.grid .board-big .note-title { font-size: 13px; }
+    body.grid .board-big .note-body { font-size: 12px; line-height: 1.7; margin-bottom: 10px; }
+    body.grid .card-foot { display: none; }            /* 보관함·휴지통 줄은 펼침에서만 */
+    @media (max-width: 1100px) { body.grid .layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* 격자 카드 제목 옆 ⤢ : 누르면 그 탭만 크게 펼침 */
+    .card-expand {
+      display: none; flex-shrink: 0; padding: 1px 7px; font-size: 13px;
+      background: none; color: #c9b8a8; border: 1px solid #eee; border-radius: 6px; cursor: pointer;
+    }
+    .card-expand:hover { color: #c96442; border-color: #c96442; }
+    body.grid .card-expand { display: inline-block; }
+
+    /* 위쪽 오른쪽 '보기' 단추 묶음 */
+    .view-seg { display: flex; gap: 2px; background: #e9e7e1; border-radius: 8px; padding: 2px; }
+    .view-seg button {
+      padding: 3px 9px; font-size: 12px; font-family: inherit; border: none; border-radius: 6px;
+      background: none; color: #777; cursor: pointer; white-space: nowrap;
+    }
+    .view-seg button.on { background: #fff; color: #c96442; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    @media (max-width: 760px) { .view-seg { display: none; } }
+
     /* ── 화면이 좁을 때 (아이패드·휴대폰) ──
        fit   : 탭들을 화면 폭에 맞게 같은 비율로 줄여서 나란히 둡니다
        swipe : 그래도 안 들어가면(휴대폰) 탭 하나가 화면을 다 쓰고, 옆으로 밀어 넘깁니다
@@ -615,6 +657,11 @@
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
     <div class="topbar-right">
+      <div class="view-seg" id="viewSeg" title="탭을 어떻게 늘어놓을지 (이 기기에만 기억)">
+        <button data-view="wide" title="탭 3개까지 크게 나란히 (길게 쓰기)">펼침</button>
+        <button data-view="g2" title="4열 × 2행, 8개를 한눈에">2×4</button>
+        <button data-view="g3" title="4열 × 3행, 12개를 한눈에 (훑어보기)">3×4</button>
+      </div>
       <span id="whoami" class="whoami"></span>
       <div id="storeStatus" class="store-status" hidden></div>
       <button class="logout" id="logout">로그아웃</button>
@@ -1239,6 +1286,7 @@
         dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
         document.getElementById("addTopic").addEventListener("click", () => addBoard("topic"));
         document.getElementById("addMemo").addEventListener("click", () => addBoard("memo"));
+        document.querySelectorAll("#viewSeg button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
       } catch (e) {
         const m = (e && e.message) ? e.message : String(e);
         dbg("D~E. 화면 그리기 실패", m + " | " + (e && e.stack ? e.stack.slice(0, 500) : ""));
@@ -1604,6 +1652,14 @@
       mark.textContent = "저장됨";
       headRow.appendChild(mark);
 
+      // 격자 보기에서만 보이는 ⤢ : 이 탭만 크게 펼침
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "card-expand";
+      expandBtn.textContent = "⤢";
+      expandBtn.title = "이 탭만 크게 펼치기 (펼침 보기로 바뀜)";
+      expandBtn.addEventListener("click", () => expandBoard(board.id));
+      headRow.appendChild(expandBtn);
+
       const archBtn = document.createElement("button");
       archBtn.className = "card-arch";
       archBtn.textContent = "보관";
@@ -1734,7 +1790,35 @@
     // 탭이 많아져도 화면이 망가지지 않게, 펼쳐 둔 탭(최대 MAX_OPEN 개)만 카드로 보입니다.
     // 어느 탭을 펼쳐 뒀는지는 이 기기에만 기억합니다(컴퓨터·휴대폰이 각자 다르게).
     const OPEN_KEY = "think_open";   // + "_" + 사람 id
-    const MAX_OPEN = 3;
+
+    // ── 보기 방식 (2026-11-03): wide = 펼침(3개 크게), g2 = 격자 2×4(8개), g3 = 격자 3×4(12개). 이 기기에만 기억 ──
+    const VIEW_KEY = "think_view";   // + "_" + 사람 id
+    const VIEWS = { wide: { max: 3, rows: 0 }, g2: { max: 8, rows: 2 }, g3: { max: 12, rows: 3 } };
+    function viewMode() {
+      try { const v = localStorage.getItem(VIEW_KEY + "_" + (me ? me.id : "x")); return VIEWS[v] ? v : "wide"; }
+      catch (e) { return "wide"; }
+    }
+    function setView(v) {
+      if (!VIEWS[v]) return;
+      try { localStorage.setItem(VIEW_KEY + "_" + (me ? me.id : "x"), v); } catch (e) {}
+      drawLayout();
+    }
+    // 한 번에 펼쳐 둘 수 있는 탭 수 (보기 방식에 따라 3 / 8 / 12)
+    function maxOpen() { return VIEWS[viewMode()].max; }
+    // 격자는 넓은 화면(760px 이상)에서만. 좁으면 펼침과 같은 방식으로 돌아감
+    function applyView() {
+      const v = viewMode();
+      const grid = v !== "wide" && document.documentElement.clientWidth >= 760;
+      document.body.classList.toggle("grid", grid);
+      document.body.classList.toggle("g2", grid && v === "g2");
+      document.body.classList.toggle("g3", grid && v === "g3");
+      document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+    }
+    // 격자에서 ⤢ 를 누르면: 펼침으로 바꾸고 그 탭 하나만 크게
+    function expandBoard(id) {
+      saveOpen([id]);
+      setView("wide");
+    }
     function loadOpen() {
       try { const v = JSON.parse(localStorage.getItem(OPEN_KEY + "_" + (me ? me.id : "x"))); return Array.isArray(v) ? v : null; }
       catch (e) { return null; }
@@ -1743,13 +1827,15 @@
     // 펼쳐 둔 탭 id 목록 (펼친 순서). 처음이면 앞에서 MAX_OPEN 개
     function openIds(boards) {
       let ids = loadOpen();
-      if (!ids) ids = boards.slice(0, MAX_OPEN).map(b => b.id);
-      return ids.filter(id => boards.some(b => b.id === id));
+      if (!ids) ids = boards.slice(0, maxOpen()).map(b => b.id);
+      ids = ids.filter(id => boards.some(b => b.id === id));
+      while (ids.length > maxOpen()) ids.shift();   // 격자(8·12개)에서 펼침(3개)으로 돌아오면 오래된 것부터 접힘
+      return ids;
     }
     function openBoard(id) {
       const ids = openIds(loadBoards()).filter(x => x !== id);
       ids.push(id);
-      while (ids.length > MAX_OPEN) ids.shift();   // 넘치면 가장 먼저 펼친 것부터 접힘
+      while (ids.length > maxOpen()) ids.shift();   // 넘치면 가장 먼저 펼친 것부터 접힘
       saveOpen(ids);
     }
     function closeBoard(id) { saveOpen(openIds(loadBoards()).filter(x => x !== id)); }
@@ -1819,7 +1905,7 @@
           const chip = document.createElement("button");
           chip.className = "tab-chip" + (on ? " on" : "");
           chip.dataset.id = b.id;
-          chip.title = on ? "누르면 접기" : "누르면 펼치기 (한 번에 " + MAX_OPEN + "개까지) · 끌어서 순서 바꾸기";
+          chip.title = on ? "누르면 접기" : "누르면 펼치기 (한 번에 " + maxOpen() + "개까지) · 끌어서 순서 바꾸기";
           const t = document.createElement("span");
           t.className = "t";
           t.textContent = b.title || "제목 없음";
@@ -1899,6 +1985,7 @@
       const layout = document.getElementById("layout");
       layout.innerHTML = "";
 
+      applyView();                                 // 펼침 / 격자 2×4 / 3×4 (body 에 표시)
       const boards = loadBoards();
       const active = boards.filter(b => !b.archived);
       if (renameId) openBoard(renameId);           // 새로 만든 탭은 바로 펼쳐 보입니다
@@ -1933,6 +2020,11 @@
       const cards = Array.from(document.querySelectorAll("#layout > .card"));
       document.body.classList.remove("fit", "swipe");
       if (!cards.length) return;
+      applyView();
+      if (document.body.classList.contains("grid")) {   // 격자: 칸 넓이는 CSS 가 똑같이 나눔
+        cards.forEach(c => { c.style.width = ""; });
+        return;
+      }
 
       const want = cards.map(c => Number(c.dataset.width) || DEFAULT_W);
       const gaps = LAYOUT_GAP * (cards.length - 1);
