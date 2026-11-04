@@ -69,6 +69,9 @@
   .addr-card td.adr .ib{margin-left:4px;vertical-align:middle}
   .addr-card td.unt{white-space:nowrap;width:1%}
   .addr-card td.mm{font-size:12px;color:var(--fg2)}
+  .addr-card .memo{padding:10px 12px;border-top:1px solid var(--line);background:var(--bg2);font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.5}
+  .addr-card .memo .mh{font-size:12px;font-weight:600;color:var(--fg2);margin-bottom:4px}
+  .addr-memo-ta{width:100%;min-height:110px;border:1px solid var(--line2);border-radius:var(--radius);padding:8px;background:var(--bg);font:inherit;font-size:13px;resize:vertical}
   .addr-note{margin:0 0 12px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);font-size:13px;color:#92400e}
   .addr-rows{display:grid;gap:8px}
   .addr-row{display:grid;grid-template-columns:150px 1fr 130px 1fr 32px;gap:6px;align-items:center}
@@ -101,17 +104,18 @@ const COMP_CLS = { '식이해법연구소': 'c1', '피에이치뷰티': 'c3', '�
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정', '페이스북 페이지', '페이스북 계정'];
 if (DEPT === '마케팅') document.title = '마케팅계정';   // 브라우저 탭 이름
 /* 사업자주소지 탭(총무 > 운영계정에만): 사업자별로 사업자등록증·홈페이지·식품영업신고지·단상자에 적힌 주소와 기한을 한눈에.
-   저장은 팀 공용 settings 표 id 'biz_addresses' 한 줄 (value = { companies:[{ name, note, items:[{ label, address, until, memo }] }] }).
+   저장은 팀 공용 settings 표 id 'biz_addresses' 한 줄 (value = { companies:[{ name, note, memo, items:[{ label, address, until, memo }] }] }).
+   note = 카드 위 한 줄 알림, memo = 카드 아래 여러 줄 메모 칸(2026-11-04 추가).
    아직 저장한 적이 없으면 아래 ADDR_DEFAULT(2026-10-18 기준)가 보이고, 처음 '수정 → 저장'할 때 settings 에 들어감 */
 const ADDR_ID = 'biz_addresses';
 const ADDR_LABELS = ['사업자등록증 주소지', '홈페이지 표기 주소지', '식품영업신고지 주소', '단상자 표기 주소'];
 const ADDR_DEFAULT = { companies: [
-  { name: '식이해법', note: '', items: [
+  { name: '식이해법', note: '', memo: '', items: [
     { label: '사업자등록증 주소지', address: '서초구 형촌3길 20, A27호', until: '2026-11-30', memo: '' },
     { label: '홈페이지 표기 주소지', address: '서초구 형촌3길 20, A27호', until: '2026-11-30', memo: '' },
     { label: '식품영업신고지 주소', address: '서울시 강남구 봉은사로16길 14, B1층 145호', until: '', memo: '' },
     { label: '단상자 표기 주소', address: '서초구 형촌3길 20, A27호', until: '', memo: '' } ] },
-  { name: '피에이치뷰티', note: '신고 들어오면, 그때 카페24 강남주소지로 변경', items: [
+  { name: '피에이치뷰티', note: '신고 들어오면, 그때 카페24 강남주소지로 변경', memo: '', items: [
     { label: '사업자등록증 주소지', address: '서초구 사평대로53길30, 515', until: '', memo: '' },
     { label: '홈페이지 표기 주소지', address: '서초구 사평대로53길30, 515', until: '', memo: '' },
     { label: '식품영업신고지 주소', address: '서초구 형촌3길 20, A83호', until: '2026-11-30', memo: '' },
@@ -174,7 +178,8 @@ function addrHtml(){
       ${c.note ? `<div class="note">📌 ${esc(c.note)}</div>` : ''}
       <table><thead><tr><th>항목</th><th>주소</th><th>기한</th><th>메모</th></tr></thead><tbody>
         ${c.items.map(i => `<tr><td class="lbl">${esc(i.label)}</td><td class="adr">${esc(i.address || '')}${i.address ? `<button class="ib" data-copy="${esc(i.address)}">복사</button>` : ''}</td><td class="unt">${addrUntil(i.until)}</td><td class="mm">${esc(i.memo || '')}</td></tr>`).join('')}
-      </tbody></table></div>`).join('')}</div>
+      </tbody></table>
+      <div class="memo"><div class="mh">📝 메모</div>${c.memo ? esc(c.memo) : '<span class="hint">아직 적은 메모가 없습니다. ✏️ 수정에서 적을 수 있습니다.</span>'}</div></div>`).join('')}</div>
     <div class="hint" style="margin-top:10px">${st ? `마지막 수정: ${esc(st.updated_by || '')} ${fmtDateTime(st.updated_at)}` : '아직 저장된 적이 없어 2026-10-18 기준 기본값이 보입니다. 수정 → 저장하면 팀 공용으로 저장됩니다.'}</div>`;
 }
 function bindAddr(){
@@ -198,6 +203,8 @@ function openAddrEdit(ci){
       <datalist id="addrLabels">${ADDR_LABELS.map(l => `<option value="${esc(l)}">`).join('')}</datalist>
       <div><button type="button" class="btn sm" id="adAdd">＋ 줄 추가</button></div>
       <div class="hint">기한은 그 주소를 더 쓸 수 없게 되는 날(예: 임대 만료 11/30)입니다. 45일 안이면 주황, 지나면 빨강으로 보입니다.</div>
+      <div class="sec">메모 (카드 아래에 보임)</div>
+      <textarea id="adMemo" class="addr-memo-ta" placeholder="주소 관련해서 기억할 것을 자유롭게 적습니다. 여러 줄 됩니다.">${esc(c.memo || '')}</textarea>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="adSave">저장</button></div>`, { wide: true });
   const rows = $('#adRows');
@@ -207,7 +214,7 @@ function openAddrEdit(ci){
   $('#adSave').onclick = async () => {
     const name = $('#adName').value.trim(); if (!name) { $('#adName').focus(); toast('사업자 이름을 입력하세요', true); return; }
     const items = [...rows.querySelectorAll('.addr-row')].map(r => ({ label: r.querySelector('.rl').value.trim(), address: r.querySelector('.ra').value.trim(), until: r.querySelector('.ru').value || '', memo: r.querySelector('.rm').value.trim() })).filter(i => i.label || i.address);
-    d.companies[ci] = { name, note: $('#adNote').value.trim(), items };
+    d.companies[ci] = { name, note: $('#adNote').value.trim(), memo: $('#adMemo').value.trim(), items };
     closeModal(); await saveRow('settings', { id: ADDR_ID, value: d, updated_by: me }); toast('사업자주소지를 저장했습니다');
   };
 }
