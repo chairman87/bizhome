@@ -416,10 +416,7 @@ function reviewHtml(){
       ${sel('rvRange', [['2', '최근 2주 게재'], ['4', '최근 4주 게재'], ['8', '최근 8주 게재'], ['spend', '기간 내 광고비 있는 전부']], rvRange, '어느 영상을 보일지: 게재일 기준')}
       <input type="search" id="rvQ" placeholder="검색 (타이틀·편집자)" value="${esc(rvQ)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       <span class="hint">${esc(perfLabel())} (${perfRangeTxt()}) · 영상 ${all.length}개 · 매체가 보고한 광고비(부가세 전)·구매 기준, 매시간 자동 반영${perfToday() ? ' · <b>오늘은 진행 중</b>' : ''}${at ? ` (${fmtDateTime(at)} 기준)` : ''}</span></div>
-    ${!all.length ? `<div class="empty">조건에 맞는 영상이 없습니다. 게재 범위나 기간을 넓혀 보세요.</div>` : `<div class="bsum">
-      ${groups.map(([p, l]) => { const s = perfSum(l); return `<div class="k"><div class="t"><b class="p-${PCODE[p]}">${p}</b> · 영상 ${l.length}개</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; }).join('')}
-      ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
-    </div>
+    ${!all.length ? `<div class="empty">조건에 맞는 영상이 없습니다. 게재 범위나 기간을 넓혀 보세요.</div>` : `
     <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다. <b>회색 칸</b>은 그 매체에서 지금 꺼져 있는 영상이고(숫자는 꺼지기 전 기간의 실적), <span class="off">전체 OFF</span> 는 세 매체가 다 꺼진 영상입니다(매일 10시 자동 반영 기준).</div>
     ${(() => {   // 제목 줄은 브랜드마다 이름 줄 바로 아래에 반복 (표가 길어 아래 브랜드에서도 열 이름이 보이게, 2026-11-09 사장님 요청)
       const head = `<tr class="hd"><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
