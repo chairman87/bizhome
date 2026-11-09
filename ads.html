@@ -131,6 +131,8 @@
   table.rv td.ttl{min-width:240px;font-weight:500}
   table.rv td.ttl .sub2{font-size:11px;color:var(--fg2);margin-top:1px}
   table.rv tr.gh td{background:#f5f5f4;font-weight:700;font-size:14px;padding:8px 10px;border-top:2px solid var(--line2)}
+  table.rv tr.gh:not(:first-child) td{border-top:14px solid #fff}   /* 둘째 브랜드부터 위에 띄움 */
+  table.rv tr.hd th.grp{border-top:1px solid #e0c25a}
   table.rv tr.sub td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
   table.rv tr.row{cursor:pointer}
   table.rv tr.row:hover td{background:#fffbea}
@@ -419,15 +421,16 @@ function reviewHtml(){
       ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
     </div>
     <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다. <b>회색 칸</b>은 그 매체에서 지금 꺼져 있는 영상이고(숫자는 꺼지기 전 기간의 실적), <span class="off">전체 OFF</span> 는 세 매체가 다 꺼진 영상입니다(매일 10시 자동 반영 기준).</div>
-    <div class="tablewrap"><table class="rv"><thead>
-      <tr><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
-      <tr>${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>
-      ${groups.map(([p, l]) => `<tr class="gh"><td colspan="${ncol}"><b class="p-${PCODE[p]}">${p}</b> <span style="font-weight:500;color:var(--fg2);font-size:12px">영상 ${l.length}개 · 게재일 최근 순</span></td></tr>
+    ${(() => {   // 제목 줄은 브랜드마다 이름 줄 바로 아래에 반복 (표가 길어 아래 브랜드에서도 열 이름이 보이게, 2026-11-09 사장님 요청)
+      const head = `<tr class="hd"><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
+      <tr class="hd">${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr>`;
+      return `<div class="tablewrap"><table class="rv"><tbody>
+      ${groups.map(([p, l]) => `<tr class="gh"><td colspan="${ncol}"><b class="p-${PCODE[p]}">${p}</b> <span style="font-weight:500;color:var(--fg2);font-size:12px">영상 ${l.length}개 · 게재일 최근 순</span></td></tr>${head}
         ${l.map(a => `<tr class="row ${allOff(a) ? 'alloff' : ''}" data-id="${a.id}"><td class="c" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
           <td class="ttl"><div>${esc(a.title)}</div><div class="sub2">${esc(a.editor || '')}${badge(a)}${isRev(a) ? ' <span title="원본 줄이 따로 있는 수정본">수정본</span>' : ''}</div></td>
           ${chs.map(([k]) => pfCells(perfOf(a, k), offOf(a, k))).join('')}${totCells(a._pf)}</tr>`).join('')}
         <tr class="sub"><td colspan="2">${p} 합계</td>${chs.map(([k]) => pfCells(perfSum(l, k))).join('')}${totCells(perfSum(l))}</tr>`).join('')}
-    </tbody></table></div>`}`;
+    </tbody></table></div>`; })()}`}`;
 }
 /* 영상 정보 창의 성과·나스 블록 */
 function perfBlock(a){
