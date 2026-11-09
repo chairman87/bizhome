@@ -134,6 +134,9 @@
   table.rv tr.sub td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
   table.rv tr.row{cursor:pointer}
   table.rv tr.row:hover td{background:#fffbea}
+  table.rv td.pfoff{background:#eceff3;color:#9aa3ae}   /* 그 매체에서 지금 꺼진 영상: 회색 음영 */
+  table.rv td.pfoff .nopurchase{color:#c4a1a1}
+  table.rv tr.alloff td.ttl,table.rv tr.alloff td.c{color:#9aa3ae}   /* 세 매체 다 꺼진 영상: 줄 흐리게 */
   .pfbox{margin:-4px 0 12px;background:var(--bg2);border-radius:8px;padding:10px 12px}
   table.pft{border-collapse:collapse;margin:4px 0;background:#fff}
   table.pft th,table.pft td{padding:3px 10px;font-size:13px;text-align:right;border-bottom:1px solid var(--line)}
@@ -253,7 +256,7 @@ const spendHtml = s => s.spend ? fmtWon(s.spend) : DASH;
 const convHtml = s => s.spend || s.conv ? fmtNum(Math.round(s.conv * 10) / 10) : DASH;
 const cpaHtml = s => s.spend ? (s.conv ? fmtWon(cpaOf(s)) : '<span class="nopurchase">구매 0</span>') : DASH;
 const roasHtml = s => s.spend ? (s.value ? roasTxt(roasOf(s)) : '<span class="nopurchase">0</span>') : DASH;
-const pfCells = s => `<td class="perf">${spendHtml(s)}</td><td class="perf">${convHtml(s)}</td><td class="perf">${cpaHtml(s)}</td><td class="perf">${roasHtml(s)}</td>`;
+const pfCells = (s, off) => { const c = off ? 'perf pfoff' : 'perf', t = off ? ' title="이 매체에서는 지금 꺼져 있음 (매일 10시 자동 반영 기준)"' : ''; return `<td class="${c}"${t}>${spendHtml(s)}</td><td class="${c}"${t}>${convHtml(s)}</td><td class="${c}"${t}>${cpaHtml(s)}</td><td class="${c}"${t}>${roasHtml(s)}</td>`; };
 const perfTitle = a => PERF_CH.map(([k, n]) => { const s = perfOf(a, k); return s.spend ? `${n} 광고비 ${fmtWon(s.spend)} · 구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}` : ''; }).filter(Boolean).join('\n') || `${perfLabel()} 광고 집행 없음`;
 const perfSel = () => `<select id="perfPeriod" title="성과(광고비·구매·CPA·ROAS)를 보는 기간" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${PERF_PERIODS.map(([k, l]) => `<option value="${k}" ${k === perfPeriod ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
 const perfAt = () => G().map(a => (a.perf || {}).at).filter(Boolean).sort().pop();   // 마지막 자동 반영 시각
@@ -401,14 +404,11 @@ function reviewHtml(){
   const sel = (id, opts, cur, title) => `<select id="${id}" title="${title}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${opts.map(([k, l]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   /* 켜짐/꺼짐 표시 (2026-11-09 사장님 질문 뒤 고침): 표의 "상태" 칸은 메타 기준이라 쓰지 않고, 매체별 운영여부로 판단.
      세 매체가 다 꺼져 있으면 "전체 OFF", 일부만 꺼졌으면 이 기간에 광고비를 썼던 매체 중 지금 꺼진 것만 "메타 OFF" 처럼 이름을 붙임. 삭제·수정필요는 그대로 */
-  const badge = a => {
-    if (a.status === '삭제·수정필요') return ' ' + stHtml(a.status);
-    const st = [['메타', 'meta', mstateOf(a) === '운영중'], ['틱톡', 'tiktok', tstateOf(a) === '운영중'], ['구글', 'google', gstateOf(a) === '운영중']];
-    const on = st.filter(x => x[2]).map(x => x[0]);
-    if (!on.length) return ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음 (매일 10시 자동 반영 기준)">전체 OFF</span>';
-    const off = st.filter(x => !x[2] && perfOf(a, x[1]).spend > 0).map(x => x[0]);   // 이 기간엔 광고비를 썼는데 지금은 꺼진 매체
-    return off.length ? ` <span class="off" title="지금 켜져 있는 매체: ${on.join('·')} (매일 10시 자동 반영 기준)">${off.join('·')} OFF</span>` : '';
-  };
+  /* 켜짐/꺼짐 (2026-11-09): 표의 "상태" 칸은 메타 기준이라 쓰지 않고 매체별 운영여부로 봄. 꺼진 매체는 그 매체 칸을 회색 음영으로(offOf), 세 매체 다 꺼졌으면 줄을 흐리게 + "전체 OFF" */
+  const ST = { meta: a => mstateOf(a), tiktok: a => tstateOf(a), google: a => gstateOf(a) };
+  const offOf = (a, k) => { const st = ST[k](a); return st !== '운영중' && (st === 'OFF' || st === '거부됨' || perfOf(a, k).spend > 0); };   // 한 번도 안 올린 매체(없음·광고비 0)는 음영 없이 '–'
+  const allOff = a => PERF_CH.every(([k]) => ST[k](a) !== '운영중');
+  const badge = a => a.status === '삭제·수정필요' ? ' ' + stHtml(a.status) : allOff(a) ? ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음 (매일 10시 자동 반영 기준)">전체 OFF</span>' : '';
   return `<div class="actions">${perfSel()}
       ${sel('rvBrand', [['', '전체 브랜드'], ...PRODUCTS.map(p => [p, p])], rvBrand, '브랜드')}
       ${sel('rvRange', [['2', '최근 2주 게재'], ['4', '최근 4주 게재'], ['8', '최근 8주 게재'], ['spend', '기간 내 광고비 있는 전부']], rvRange, '어느 영상을 보일지: 게재일 기준')}
@@ -418,14 +418,14 @@ function reviewHtml(){
       ${groups.map(([p, l]) => { const s = perfSum(l); return `<div class="k"><div class="t"><b class="p-${PCODE[p]}">${p}</b> · 영상 ${l.length}개</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; }).join('')}
       ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
     </div>
-    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다. <span class="off">전체 OFF</span> 는 세 매체가 다 꺼진 영상, <span class="off">메타 OFF</span> 처럼 매체 이름이 붙은 것은 그 매체만 꺼지고 다른 매체는 아직 도는 영상입니다(매일 10시 자동 반영 기준).</div>
+    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다. <b>회색 칸</b>은 그 매체에서 지금 꺼져 있는 영상이고(숫자는 꺼지기 전 기간의 실적), <span class="off">전체 OFF</span> 는 세 매체가 다 꺼진 영상입니다(매일 10시 자동 반영 기준).</div>
     <div class="tablewrap"><table class="rv"><thead>
       <tr><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
       <tr>${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>
       ${groups.map(([p, l]) => `<tr class="gh"><td colspan="${ncol}"><b class="p-${PCODE[p]}">${p}</b> <span style="font-weight:500;color:var(--fg2);font-size:12px">영상 ${l.length}개 · 게재일 최근 순</span></td></tr>
-        ${l.map(a => `<tr class="row" data-id="${a.id}"><td class="c" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
+        ${l.map(a => `<tr class="row ${allOff(a) ? 'alloff' : ''}" data-id="${a.id}"><td class="c" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
           <td class="ttl"><div>${esc(a.title)}</div><div class="sub2">${esc(a.editor || '')}${badge(a)}${isRev(a) ? ' <span title="원본 줄이 따로 있는 수정본">수정본</span>' : ''}</div></td>
-          ${chs.map(([k]) => pfCells(perfOf(a, k))).join('')}${totCells(a._pf)}</tr>`).join('')}
+          ${chs.map(([k]) => pfCells(perfOf(a, k), offOf(a, k))).join('')}${totCells(a._pf)}</tr>`).join('')}
         <tr class="sub"><td colspan="2">${p} 합계</td>${chs.map(([k]) => pfCells(perfSum(l, k))).join('')}${totCells(perfSum(l))}</tr>`).join('')}
     </tbody></table></div>`}`;
 }
