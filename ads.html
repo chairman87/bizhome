@@ -12,15 +12,15 @@
   .wrap-wide{max-width:1800px}
   table.ads{min-width:1000px}
   /* 제목 줄(정렬·필터): 연한 노란색 배경, 큰 글자, 높은 칸 */
-  table.ads th{text-align:center;background:#fffbea;color:#292524;font-size:14px;font-weight:600;padding:11px 8px;border-bottom:2px solid #e0c25a}
-  table.ads th[data-sort]:hover{color:#292524;background:#fef3c7}
-  table.ads th .arrow{color:#b45309}
-  table.ads td{padding:5px 8px;font-size:13px}
+  table.ads th,table.rv th{text-align:center;background:#fffbea;color:#292524;font-size:14px;font-weight:600;padding:11px 8px;border-bottom:2px solid #e0c25a}
+  table.ads th[data-sort]:hover,table.rv th[data-sort]:hover{color:#292524;background:#fef3c7}
+  table.ads th .arrow,table.rv th .arrow{color:#b45309}
+  table.ads td,table.rv td{padding:5px 8px;font-size:13px}
   /* 묶음 제목 줄: 메타(페이지명·운영여부) / 틱톡 / 구글, 그 뒤 집행금액(3매체 합계) */
-  table.ads th.grp{padding:7px 8px 6px;background:#fff;border-bottom:1px solid #e0c25a}
-  table.ads th.grp .brand{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#292524;letter-spacing:.01em}
-  table.ads th.grp svg{width:17px;height:17px;display:block}
-  table.ads th.gl{border-left:2px solid #e0c25a}
+  table.ads th.grp,table.rv th.grp{padding:7px 8px 6px;background:#fff;border-bottom:1px solid #e0c25a}
+  table.ads th.grp .brand,table.rv th.grp .brand{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#292524;letter-spacing:.01em}
+  table.ads th.grp svg,table.rv th.grp svg{width:17px;height:17px;display:block}
+  table.ads th.gl,table.rv th.gl{border-left:2px solid #e0c25a}
   table.ads tbody td:nth-child(4),table.ads tbody td:nth-child(6),table.ads tbody td:nth-child(8),table.ads.g tbody td:nth-child(10){border-left:2px solid var(--line)}
   td.spend{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   table.bud .bar.t{background:#111;margin-left:-8px;border-radius:0 5px 5px 0}
@@ -122,6 +122,29 @@
   .vlist div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:2px 0}
   .vlist div span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lk{font-size:10px;opacity:.55;margin-left:3px;cursor:help}
+  /* 성과(CPA·ROAS) · 영상 리뷰 · 나스 영상 열기 (2026-11-09) */
+  td.perf{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  table.ads tbody td.pf1,table.rv tbody td.tl{border-left:2px solid var(--line)}
+  .nopurchase{color:#b91c1c;font-weight:600;font-size:12px}
+  .nasbtn{border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:999px;width:22px;height:22px;font-size:10px;line-height:20px;padding:0;cursor:pointer;margin-left:6px;vertical-align:middle;flex:none}
+  .nasbtn:hover{background:#1d4ed8;color:#fff}
+  table.rv{min-width:1000px}
+  table.rv td.c{text-align:center;white-space:nowrap}
+  table.rv td.ttl{min-width:240px;font-weight:500}
+  table.rv td.ttl .sub2{font-size:11px;color:var(--fg2);margin-top:1px}
+  table.rv tr.gh td{background:#f5f5f4;font-weight:700;font-size:14px;padding:8px 10px;border-top:2px solid var(--line2)}
+  table.rv tr.sub td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
+  table.rv tr.row{cursor:pointer}
+  table.rv tr.row:hover td{background:#fffbea}
+  .path{font-family:Consolas,'Courier New',monospace;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;word-break:break-all;user-select:all}
+  .nasrow{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px}
+  .nasrow.main .fn{font-weight:600;font-size:14px}
+  .pfbox{margin:-4px 0 12px;background:var(--bg2);border-radius:8px;padding:10px 12px}
+  table.pft{border-collapse:collapse;margin:4px 0;background:#fff}
+  table.pft th,table.pft td{padding:3px 10px;font-size:13px;text-align:right;border-bottom:1px solid var(--line)}
+  table.pft th{background:#fffbea;font-weight:600}
+  table.pft th:first-child,table.pft td:first-child{text-align:left}
+  table.pft tr.sub td{font-weight:700}
 </style>
 </head>
 <body>
@@ -133,7 +156,9 @@
 /* ================================================================
    광고 영상 리스트 — 마케팅 팀장이 구글시트로 관리하던 표
    한 줄 = { product(제품), date(게재일), title(영상 타이틀), editor(편집자), meta_account(메타 계정),
-            meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(콘티 메모), files(콘티 파일) }
+            meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(콘티 메모), files(콘티 파일),
+            meta_spend·google_spend·tiktok_spend(매체별 월 집행금액), perf(매체별 하루·달 성과: 광고비·구매·구매금액), nas(나스 최종본 파일) }
+   성과·나스 칸은 2026-11-09 추가. lemon803 의 MKT-PERF 가 매시간 40분쯤 기록. 월요일 마케팅 회의용 "영상 리뷰" 탭이 이걸로 영상별 CPA·ROAS 를 보여 줌
 ================================================================ */
 const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
 const PCODE = { '레모너리': '레', '서리맥스': '서', '흑생마': '흑' };
@@ -199,6 +224,50 @@ const spendMonths = () => [...new Set(G().flatMap(a => SPEND_CH.flatMap(([k]) =>
 const monthLabel = k => `${k.slice(0, 4)}년 ${Number(k.slice(5))}월`;
 const spendTitle = a => { const lines = SPEND_CH.map(([k, n]) => { const s = a[k] || {}, ks = Object.keys(s).filter(x => x >= SPEND_SINCE).sort(); return ks.length ? `${n} ${fmtWon(spendOf(a, null, k))}원 (${ks.map(x => `${monthLabel(x)} ${fmtWon(s[x])}`).join(' · ')})` : ''; }).filter(Boolean);
   return (lines.length ? `집행 금액 합계 ${fmtWon(spendOf(a))}원 (부가세 전)\n` + lines.join('\n') : '2026년 10월 이후 집행 없음') + (a.meta_budget ? `\n메타 일예산 ${String(a.meta_budget).toUpperCase() === 'OFF' ? 'OFF' : fmtBudget(a.meta_budget)}` : ''); };
+/* ---------- 성과 (2026-11-09): perf = { meta: {"YYYY-MM-DD": [광고비, 구매, 구매금액], "YYYY-MM": [달 합계]}, tiktok: {...}, google: {...}, at } ----------
+   하루 칸(날짜 10자)은 최근 60일만, 달 칸(7자)은 2026-10 부터. 둘은 겹치므로 같이 더하지 않음. 광고비는 매체 보고(부가세 전), 구매·구매금액은 매체 픽셀이 추적한 것.
+   lemon803 의 MKT-PERF/video_sync.py 가 매시간 40분쯤 기록하므로 오늘 값은 진행 중 */
+const PERF_CH = [['meta', '메타'], ['tiktok', '틱톡'], ['google', '구글']];
+const PERF_PERIODS = [['lastweek', '지난주(월~일)'], ['7', '최근 7일'], ['14', '최근 14일'], ['28', '최근 28일'], ['all', '10월 이후 누적']];
+let perfPeriod = PERF_PERIODS.some(([k]) => k === LS.get('ads_perf_period')) ? LS.get('ads_perf_period') : '7';
+const hasPerf = () => G().length > 0 && 'perf' in G()[0];   // 저장소에 perf 칸이 생겼는지 (sql-ads-perf.sql)
+const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+function perfRange(){   // 보는 기간 [시작, 끝] (둘 다 포함). 누적이면 null (달 칸을 더함)
+  const t = todayStr();
+  if (perfPeriod === 'all') return null;
+  if (perfPeriod === 'lastweek') { const mon = addDays(t, -((parseYmd(t).getDay() + 6) % 7) - 7); return [mon, addDays(mon, 6)]; }
+  return [addDays(t, -(Number(perfPeriod) - 1)), t];
+}
+const perfLabel = () => PERF_PERIODS.find(([k]) => k === perfPeriod)[1];
+const perfRangeTxt = () => { const r = perfRange(); return r ? `${fmtDate(r[0]).slice(5)} ~ ${fmtDate(r[1]).slice(5)}` : '2026년 10월 이후'; };
+const perfToday = () => { const r = perfRange(); return !r || r[1] >= todayStr(); };   // 오늘이 기간에 들어 있어 값이 진행 중인지
+function perfOf(a, ch){   // ch: 'meta' | 'tiktok' | 'google' | 없으면 세 매체 합 → { spend, conv, value }
+  const r = perfRange(), s = { spend: 0, conv: 0, value: 0 };
+  (ch ? [ch] : PERF_CH.map(x => x[0])).forEach(k => Object.entries((a.perf || {})[k] || {}).forEach(([key, v]) => {
+    const ok = r ? (key.length === 10 && key >= r[0] && key <= r[1]) : (key.length === 7 && key >= SPEND_SINCE);
+    if (ok && Array.isArray(v)) { s.spend += Number(v[0]) || 0; s.conv += Number(v[1]) || 0; s.value += Number(v[2]) || 0; }
+  }));
+  return s;
+}
+const perfSum = (list, ch) => list.reduce((t, a) => { const s = perfOf(a, ch); return { spend: t.spend + s.spend, conv: t.conv + s.conv, value: t.value + s.value }; }, { spend: 0, conv: 0, value: 0 });
+const cpaOf = s => s.conv ? s.spend / s.conv : null;      // CPA = 광고비 ÷ 구매 수
+const roasOf = s => s.spend ? s.value / s.spend : null;   // ROAS = 구매 금액 ÷ 광고비 (광고관리자와 같은 기준)
+const roasTxt = r => r == null ? '-' : r.toFixed(2);      // perf.html 과 같게 '배' 없이 숫자만
+const DASH = '<span style="color:var(--fg3)">–</span>';
+const spendHtml = s => s.spend ? fmtWon(s.spend) : DASH;
+const convHtml = s => s.spend || s.conv ? fmtNum(Math.round(s.conv * 10) / 10) : DASH;
+const cpaHtml = s => s.spend ? (s.conv ? fmtWon(cpaOf(s)) : '<span class="nopurchase">구매 0</span>') : DASH;
+const roasHtml = s => s.spend ? (s.value ? roasTxt(roasOf(s)) : '<span class="nopurchase">0</span>') : DASH;
+const pfCells = s => `<td class="perf">${spendHtml(s)}</td><td class="perf">${convHtml(s)}</td><td class="perf">${cpaHtml(s)}</td><td class="perf">${roasHtml(s)}</td>`;
+const perfTitle = a => PERF_CH.map(([k, n]) => { const s = perfOf(a, k); return s.spend ? `${n} 광고비 ${fmtWon(s.spend)} · 구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}` : ''; }).filter(Boolean).join('\n') || `${perfLabel()} 광고 집행 없음`;
+const perfSel = () => `<select id="perfPeriod" title="성과(광고비·구매·CPA·ROAS)를 보는 기간" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${PERF_PERIODS.map(([k, l]) => `<option value="${k}" ${k === perfPeriod ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+const perfAt = () => G().map(a => (a.perf || {}).at).filter(Boolean).sort().pop();   // 마지막 자동 반영 시각
+/* 나스 최종본: nas = { path(UNC 경로 \\192.168.0.10\마케팅\...), mb, mtime, alts(같은 영상의 다른 판), at } — video_sync.py 가 게재일·타이틀·편집자로 짝지음 */
+const nasOf = a => (a.nas && a.nas.path) ? a.nas : null;
+const baseName = p => String(p || '').split(/[\\/]/).pop();
+const nasBtn = a => nasOf(a) ? `<button type="button" class="nasbtn" data-nas="${a.id}" title="나스에서 영상 열기 (${esc(baseName(a.nas.path))})">▶</button>` : '';
+const nasProto = p => 'phbnas://open?p=' + encodeURIComponent(p);   // tools/nas-open-setup.cmd 로 PC 에 한 번 등록하는 주소 형식 → 기본 재생 프로그램으로 열림
+const dsmUrl = p => 'https://192.168.0.10:944/?launchApp=SYNO.SDS.App.FileStation3.Instance&launchParam=openfile%3D' + encodeURIComponent(String(p).replace(/^\\\\192\.168\.0\.10/, '').replace(/\\/g, '/'));
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
 const MSTATES = ['운영중', 'OFF', '미연결'];
 const mstateOf = a => a.meta_state === '운영중' || a.meta_state === 'OFF' ? a.meta_state : '미연결';   // 메타에서 실제로 켜져 있는지 (매일 10시 자동 반영)
@@ -222,9 +291,9 @@ function normalize(table, a){ if (table !== 'ads') return a; return { ...a, prod
 /* ---------- 화면 ---------- */
 function render(){
   revCache.src = null;   // 수정본 판정은 그릴 때마다 새로 (저장하면 목록이 같은 자리에서 바뀜)
-  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }, { key: 'budget', label: '집행 현황' }];
+  const tabs = [...PRODUCTS.map(p => ({ key: p, label: p, badge: 0 })), null, { key: 'month', label: '월별 현황' }, { key: 'budget', label: '집행 현황' }, { key: 'review', label: '영상 리뷰' }];
   $('#app').innerHTML = headerHtml({ icon: '🎬', title: '광고 영상 리스트', tabs, active: view })
-    + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : view === 'budget' ? budgetHtml() : productHtml(view)}</main>`;
+    + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : view === 'budget' ? budgetHtml() : view === 'review' ? reviewHtml() : productHtml(view)}</main>`;
   bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name && !isRev(a)).length}건`);
   bindView();
 }
@@ -253,17 +322,22 @@ function listOf(p){
     && (!filter.editor || a.editor === filter.editor) && (!filter.meta || a.meta_account === filter.meta) && (!filter.mstate || mstateOf(a) === filter.mstate || (filter.mstate === '운영중' && mstateOf(a) === '미연결' && a.status === '운영중')) && (!filter.budget || budgetKey(a.meta_budget) === filter.budget) && (!filter.tstate || tstateOf(a) === filter.tstate) && (!filter.gstate || gstateOf(a) === filter.gstate) && (!filter.google || (a.google ? 'O' : 'X') === filter.google) && (!filter.status || a.status === filter.status));
 }
 function productHtml(p){
-  const list = sortBy(listOf(p).map(a => ({ ...a, spend_total: spendOf(a) || null })), sort, {});
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['spend_total', '집행금액'], ['note', '콘티']].filter(([k]) => hasGoogle(p) || (k !== 'google_state' && k !== 'google'));
+  const pf = hasPerf();
+  const list = sortBy(listOf(p).map(a => { const s = perfOf(a); return { ...a, spend_total: spendOf(a) || null, _pf: s, perf_spend: s.spend || null, perf_conv: s.conv || null, perf_cpa: cpaOf(s), perf_roas: roasOf(s) }; }), sort, {});
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['spend_total', '집행금액'],
+    ['perf_spend', '광고비'], ['perf_conv', '구매'], ['perf_cpa', 'CPA'], ['perf_roas', 'ROAS'], ['note', '콘티']].filter(([k]) => (hasGoogle(p) || (k !== 'google_state' && k !== 'google')) && (pf || !k.startsWith('perf_')));
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
+      ${pf ? perfSel() : ''}
       <span class="count">${(filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status) ? `<b>${[filter.editor, filter.meta, filter.mstate && '메타 ' + filter.mstate, filter.tstate && '틱톡 ' + filter.tstate, filter.gstate && '구글 ' + filter.gstate, filter.google && '구글 ' + filter.google, filter.budget === 'OFF' ? '예산 OFF' : filter.budget && fmtBudget(filter.budget), filter.status].filter(Boolean).map(esc).join(' · ')}</b> ${list.length}건 보는 중 · <a href="#" data-clear style="color:var(--blue)">전체 보기</a>` : `${list.length}건`}</span></div>
     <div class="hint" style="margin-bottom:8px;line-height:1.7">
       <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>집행금액·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 영상도 자동으로 들어옵니다. 집행금액은 <b>2026년 10월부터 지금까지</b> 메타·구글·틱톡이 보고한 금액(부가세 전) 합계이고, 칸에 마우스를 올리면 매체별·달별 금액이 보입니다.</div>
+      ${pf ? `<div>3) <b>성과</b> 네 칸은 위에서 고른 기간(<b>${esc(perfLabel())}</b>, ${perfRangeTxt()})의 메타·구글·틱톡 합계입니다. <b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비), <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비. 모두 부가세 전·광고관리자와 같은 기준이고 <b>매시간 자동 반영</b>됩니다${perfToday() ? ' (오늘은 진행 중)' : ''}. 칸에 마우스를 올리면 매체별로 보이고, 타이틀 옆 <b>▶</b> 를 누르면 나스의 최종본 영상이 열립니다. 회의용으로는 <b>영상 리뷰</b> 탭이 편합니다.</div>` : ''}
     </div>
     <div class="tablewrap"><table class="ads ${hasGoogle(p) ? 'g' : ''}"><thead>${(() => {
-      const GROUP = { meta_account: '메타', meta_state: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg' };
+      const GROUP = { meta_account: '메타', meta_state: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글', perf_spend: '성과', perf_conv: '성과', perf_cpa: '성과', perf_roas: '성과' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg', '성과': 'g-pf' };
+      const glabel = g => LOGO[g] || `<span class="brand" title="고른 기간의 메타·구글·틱톡 합계 (부가세 전, 매시간 자동 반영)">📊 성과 · ${esc(perfLabel())}</span>`;
       const th = ([k, l], attr = '', cls = '') => {
         const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], tiktok_state: ['tstate', TSTATES], google_state: ['gstate', GSTATES], google: ['google', ['O', 'X']] }[k];   // 열 머리 필터: [filter 키, 선택지]
         if (!HF) return `<th data-sort="${k}" class="${cls}" ${attr}>${l}${sortArrow(sort, k)}</th>`;
@@ -271,7 +345,7 @@ function productHtml(p){
         return `<th class="c ${cls}" ${attr}><select data-hf="${fk}" title="${name}(으)로 걸러 보기" class="${cur ? 'on' : ''}"><option value="">${l}</option>${opts.map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${fk === 'budget' && o !== 'OFF' ? fmtBudget(o) : esc(o)}</option>`).join('')}</select></th>`;
       };
       const first = (c, i) => i === 0 || GROUP[cols[i - 1][0]] !== GROUP[c[0]];   // 묶음의 첫 열인지
-      const top = cols.map((c, i) => !GROUP[c[0]] ? th(c, 'rowspan="2"', i && GROUP[cols[i - 1][0]] ? 'gl' : '') : first(c, i) ? `<th class="grp gl ${GCLS[GROUP[c[0]]]}" colspan="${cols.filter(x => GROUP[x[0]] === GROUP[c[0]]).length}">${LOGO[GROUP[c[0]]]}</th>` : '').join('');
+      const top = cols.map((c, i) => !GROUP[c[0]] ? th(c, 'rowspan="2"', i && GROUP[cols[i - 1][0]] ? 'gl' : '') : first(c, i) ? `<th class="grp gl ${GCLS[GROUP[c[0]]]}" colspan="${cols.filter(x => GROUP[x[0]] === GROUP[c[0]]).length}">${glabel(GROUP[c[0]])}</th>` : '').join('');
       const sub = cols.map((c, i) => GROUP[c[0]] ? th(c, '', first(c, i) ? 'gl' : '') : '').join('');
       return `<tr>${top}</tr><tr>${sub}</tr>`;
     })()}</thead><tbody>
@@ -286,12 +360,13 @@ function productHtml(p){
       ${hasGoogle(p) ? `<td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
       <td class="c hint" title="메타·구글·틱톡에서 집행 금액을 자동으로 읽어 옵니다">자동</td>
+      ${pf ? '<td class="c hint" title="매체에서 광고비·구매를 매시간 자동으로 읽어 옵니다">자동</td>'.repeat(4) : ''}
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="콘티 (메모)" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
     ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
-      <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
+      <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}${nasBtn(a)}</td>
       <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
       <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
@@ -300,6 +375,7 @@ function productHtml(p){
       ${hasGoogle(p) ? `<td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>` : ''}
       <td class="spend" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtWon(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
+      ${pf ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${convHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${cpaHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${roasHtml(a._pf)}</td>` : ''}
       <td class="note" data-edit="note" data-id="${a.id}">${(a.note || '').trim() ? `<span class="nt" data-note="${a.id}" title="누르면 콘티 전체가 보입니다 (더블클릭: 바로 고치기)">${esc(String(a.note).trim().split(/\r?\n/)[0])}</span>` : ''}${(a.files || []).length ? `<span class="cmt" data-note="${a.id}" title="콘티 파일 ${a.files.length}개 (누르면 열림)" style="cursor:pointer">📎 ${a.files.length}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
@@ -315,6 +391,70 @@ async function addFromRow(){
   await saveRow('ads', row);
   toast(`추가: ${title}`);
   const t = $('#nTitle'); if (t) t.focus();
+}
+
+/* 영상 리뷰 (2026-11-09): 월요일 마케팅 회의용. 최근에 게재한 영상을 브랜드별로 묶어 매체별(메타·틱톡·구글) 광고비·구매·CPA·ROAS 를 고른 기간으로 보여 줌.
+   ▶ 를 누르면 나스 최종본이 열림(openNas). 줄을 누르면 영상 정보 창 */
+let rvBrand = '', rvRange = '4', rvQ = '';   // 브랜드 필터 · 게재 범위(주 수, 'spend' = 기간 내 광고비 있는 전부) · 검색어
+function reviewHtml(){
+  if (!hasPerf()) return `<div class="empty">성과 칸이 아직 없습니다.${isAdmin() ? ' TEAM-TASKS\\sql-ads-perf.sql 을 Supabase SQL Editor 에서 한 번 실행하세요.' : ' 관리자가 저장소 설정을 마치면 보입니다.'}</div>`;
+  const q = rvQ.trim().toLowerCase(), since = rvRange === 'spend' ? null : addDays(todayStr(), -Number(rvRange) * 7 + 1);
+  const all = G().map(a => ({ ...a, _pf: perfOf(a) })).filter(a => (!rvBrand || a.product === rvBrand) && (!q || [a.title, a.editor].some(v => (v || '').toLowerCase().includes(q)))
+    && (since ? (a.date || '') >= since : a._pf.spend > 0));
+  const chs = PERF_CH.filter(([k]) => all.some(a => perfOf(a, k).spend > 0));   // 이 기간에 집행이 있는 매체만 열을 보임
+  const groups = PRODUCTS.filter(p => !rvBrand || p === rvBrand).map(p => [p, all.filter(a => a.product === p).sort((x, y) => (y.date || '').localeCompare(x.date || '') || y._pf.spend - x._pf.spend)]).filter(([, l]) => l.length);
+  const ncol = 2 + chs.length * 4 + 3, at = perfAt();
+  const totCells = s => `<td class="perf tl">${spendHtml(s)}</td><td class="perf">${cpaHtml(s)}</td><td class="perf">${roasHtml(s)}</td>`;
+  const sel = (id, opts, cur, title) => `<select id="${id}" title="${title}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${opts.map(([k, l]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const badge = a => a.status !== '운영중' ? ' ' + stHtml(a.status) : (mstateOf(a) === 'OFF' && tstateOf(a) !== '운영중' && gstateOf(a) !== '운영중') ? ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음">OFF</span>' : '';
+  return `<div class="actions">${perfSel()}
+      ${sel('rvBrand', [['', '전체 브랜드'], ...PRODUCTS.map(p => [p, p])], rvBrand, '브랜드')}
+      ${sel('rvRange', [['2', '최근 2주 게재'], ['4', '최근 4주 게재'], ['8', '최근 8주 게재'], ['spend', '기간 내 광고비 있는 전부']], rvRange, '어느 영상을 보일지: 게재일 기준')}
+      <input type="search" id="rvQ" placeholder="검색 (타이틀·편집자)" value="${esc(rvQ)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
+      <span class="hint">${esc(perfLabel())} (${perfRangeTxt()}) · 영상 ${all.length}개 · 매체가 보고한 광고비(부가세 전)·구매 기준, 매시간 자동 반영${perfToday() ? ' · <b>오늘은 진행 중</b>' : ''}${at ? ` (${fmtDateTime(at)} 기준)` : ''}</span></div>
+    ${!all.length ? `<div class="empty">조건에 맞는 영상이 없습니다. 게재 범위나 기간을 넓혀 보세요.</div>` : `<div class="bsum">
+      ${groups.map(([p, l]) => { const s = perfSum(l); return `<div class="k"><div class="t"><b class="p-${PCODE[p]}">${p}</b> · 영상 ${l.length}개</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; }).join('')}
+      ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
+    </div>
+    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. <b>▶</b> 를 누르면 나스의 최종본 영상이 열리고(처음 쓰는 PC 는 안내에 따라 설치 파일 한 번 실행), 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다.</div>
+    <div class="tablewrap"><table class="rv"><thead>
+      <tr><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
+      <tr>${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>
+      ${groups.map(([p, l]) => `<tr class="gh"><td colspan="${ncol}"><b class="p-${PCODE[p]}">${p}</b> <span style="font-weight:500;color:var(--fg2);font-size:12px">영상 ${l.length}개 · 게재일 최근 순</span></td></tr>
+        ${l.map(a => `<tr class="row" data-id="${a.id}"><td class="c" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
+          <td class="ttl"><div>${esc(a.title)}${nasBtn(a)}</div><div class="sub2">${esc(a.editor || '')}${badge(a)}${isRev(a) ? ' <span title="원본 줄이 따로 있는 수정본">수정본</span>' : ''}</div></td>
+          ${chs.map(([k]) => pfCells(perfOf(a, k))).join('')}${totCells(a._pf)}</tr>`).join('')}
+        <tr class="sub"><td colspan="2">${p} 합계</td>${chs.map(([k]) => pfCells(perfSum(l, k))).join('')}${totCells(perfSum(l))}</tr>`).join('')}
+    </tbody></table></div>`}`;
+}
+/* 나스 영상 열기: phbnas:// 주소로 PC 의 기본 재생 프로그램(팟플레이어 등)을 부르고, 경로·복사·NAS 웹 보기 창을 띄움 */
+function openNas(id){
+  const a = G().find(x => x.id === id), n = a && nasOf(a); if (!n) return;
+  const fire = p => { location.href = nasProto(p); };
+  fire(n.path);
+  const row = (p, main) => `<div class="nasrow ${main ? 'main' : ''}"><button type="button" class="nasbtn" data-fire="${esc(p)}" title="열기">▶</button><span class="fn">${esc(baseName(p))}</span>${main && n.mb ? `<span class="hint">${Math.round(n.mb)} MB${n.mtime ? ' · ' + esc(n.mtime) : ''}</span>` : ''}</div>`;
+  openModal(`${modalHead(`나스 영상 · ${esc(a.title)}`)}
+    <div class="mb">
+      ${row(n.path, true)}
+      <div class="path">${esc(n.path)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <button class="btn primary" data-fire="${esc(n.path)}">▶ 다시 열기</button>
+        <button class="btn" id="nasCopy">경로 복사</button>
+        <a class="btn" href="${dsmUrl(n.path)}" target="_blank" rel="noopener" title="시놀로지 File Station 에서 이 파일을 보여 줍니다 (나스 로그인 필요, 회사 네트워크에서만)">NAS 웹에서 보기</a>
+      </div>
+      ${(n.alts || []).length ? `<div class="hint" style="margin-bottom:2px">같은 영상의 다른 판 ${n.alts.length}개</div>${n.alts.map(p => row(p)).join('')}` : ''}
+      <div class="hint" style="margin-top:12px;line-height:1.7">처음 쓰는 PC 에서는 아래 설치 파일을 한 번 실행하면 ▶ 를 누를 때 팟플레이어 등 기본 재생 프로그램으로 바로 열립니다. 회사 네트워크(나스가 보이는 PC)에서만 됩니다.<br><a href="tools/nas-open-setup.cmd" download>⬇ 나스 영상 열기 설치 파일 받기</a> · 안 열리면 위 경로를 복사해 탐색기 주소창에 붙여 넣으세요.</div>
+    </div>
+    <div class="mf"><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
+  document.querySelectorAll('#modal [data-fire]').forEach(b => b.onclick = e => { e.stopPropagation(); fire(b.dataset.fire); });
+  $('#nasCopy').onclick = async () => { try { await navigator.clipboard.writeText(n.path); toast('경로를 복사했습니다'); } catch { toast('복사하지 못했습니다. 경로를 직접 선택해 복사하세요', true); } };
+}
+/* 영상 정보 창의 성과·나스 블록 */
+function perfBlock(a){
+  const n = nasOf(a), rows = PERF_CH.map(([k, nm]) => [nm, perfOf(a, k)]).filter(([, s]) => s.spend || s.conv);
+  return `<div class="pfbox"><div class="hint" style="margin-bottom:4px"><b>성과 · ${esc(perfLabel())}</b> (${perfRangeTxt()} · 부가세 전 · 매시간 자동 반영${perfToday() ? ' · 오늘은 진행 중' : ''})</div>
+    ${rows.length ? `<table class="pft"><tr><th>매체</th><th>광고비</th><th>구매</th><th>CPA</th><th>ROAS</th></tr>${rows.map(([nm, s]) => `<tr><td>${nm}</td>${pfCells(s)}</tr>`).join('')}${rows.length > 1 ? `<tr class="sub"><td>합계</td>${pfCells(perfOf(a))}</tr>` : ''}</table>` : '<div class="hint">이 기간에는 광고 집행이 없습니다.</div>'}
+    <div class="hint" style="margin-top:6px">나스 최종본: ${n ? `${nasBtn(a)} ${esc(baseName(n.path))}${n.mb ? ` (${Math.round(n.mb)} MB)` : ''}` : '아직 못 찾음 (게재일·타이틀·편집자가 나스 파일 이름과 같으면 다음 자동 반영 때 연결됩니다)'}</div></div>`;
 }
 
 /* 집행 현황 (2026-11-02): 메타·구글·틱톡 광고 집행 금액(부가세 전)을 달별로 편집자별 합계 → 큰 순서. 예전 "예산 현황"(하루 예산 합계)을 대신함 —
@@ -418,6 +558,11 @@ function bindView(){
   document.querySelectorAll('[data-note]').forEach(el => el.onclick = e => { e.stopPropagation(); if (e.detail > 1) return; openNote(el.dataset.note); });   // 콘티 한 번 클릭 → 전체 보기 창 (두 번 클릭은 바로 고치기)
   document.querySelectorAll('table.bud tr.ed').forEach(tr => tr.onclick = () => { budOpen = budOpen === tr.dataset.ed ? '' : tr.dataset.ed; render(); });
   const smn = $('#spendMonth'); if (smn) smn.onchange = () => { spendMonth = smn.value; render(); };   // 집행 현황: 보는 달 바꾸기
+  const pp = $('#perfPeriod'); if (pp) pp.onchange = () => { perfPeriod = pp.value; LS.set('ads_perf_period', perfPeriod); render(); };   // 성과 기간 (제품 탭·영상 리뷰 공통)
+  document.querySelectorAll('[data-nas]').forEach(b => b.onclick = e => { e.stopPropagation(); openNas(b.dataset.nas); });   // ▶ 나스 영상 열기
+  const rb = $('#rvBrand'); if (rb) rb.onchange = () => { rvBrand = rb.value; render(); };
+  const rr = $('#rvRange'); if (rr) rr.onchange = () => { rvRange = rr.value; render(); };
+  const rq = $('#rvQ'); if (rq) rq.oninput = () => { rvQ = rq.value; render(); const b = $('#rvQ'); b.focus(); b.setSelectionRange(rvQ.length, rvQ.length); };
   document.querySelectorAll('table.bud [data-open]').forEach(d => d.onclick = e => { e.stopPropagation(); openAd(d.dataset.open); });
   const mp = $('#mPrev'); if (mp) {
     const shift = n => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); month = ymd(d).slice(0, 7); render(); };
@@ -472,6 +617,7 @@ function openAd(id, preset = {}){
         <div class="f"><label>메타 일예산 (자동, 숫자 또는 OFF)</label><input id="aBudget" value="${esc(d.meta_budget || '')}" placeholder="캠페인에 영상이 여러 개면 비어 있음"></div>
       </div>
       ${a && spendOf(a) ? `<div class="hint" style="margin:-4px 0 10px;white-space:pre-line">${esc(spendTitle(a))}</div>` : ''}
+      ${a && hasPerf() ? perfBlock(a) : ''}
       <div class="f"><label>틱톡</label><input id="aTiktok" value="${esc(d.tiktok || '')}" placeholder="예: 리타겟2, 1, 3"></div>
       <div class="f" ${hasGoogle(d.product) ? '' : 'style="display:none"'}><label>구글</label><select id="aGoogle"><option value="0" ${!d.google ? 'selected' : ''}>X</option><option value="1" ${d.google ? 'selected' : ''}>O</option></select></div>
       <div class="f"><label>콘티</label><textarea id="aNote" placeholder="콘티 내용이나 메모. 파일(사진·PDF·문서)은 아래에 첨부">${esc(d.note || '')}</textarea>${fAt.html}</div>
@@ -483,6 +629,7 @@ function openAd(id, preset = {}){
       <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
     </div>`, { wide: true });
   fAt.bind(); $('#aTitle').focus();
+  document.querySelectorAll('#modal [data-nas]').forEach(b => b.onclick = e => { e.stopPropagation(); openNas(b.dataset.nas); });   // 성과 블록의 ▶
   $('#aSave').onclick = async () => {
     const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
     if (!a && !revGuard($('#aProduct').value, title, $('#aEditor').value.trim(), $('#aDate').value)) { closeModal(); return; }
