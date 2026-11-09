@@ -399,7 +399,16 @@ function reviewHtml(){
   const ncol = 2 + chs.length * 4 + 3, at = perfAt();
   const totCells = s => `<td class="perf tl">${spendHtml(s)}</td><td class="perf">${cpaHtml(s)}</td><td class="perf">${roasHtml(s)}</td>`;
   const sel = (id, opts, cur, title) => `<select id="${id}" title="${title}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${opts.map(([k, l]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  const badge = a => a.status !== '운영중' ? ' ' + stHtml(a.status) : (mstateOf(a) === 'OFF' && tstateOf(a) !== '운영중' && gstateOf(a) !== '운영중') ? ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음">OFF</span>' : '';
+  /* 켜짐/꺼짐 표시 (2026-11-09 사장님 질문 뒤 고침): 표의 "상태" 칸은 메타 기준이라 쓰지 않고, 매체별 운영여부로 판단.
+     세 매체가 다 꺼져 있으면 "전체 OFF", 일부만 꺼졌으면 이 기간에 광고비를 썼던 매체 중 지금 꺼진 것만 "메타 OFF" 처럼 이름을 붙임. 삭제·수정필요는 그대로 */
+  const badge = a => {
+    if (a.status === '삭제·수정필요') return ' ' + stHtml(a.status);
+    const st = [['메타', 'meta', mstateOf(a) === '운영중'], ['틱톡', 'tiktok', tstateOf(a) === '운영중'], ['구글', 'google', gstateOf(a) === '운영중']];
+    const on = st.filter(x => x[2]).map(x => x[0]);
+    if (!on.length) return ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음 (매일 10시 자동 반영 기준)">전체 OFF</span>';
+    const off = st.filter(x => !x[2] && perfOf(a, x[1]).spend > 0).map(x => x[0]);   // 이 기간엔 광고비를 썼는데 지금은 꺼진 매체
+    return off.length ? ` <span class="off" title="지금 켜져 있는 매체: ${on.join('·')} (매일 10시 자동 반영 기준)">${off.join('·')} OFF</span>` : '';
+  };
   return `<div class="actions">${perfSel()}
       ${sel('rvBrand', [['', '전체 브랜드'], ...PRODUCTS.map(p => [p, p])], rvBrand, '브랜드')}
       ${sel('rvRange', [['2', '최근 2주 게재'], ['4', '최근 4주 게재'], ['8', '최근 8주 게재'], ['spend', '기간 내 광고비 있는 전부']], rvRange, '어느 영상을 보일지: 게재일 기준')}
@@ -409,7 +418,7 @@ function reviewHtml(){
       ${groups.map(([p, l]) => { const s = perfSum(l); return `<div class="k"><div class="t"><b class="p-${PCODE[p]}">${p}</b> · 영상 ${l.length}개</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; }).join('')}
       ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
     </div>
-    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다.</div>
+    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다. <span class="off">전체 OFF</span> 는 세 매체가 다 꺼진 영상, <span class="off">메타 OFF</span> 처럼 매체 이름이 붙은 것은 그 매체만 꺼지고 다른 매체는 아직 도는 영상입니다(매일 10시 자동 반영 기준).</div>
     <div class="tablewrap"><table class="rv"><thead>
       <tr><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
       <tr>${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>
