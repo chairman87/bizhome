@@ -122,12 +122,10 @@
   .vlist div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:2px 0}
   .vlist div span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lk{font-size:10px;opacity:.55;margin-left:3px;cursor:help}
-  /* 성과(CPA·ROAS) · 영상 리뷰 · 나스 영상 열기 (2026-11-09) */
+  /* 성과(CPA·ROAS) · 영상 리뷰 (2026-11-09) */
   td.perf{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   table.ads tbody td.pf1,table.rv tbody td.tl{border-left:2px solid var(--line)}
   .nopurchase{color:#b91c1c;font-weight:600;font-size:12px}
-  .nasbtn{border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:999px;width:22px;height:22px;font-size:10px;line-height:20px;padding:0;cursor:pointer;margin-left:6px;vertical-align:middle;flex:none}
-  .nasbtn:hover{background:#1d4ed8;color:#fff}
   table.rv{min-width:1000px}
   table.rv td.c{text-align:center;white-space:nowrap}
   table.rv td.ttl{min-width:240px;font-weight:500}
@@ -136,9 +134,6 @@
   table.rv tr.sub td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
   table.rv tr.row{cursor:pointer}
   table.rv tr.row:hover td{background:#fffbea}
-  .path{font-family:Consolas,'Courier New',monospace;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;word-break:break-all;user-select:all}
-  .nasrow{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px}
-  .nasrow.main .fn{font-weight:600;font-size:14px}
   .pfbox{margin:-4px 0 12px;background:var(--bg2);border-radius:8px;padding:10px 12px}
   table.pft{border-collapse:collapse;margin:4px 0;background:#fff}
   table.pft th,table.pft td{padding:3px 10px;font-size:13px;text-align:right;border-bottom:1px solid var(--line)}
@@ -157,7 +152,7 @@
    광고 영상 리스트 — 마케팅 팀장이 구글시트로 관리하던 표
    한 줄 = { product(제품), date(게재일), title(영상 타이틀), editor(편집자), meta_account(메타 계정),
             meta_budget(메타 예산: 숫자 또는 OFF), tiktok(틱톡), status(운영중/OFF/삭제·수정필요), note(콘티 메모), files(콘티 파일),
-            meta_spend·google_spend·tiktok_spend(매체별 월 집행금액), perf(매체별 하루·달 성과: 광고비·구매·구매금액), nas(나스 최종본 파일) }
+            meta_spend·google_spend·tiktok_spend(매체별 월 집행금액), perf(매체별 하루·달 성과: 광고비·구매·구매금액), nas(나스 최종본 파일 이름 — 영상 정보 창에 글자로만 표시) }
    성과·나스 칸은 2026-11-09 추가. lemon803 의 MKT-PERF 가 매시간 40분쯤 기록. 월요일 마케팅 회의용 "영상 리뷰" 탭이 이걸로 영상별 CPA·ROAS 를 보여 줌
 ================================================================ */
 const PRODUCTS = ['레모너리', '서리맥스', '흑생마'];
@@ -262,12 +257,10 @@ const pfCells = s => `<td class="perf">${spendHtml(s)}</td><td class="perf">${co
 const perfTitle = a => PERF_CH.map(([k, n]) => { const s = perfOf(a, k); return s.spend ? `${n} 광고비 ${fmtWon(s.spend)} · 구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}` : ''; }).filter(Boolean).join('\n') || `${perfLabel()} 광고 집행 없음`;
 const perfSel = () => `<select id="perfPeriod" title="성과(광고비·구매·CPA·ROAS)를 보는 기간" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;font:inherit;font-weight:600">${PERF_PERIODS.map(([k, l]) => `<option value="${k}" ${k === perfPeriod ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
 const perfAt = () => G().map(a => (a.perf || {}).at).filter(Boolean).sort().pop();   // 마지막 자동 반영 시각
-/* 나스 최종본: nas = { path(UNC 경로 \\192.168.0.10\마케팅\...), mb, mtime, alts(같은 영상의 다른 판), at } — video_sync.py 가 게재일·타이틀·편집자로 짝지음 */
+/* 나스 최종본: nas = { path(UNC 경로), mb, mtime, alts, at } — video_sync.py 가 게재일·타이틀·편집자로 짝지음.
+   영상 정보 창에 파일 이름만 보여 줌 (웹에서 바로 여는 ▶ 기능은 회의 PC 가 매번 바뀌어 2026-11-09 뺌) */
 const nasOf = a => (a.nas && a.nas.path) ? a.nas : null;
 const baseName = p => String(p || '').split(/[\\/]/).pop();
-const nasBtn = a => nasOf(a) ? `<button type="button" class="nasbtn" data-nas="${a.id}" title="나스에서 영상 열기 (${esc(baseName(a.nas.path))})">▶</button>` : '';
-const nasProto = p => 'phbnas://open?p=' + encodeURIComponent(p);   // tools/nas-open-setup.cmd 로 PC 에 한 번 등록하는 주소 형식 → 기본 재생 프로그램으로 열림
-const dsmUrl = p => 'https://192.168.0.10:944/?launchApp=SYNO.SDS.App.FileStation3.Instance&launchParam=openfile%3D' + encodeURIComponent(String(p).replace(/^\\\\192\.168\.0\.10/, '').replace(/\\/g, '/'));
 const stHtml = s => s === 'OFF' ? '<span class="off">OFF</span>' : s === '삭제·수정필요' ? '<span class="del">삭제·수정필요</span>' : '<span class="run">운영중</span>';
 const MSTATES = ['운영중', 'OFF', '미연결'];
 const mstateOf = a => a.meta_state === '운영중' || a.meta_state === 'OFF' ? a.meta_state : '미연결';   // 메타에서 실제로 켜져 있는지 (매일 10시 자동 반영)
@@ -333,7 +326,7 @@ function productHtml(p){
     <div class="hint" style="margin-bottom:8px;line-height:1.7">
       <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>집행금액·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 영상도 자동으로 들어옵니다. 집행금액은 <b>2026년 10월부터 지금까지</b> 메타·구글·틱톡이 보고한 금액(부가세 전) 합계이고, 칸에 마우스를 올리면 매체별·달별 금액이 보입니다.</div>
-      ${pf ? `<div>3) <b>성과</b> 네 칸은 위에서 고른 기간(<b>${esc(perfLabel())}</b>, ${perfRangeTxt()})의 메타·구글·틱톡 합계입니다. <b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비), <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비. 모두 부가세 전·광고관리자와 같은 기준이고 <b>매시간 자동 반영</b>됩니다${perfToday() ? ' (오늘은 진행 중)' : ''}. 칸에 마우스를 올리면 매체별로 보이고, 타이틀 옆 <b>▶</b> 를 누르면 나스의 최종본 영상이 열립니다. 회의용으로는 <b>영상 리뷰</b> 탭이 편합니다.</div>` : ''}
+      ${pf ? `<div>3) <b>성과</b> 네 칸은 위에서 고른 기간(<b>${esc(perfLabel())}</b>, ${perfRangeTxt()})의 메타·구글·틱톡 합계입니다. <b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비), <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비. 모두 부가세 전·광고관리자와 같은 기준이고 <b>매시간 자동 반영</b>됩니다${perfToday() ? ' (오늘은 진행 중)' : ''}. 칸에 마우스를 올리면 매체별로 보입니다. 회의용으로는 <b>영상 리뷰</b> 탭이 편합니다.</div>` : ''}
     </div>
     <div class="tablewrap"><table class="ads ${hasGoogle(p) ? 'g' : ''}"><thead>${(() => {
       const GROUP = { meta_account: '메타', meta_state: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글', perf_spend: '성과', perf_conv: '성과', perf_cpa: '성과', perf_roas: '성과' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg', '성과': 'g-pf' };
@@ -366,7 +359,7 @@ function productHtml(p){
     ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
     ${list.map(a => `<tr class="row" data-id="${a.id}">
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
-      <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}${nasBtn(a)}</td>
+      <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
       <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
       <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
       <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
@@ -394,7 +387,7 @@ async function addFromRow(){
 }
 
 /* 영상 리뷰 (2026-11-09): 월요일 마케팅 회의용. 최근에 게재한 영상을 브랜드별로 묶어 매체별(메타·틱톡·구글) 광고비·구매·CPA·ROAS 를 고른 기간으로 보여 줌.
-   ▶ 를 누르면 나스 최종본이 열림(openNas). 줄을 누르면 영상 정보 창 */
+   줄을 누르면 영상 정보 창 */
 let rvBrand = '', rvRange = '4', rvQ = '';   // 브랜드 필터 · 게재 범위(주 수, 'spend' = 기간 내 광고비 있는 전부) · 검색어
 function reviewHtml(){
   if (!hasPerf()) return `<div class="empty">성과 칸이 아직 없습니다.${isAdmin() ? ' TEAM-TASKS\\sql-ads-perf.sql 을 Supabase SQL Editor 에서 한 번 실행하세요.' : ' 관리자가 저장소 설정을 마치면 보입니다.'}</div>`;
@@ -416,45 +409,23 @@ function reviewHtml(){
       ${groups.map(([p, l]) => { const s = perfSum(l); return `<div class="k"><div class="t"><b class="p-${PCODE[p]}">${p}</b> · 영상 ${l.length}개</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; }).join('')}
       ${groups.length > 1 ? (() => { const s = perfSum(all); return `<div class="k big"><div class="t">전체 합계</div><div class="v">${fmtWon(s.spend)}<small>원</small></div><div class="s">구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}</div></div>`; })() : ''}
     </div>
-    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. <b>▶</b> 를 누르면 나스의 최종본 영상이 열리고(처음 쓰는 PC 는 안내에 따라 설치 파일 한 번 실행), 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다.</div>
+    <div class="hint" style="margin-bottom:8px;line-height:1.7"><b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비, 낮을수록 좋음) · <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비(높을수록 좋음). 매체 픽셀 기준이라 쿠팡·스마트스토어 구매는 거의 안 잡힙니다. 줄을 누르면 영상 정보 창이 열립니다. <span class="nopurchase">구매 0</span> 은 광고비는 썼는데 구매가 한 건도 안 잡힌 영상입니다.</div>
     <div class="tablewrap"><table class="rv"><thead>
       <tr><th rowspan="2">게재일</th><th rowspan="2" style="text-align:left">영상</th>${chs.map(([, n]) => `<th class="grp gl" colspan="4">${LOGO[n]}</th>`).join('')}<th class="grp gl" colspan="3"><span class="brand">합계</span></th></tr>
       <tr>${chs.map(() => '<th class="gl">광고비</th><th>구매</th><th>CPA</th><th>ROAS</th>').join('')}<th class="gl">광고비</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>
       ${groups.map(([p, l]) => `<tr class="gh"><td colspan="${ncol}"><b class="p-${PCODE[p]}">${p}</b> <span style="font-weight:500;color:var(--fg2);font-size:12px">영상 ${l.length}개 · 게재일 최근 순</span></td></tr>
         ${l.map(a => `<tr class="row" data-id="${a.id}"><td class="c" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
-          <td class="ttl"><div>${esc(a.title)}${nasBtn(a)}</div><div class="sub2">${esc(a.editor || '')}${badge(a)}${isRev(a) ? ' <span title="원본 줄이 따로 있는 수정본">수정본</span>' : ''}</div></td>
+          <td class="ttl"><div>${esc(a.title)}</div><div class="sub2">${esc(a.editor || '')}${badge(a)}${isRev(a) ? ' <span title="원본 줄이 따로 있는 수정본">수정본</span>' : ''}</div></td>
           ${chs.map(([k]) => pfCells(perfOf(a, k))).join('')}${totCells(a._pf)}</tr>`).join('')}
         <tr class="sub"><td colspan="2">${p} 합계</td>${chs.map(([k]) => pfCells(perfSum(l, k))).join('')}${totCells(perfSum(l))}</tr>`).join('')}
     </tbody></table></div>`}`;
-}
-/* 나스 영상 열기: phbnas:// 주소로 PC 의 기본 재생 프로그램(팟플레이어 등)을 부르고, 경로·복사·NAS 웹 보기 창을 띄움 */
-function openNas(id){
-  const a = G().find(x => x.id === id), n = a && nasOf(a); if (!n) return;
-  const fire = p => { location.href = nasProto(p); };
-  fire(n.path);
-  const row = (p, main) => `<div class="nasrow ${main ? 'main' : ''}"><button type="button" class="nasbtn" data-fire="${esc(p)}" title="열기">▶</button><span class="fn">${esc(baseName(p))}</span>${main && n.mb ? `<span class="hint">${Math.round(n.mb)} MB${n.mtime ? ' · ' + esc(n.mtime) : ''}</span>` : ''}</div>`;
-  openModal(`${modalHead(`나스 영상 · ${esc(a.title)}`)}
-    <div class="mb">
-      ${row(n.path, true)}
-      <div class="path">${esc(n.path)}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
-        <button class="btn primary" data-fire="${esc(n.path)}">▶ 다시 열기</button>
-        <button class="btn" id="nasCopy">경로 복사</button>
-        <a class="btn" href="${dsmUrl(n.path)}" target="_blank" rel="noopener" title="시놀로지 File Station 에서 이 파일을 보여 줍니다 (나스 로그인 필요, 회사 네트워크에서만)">NAS 웹에서 보기</a>
-      </div>
-      ${(n.alts || []).length ? `<div class="hint" style="margin-bottom:2px">같은 영상의 다른 판 ${n.alts.length}개</div>${n.alts.map(p => row(p)).join('')}` : ''}
-      <div class="hint" style="margin-top:12px;line-height:1.7">처음 쓰는 PC 에서는 아래 설치 파일을 한 번 실행하면 ▶ 를 누를 때 팟플레이어 등 기본 재생 프로그램으로 바로 열립니다. 회사 네트워크(나스가 보이는 PC)에서만 됩니다.<br><a href="tools/nas-open-setup.cmd" download>⬇ 나스 영상 열기 설치 파일 받기</a> · 안 열리면 위 경로를 복사해 탐색기 주소창에 붙여 넣으세요.</div>
-    </div>
-    <div class="mf"><button class="btn primary" data-close>닫기</button></div>`, { wide: true });
-  document.querySelectorAll('#modal [data-fire]').forEach(b => b.onclick = e => { e.stopPropagation(); fire(b.dataset.fire); });
-  $('#nasCopy').onclick = async () => { try { await navigator.clipboard.writeText(n.path); toast('경로를 복사했습니다'); } catch { toast('복사하지 못했습니다. 경로를 직접 선택해 복사하세요', true); } };
 }
 /* 영상 정보 창의 성과·나스 블록 */
 function perfBlock(a){
   const n = nasOf(a), rows = PERF_CH.map(([k, nm]) => [nm, perfOf(a, k)]).filter(([, s]) => s.spend || s.conv);
   return `<div class="pfbox"><div class="hint" style="margin-bottom:4px"><b>성과 · ${esc(perfLabel())}</b> (${perfRangeTxt()} · 부가세 전 · 매시간 자동 반영${perfToday() ? ' · 오늘은 진행 중' : ''})</div>
     ${rows.length ? `<table class="pft"><tr><th>매체</th><th>광고비</th><th>구매</th><th>CPA</th><th>ROAS</th></tr>${rows.map(([nm, s]) => `<tr><td>${nm}</td>${pfCells(s)}</tr>`).join('')}${rows.length > 1 ? `<tr class="sub"><td>합계</td>${pfCells(perfOf(a))}</tr>` : ''}</table>` : '<div class="hint">이 기간에는 광고 집행이 없습니다.</div>'}
-    <div class="hint" style="margin-top:6px">나스 최종본: ${n ? `${nasBtn(a)} ${esc(baseName(n.path))}${n.mb ? ` (${Math.round(n.mb)} MB)` : ''}` : '아직 못 찾음 (게재일·타이틀·편집자가 나스 파일 이름과 같으면 다음 자동 반영 때 연결됩니다)'}</div></div>`;
+    <div class="hint" style="margin-top:6px">나스 최종본: ${n ? `${esc(baseName(n.path))}${n.mb ? ` (${Math.round(n.mb)} MB)` : ''}` : '아직 못 찾음 (게재일·타이틀·편집자가 나스 파일 이름과 같으면 다음 자동 반영 때 연결됩니다)'}</div></div>`;
 }
 
 /* 집행 현황 (2026-11-02): 메타·구글·틱톡 광고 집행 금액(부가세 전)을 달별로 편집자별 합계 → 큰 순서. 예전 "예산 현황"(하루 예산 합계)을 대신함 —
@@ -559,7 +530,6 @@ function bindView(){
   document.querySelectorAll('table.bud tr.ed').forEach(tr => tr.onclick = () => { budOpen = budOpen === tr.dataset.ed ? '' : tr.dataset.ed; render(); });
   const smn = $('#spendMonth'); if (smn) smn.onchange = () => { spendMonth = smn.value; render(); };   // 집행 현황: 보는 달 바꾸기
   const pp = $('#perfPeriod'); if (pp) pp.onchange = () => { perfPeriod = pp.value; LS.set('ads_perf_period', perfPeriod); render(); };   // 성과 기간 (제품 탭·영상 리뷰 공통)
-  document.querySelectorAll('[data-nas]').forEach(b => b.onclick = e => { e.stopPropagation(); openNas(b.dataset.nas); });   // ▶ 나스 영상 열기
   const rb = $('#rvBrand'); if (rb) rb.onchange = () => { rvBrand = rb.value; render(); };
   const rr = $('#rvRange'); if (rr) rr.onchange = () => { rvRange = rr.value; render(); };
   const rq = $('#rvQ'); if (rq) rq.oninput = () => { rvQ = rq.value; render(); const b = $('#rvQ'); b.focus(); b.setSelectionRange(rvQ.length, rvQ.length); };
@@ -629,7 +599,6 @@ function openAd(id, preset = {}){
       <button class="btn primary" id="aSave">${a ? '저장' : '추가'}</button>
     </div>`, { wide: true });
   fAt.bind(); $('#aTitle').focus();
-  document.querySelectorAll('#modal [data-nas]').forEach(b => b.onclick = e => { e.stopPropagation(); openNas(b.dataset.nas); });   // 성과 블록의 ▶
   $('#aSave').onclick = async () => {
     const title = $('#aTitle').value.trim(); if (!title) { $('#aTitle').focus(); toast('영상 타이틀을 입력하세요', true); return; }
     if (!a && !revGuard($('#aProduct').value, title, $('#aEditor').value.trim(), $('#aDate').value)) { closeModal(); return; }
