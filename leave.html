@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>연차/휴가 등록</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202610301630">
-<script src="common.js?v=202610301630"></script>
+<link rel="stylesheet" href="common.css?v=202611101107">
+<script src="common.js?v=202611101107"></script>
 <style>
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
   .stat{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--bg)}
@@ -55,6 +55,7 @@
 /* ================================================================
    연차/휴가 등록
    흐름: 팀원이 신청 → 관리자가 승인 / 반려. 신청자는 승인 전까지 취소 가능
+   승인된 건 취소(2026-11-10): 관리자는 언제든, 신청자 본인은 휴가 시작일 전날까지. 취소하면 사용 일수에서 빠지고 처리 기록에 '승인 취소'
 ================================================================ */
 const ST = { '신청': ['#fbeccc','#9a6700'], '승인': ['#dcfce7','#15803d'], '반려': ['#fee2e2','#b91c1c'], '취소': ['#e9e9e7','#5a5a55'] };
 const STATUSES = Object.keys(ST);
@@ -151,11 +152,15 @@ function openReject(id){
     toast('반려했습니다');
   };
 }
+/* 취소할 수 있는가: 신청 중이면 본인, 승인된 건이면 관리자(언제든) 또는 본인(휴가 시작 전) */
+const canCancel = l => (l.status === '신청' && l.name === me) || (l.status === '승인' && (isAdmin() || (l.name === me && (l.start_date || '') > todayStr())));
 async function cancelLeave(id){
-  const l = L().find(x => x.id === id); if (!l) return;
-  if (!confirm(`${l.type} 신청(${period(l)})을 취소할까요?`)) return;
-  await saveRow('leaves', { ...l, status: '취소', comments: [...(l.comments || []), log('신청 취소')] });
-  toast('취소했습니다');
+  const l = L().find(x => x.id === id); if (!l || !canCancel(l)) return;
+  const ok = l.status === '승인';
+  if (!confirm(ok ? `승인된 ${l.type}(${l.name !== me ? l.name + '님, ' : ''}${period(l)})을 취소할까요?
+취소하면 사용한 연차에서 빠지고 달력에서도 사라집니다.` : `${l.type} 신청(${period(l)})을 취소할까요?`)) return;
+  await saveRow('leaves', { ...l, status: '취소', ...(ok ? { decided_by: me, decided_at: nowIso() } : {}), comments: [...(l.comments || []), log(ok ? '승인 취소' : '신청 취소')] });
+  toast(ok ? '승인된 휴가를 취소했습니다' : '취소했습니다');
 }
 
 /* ---------- 화면 ---------- */
@@ -233,7 +238,7 @@ function tableHtml(list){
 function actionButtons(l){
   let h = '';
   if (l.status === '신청' && isAdmin()) h += `<button class="btn sm primary" data-ok="${l.id}">승인</button><button class="btn sm" data-no="${l.id}">반려</button>`;
-  if (l.status === '신청' && l.name === me) h += `<button class="btn sm" data-cancel="${l.id}">취소</button>`;
+  if (canCancel(l)) h += `<button class="btn sm" data-cancel="${l.id}">${l.status === '승인' ? '승인 취소' : '취소'}</button>`;
   return h;
 }
 
@@ -335,7 +340,7 @@ function openLeave(id, preset = {}){
       ${l && isAdmin() ? `<button class="btn danger left" id="lDelete">삭제</button>` : ''}
       ${!l && DATA.schedules ? `<button class="btn left" id="lToSched" title="이 날짜로 내 일정 등록 창을 엽니다" style="background:#16a34a;border-color:#16a34a;color:#fff">🗓 일정 등록으로 바꾸기</button>` : ''}
       ${l && l.status === '신청' && isAdmin() ? `<button class="btn" id="lNo">반려</button><button class="btn primary" id="lOk">승인</button>` : ''}
-      ${l && l.status === '신청' && l.name === me && !isAdmin() ? `<button class="btn danger" id="lCancel">신청 취소</button>` : ''}
+      ${l && canCancel(l) && !(l.status === '신청' && isAdmin()) ? `<button class="btn danger" id="lCancel">${l.status === '승인' ? '승인 취소' : '신청 취소'}</button>` : ''}
       <button class="btn" data-close>닫기</button>
       ${editable ? `<button class="btn primary" id="lSave">${l ? '저장' : '신청하기'}</button>` : ''}
     </div>`);
