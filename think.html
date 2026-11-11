@@ -2059,9 +2059,22 @@
     // 폭이 바뀌면(회전 등) 펼쳐 둔 글 칸의 높이도 새 폭에 맞춰 다시 잽니다
     function regrowAll() {
       document.querySelectorAll("textarea.note-body").forEach(ta => {
-        ta.style.height = "auto";
-        ta.style.height = (ta.scrollHeight + 2) + "px";
+        keepScroll(ta, () => {
+          ta.style.height = "auto";
+          ta.style.height = (ta.scrollHeight + 2) + "px";
+        });
       });
+    }
+    // 글 칸 높이를 다시 잴 때는 칸을 잠깐 줄였다가 늘립니다. 그 순간 카드 안 스크롤이 맨 위로 돌아가므로
+    // (격자 3×4 처럼 카드가 작아 글이 넘칠 때, 띄어쓰기를 하면 첫 줄로 올라가던 문제. 2026-11-12)
+    // 재기 전 스크롤 위치를 기억했다가 되돌립니다.
+    function keepScroll(ta, fn) {
+      const box = ta.closest(".card-body");
+      const top = box ? box.scrollTop : 0;
+      const winY = window.scrollY;
+      fn();
+      if (box && box.scrollTop !== top) box.scrollTop = top;
+      if (window.scrollY !== winY) window.scrollTo(window.scrollX, winY);
     }
     let fitTimer = null;
     window.addEventListener("resize", () => {
@@ -2092,10 +2105,10 @@
       const item = load()[0];
       ta.value = (item && item.body) || "";
 
-      const grow = () => {
+      const grow = () => keepScroll(ta, () => {
         ta.style.height = "auto";
         ta.style.height = Math.max(ta.scrollHeight + 2, el.body.clientHeight - 4) + "px";
-      };
+      });
       let timer = null;
       const save = () => {
         const all = load();
@@ -2424,10 +2437,10 @@
             ta.addEventListener("mouseup", () => { item.draggable = true; });
 
             // 글이 길어지면 칸도 같이 늘어나게
-            const grow = () => {
+            const grow = () => keepScroll(ta, () => {
               ta.style.height = "auto";
               ta.style.height = (ta.scrollHeight + 2) + "px";
-            };
+            });
 
             let bodyTimer = null;
             const saveBody = () => {
