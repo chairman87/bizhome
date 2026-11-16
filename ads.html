@@ -21,7 +21,7 @@
   table.ads th.grp .brand,table.rv th.grp .brand{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#292524;letter-spacing:.01em}
   table.ads th.grp svg,table.rv th.grp svg{width:17px;height:17px;display:block}
   table.ads th.gl,table.rv th.gl{border-left:2px solid #e0c25a}
-  table.ads tbody td:nth-child(4),table.ads tbody td:nth-child(6),table.ads tbody td:nth-child(8),table.ads.g tbody td:nth-child(10){border-left:2px solid var(--line)}
+  table.ads tbody td.gs{border-left:2px solid var(--line)}   /* 묶음(메타·틱톡·구글·집행금액)의 첫 칸 */
   td.spend{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   table.bud .bar.t{background:#111;margin-left:-8px;border-radius:0 5px 5px 0}
   td.c{text-align:center;white-space:nowrap}
@@ -321,9 +321,13 @@ function listOf(p){
 }
 function productHtml(p){
   const pf = hasPerf();
-  const list = sortBy(listOf(p).map(a => { const s = perfOf(a); return { ...a, spend_total: spendOf(a) || null, _pf: s, perf_spend: s.spend || null, perf_conv: s.conv || null, perf_cpa: cpaOf(s), perf_roas: roasOf(s) }; }), sort, {});
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ['google_state', '운영여부'], ['google', '구글'], ['spend_total', '집행금액'],
-    ['perf_spend', '광고비'], ['perf_conv', '구매'], ['perf_cpa', 'CPA'], ['perf_roas', 'ROAS'], ['note', '콘티']].filter(([k]) => (hasGoogle(p) || (k !== 'google_state' && k !== 'google')) && (pf || !k.startsWith('perf_')));
+  const list = sortBy(listOf(p).map(a => { const s = perfOf(a); const o = { ...a, spend_total: spendOf(a) || null, _pf: s, _pc: {}, perf_spend: s.spend || null, perf_conv: s.conv || null, perf_cpa: cpaOf(s), perf_roas: roasOf(s) };
+    PERF_CH.forEach(([k]) => { const c = o._pc[k] = perfOf(a, k); o[`perf_${k}_spend`] = c.spend || null; o[`perf_${k}_conv`] = c.conv || null; o[`perf_${k}_cpa`] = cpaOf(c); o[`perf_${k}_roas`] = roasOf(c); });   // 매체별 성과 (2026-11-16 사장님 요청: 제품 표에서도 매체별로 보이게)
+    return o; }), sort, {});
+  const pfCols = k => [[`perf_${k}_spend`, '광고비'], [`perf_${k}_conv`, '구매'], [`perf_${k}_cpa`, 'CPA'], [`perf_${k}_roas`, 'ROAS']];   // 매체 묶음 안에 붙는 성과 네 칸
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ...pfCols('meta'), ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ...pfCols('tiktok'), ['google_state', '운영여부'], ['google', '구글'], ...pfCols('google'), ['spend_total', '집행금액'],
+    ['perf_spend', '광고비'], ['perf_conv', '구매'], ['perf_cpa', 'CPA'], ['perf_roas', 'ROAS'], ['note', '콘티']].filter(([k]) => (hasGoogle(p) || !k.includes('google')) && (pf || !k.startsWith('perf_')));
+  const pfNew = pf ? '<td class="c hint" title="매체에서 광고비·구매를 매시간 자동으로 읽어 옵니다">자동</td>'.repeat(4) : '';   // 입력 줄의 성과 칸(자동)
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
       <input type="search" id="fq" placeholder="검색" value="${esc(filter.q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:180px">
       ${pf ? perfSel() : ''}
@@ -331,11 +335,11 @@ function productHtml(p){
     <div class="hint" style="margin-bottom:8px;line-height:1.7">
       <div>1) 제목 줄 바로 아래 <b>입력 줄</b>에 바로 입력하고 <b>Enter</b> 를 누르면 저장됩니다(Tab 으로 칸 이동). 기존 칸은 <b>더블클릭</b>으로 고치고, 줄을 클릭하면 상세 창이 열립니다.</div>
       <div>2) <b>🔗</b> 표시가 있는 줄은 메타 광고 관리자와 연결되어 <b>집행금액·상태가 매일 오전 10시에 자동으로</b> 맞춰지고, 메타에 새로 만든 영상도 자동으로 들어옵니다. 집행금액은 <b>2026년 10월부터 지금까지</b> 메타·구글·틱톡이 보고한 금액(부가세 전) 합계이고, 칸에 마우스를 올리면 매체별·달별 금액이 보입니다.</div>
-      ${pf ? `<div>3) <b>성과</b> 네 칸은 위에서 고른 기간(<b>${esc(perfLabel())}</b>, ${perfRangeTxt()})의 메타·구글·틱톡 합계입니다. <b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비), <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비. 모두 부가세 전·광고관리자와 같은 기준이고 <b>매시간 자동 반영</b>됩니다${perfToday() ? ' (오늘은 진행 중)' : ''}. 칸에 마우스를 올리면 매체별로 보입니다. 회의용으로는 <b>영상 리뷰</b> 탭이 편합니다.</div>` : ''}
+      ${pf ? `<div>3) 매체(메타·틱톡·구글) 묶음마다 있는 <b>광고비·구매·CPA·ROAS</b> 는 위에서 고른 기간(<b>${esc(perfLabel())}</b>, ${perfRangeTxt()})의 그 매체 성과이고, 오른쪽 <b>📊 합계</b> 네 칸은 세 매체를 더한 값입니다. <b>CPA</b> = 광고비 ÷ 매체가 추적한 구매 수(구매 1건에 든 광고비), <b>ROAS</b> = 매체가 추적한 구매 금액 ÷ 광고비. 모두 부가세 전·광고관리자와 같은 기준이고 <b>매시간 자동 반영</b>됩니다${perfToday() ? ' (오늘은 진행 중)' : ''}. 회의용으로는 <b>영상 리뷰</b> 탭이 편합니다.</div>` : ''}
     </div>
     <div class="tablewrap"><table class="ads ${hasGoogle(p) ? 'g' : ''}"><thead>${(() => {
-      const GROUP = { meta_account: '메타', meta_state: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글', perf_spend: '성과', perf_conv: '성과', perf_cpa: '성과', perf_roas: '성과' }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg', '성과': 'g-pf' };
-      const glabel = g => LOGO[g] || `<span class="brand" title="고른 기간의 메타·구글·틱톡 합계 (부가세 전, 매시간 자동 반영)">📊 성과 · ${esc(perfLabel())}</span>`;
+      const GROUP = { meta_account: '메타', meta_state: '메타', tiktok_state: '틱톡', tiktok: '틱톡', google_state: '구글', google: '구글', perf_spend: '성과', perf_conv: '성과', perf_cpa: '성과', perf_roas: '성과', ...Object.fromEntries(PERF_CH.flatMap(([k, n]) => pfCols(k).map(([c]) => [c, n]))) }, GCLS = { '메타': 'g-meta', '틱톡': 'g-tt', '구글': 'g-gg', '성과': 'g-pf' };
+      const glabel = g => LOGO[g] || `<span class="brand" title="고른 기간의 메타·구글·틱톡 합계 (부가세 전, 매시간 자동 반영)">📊 합계 · ${esc(perfLabel())}</span>`;
       const th = ([k, l], attr = '', cls = '') => {
         const HF = { editor: ['editor', EDITORS], meta_account: ['meta', metas()], meta_state: ['mstate', MSTATES], tiktok_state: ['tstate', TSTATES], google_state: ['gstate', GSTATES], google: ['google', ['O', 'X']] }[k];   // 열 머리 필터: [filter 키, 선택지]
         if (!HF) return `<th data-sort="${k}" class="${cls}" ${attr}>${l}${sortArrow(sort, k)}</th>`;
@@ -351,14 +355,17 @@ function productHtml(p){
       <td class="c"><input type="date" id="nDate" value="${esc(lastNew.date)}"></td>
       <td><input id="nTitle" placeholder="영상 타이틀 입력 후 Enter" maxlength="200"></td>
       <td class="c"><select id="nEditor" style="width:80px">${editorOpts(lastNew.editor)}</select></td>
-      <td class="c"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
+      <td class="c gs"><input id="nMeta" list="metaList2" value="${esc(lastNew.meta)}" placeholder="페이지명" style="width:100px"><datalist id="metaList2">${metas().map(e => `<option value="${esc(e)}">`).join('')}</datalist></td>
       <td class="c hint" title="메타 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
-      <td class="c hint" title="틱톡 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
+      ${pfNew}
+      <td class="c hint gs" title="틱톡 광고 관리자에서 자동으로 읽어 옵니다">자동</td>
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
-      ${hasGoogle(p) ? `<td class="c hint" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
-      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>` : ''}
-      <td class="c hint" title="메타·구글·틱톡에서 집행 금액을 자동으로 읽어 옵니다">자동</td>
-      ${pf ? '<td class="c hint" title="매체에서 광고비·구매를 매시간 자동으로 읽어 옵니다">자동</td>'.repeat(4) : ''}
+      ${pfNew}
+      ${hasGoogle(p) ? `<td class="c hint gs" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
+      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>
+      ${pfNew}` : ''}
+      <td class="c hint gs" title="메타·구글·틱톡에서 집행 금액을 자동으로 읽어 옵니다">자동</td>
+      ${pfNew}
       <td><div style="display:flex;gap:4px"><input id="nNote" placeholder="콘티 (메모)" style="flex:1"><button class="btn sm primary" id="nAdd" title="저장 (Enter)">추가</button></div></td>
     </tr>
     ${list.length ? '' : `<tr><td colspan="${cols.length}" class="hint" style="text-align:center;padding:16px">${filter.q || filter.editor || filter.meta || filter.mstate || filter.budget || filter.tstate || filter.gstate || filter.google || filter.status ? '조건에 맞는 영상이 없습니다.' : `${p} 영상이 아직 없습니다. 위 입력 줄에 입력해 보세요.`}</td></tr>`}
@@ -366,13 +373,16 @@ function productHtml(p){
       <td class="c" data-edit="date" data-id="${a.id}" title="${esc(a.date || '')}">${mmdd(a.date)}</td>
       <td class="ttl" data-edit="title" data-id="${a.id}">${esc(a.title)}</td>
       <td class="c" data-edit="editor" data-id="${a.id}">${esc(a.editor || '')}</td>
-      <td class="c" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
+      <td class="c gs" data-edit="meta_account" data-id="${a.id}">${esc(a.meta_account || '')}</td>
       <td class="c" title="메타 광고 관리자에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${mstateHtml(a)}</td>
-      <td class="c" title="틱톡 광고 관리자에서 실제로 송출 중인지 (매일 오전 10시 자동 반영)">${tstateHtml(a)}</td>
+      ${pf ? pfCells(a._pc.meta) : ''}
+      <td class="c gs" title="틱톡 광고 관리자에서 실제로 송출 중인지 (매일 오전 10시 자동 반영)">${tstateHtml(a)}</td>
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
-      ${hasGoogle(p) ? `<td class="c" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
-      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>` : ''}
-      <td class="spend" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtWon(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
+      ${pf ? pfCells(a._pc.tiktok) : ''}
+      ${hasGoogle(p) ? `<td class="c gs" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
+      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
+      ${pf ? pfCells(a._pc.google) : ''}` : ''}
+      <td class="spend gs" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtWon(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       ${pf ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${convHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${cpaHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${roasHtml(a._pf)}</td>` : ''}
       <td class="note" data-edit="note" data-id="${a.id}">${(a.note || '').trim() ? `<span class="nt" data-note="${a.id}" title="누르면 콘티 전체가 보입니다 (더블클릭: 바로 고치기)">${esc(String(a.note).trim().split(/\r?\n/)[0])}</span>` : ''}${(a.files || []).length ? `<span class="cmt" data-note="${a.id}" title="콘티 파일 ${a.files.length}개 (누르면 열림)" style="cursor:pointer">📎 ${a.files.length}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
