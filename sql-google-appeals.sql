@@ -1,7 +1,7 @@
 -- 구글 이의신청내역 관리 표 — Supabase SQL Editor 에 붙여넣고 Run
 create table if not exists google_appeals (
   id          uuid primary key,
-  product     text not null,                 -- 서리맥스 / 흑생마
+  product     text not null,                 -- 서리맥스 / 흑생마 / 레모너리
   ad_id       uuid,                          -- 광고 영상 리스트(ads)의 영상과 연결 (없어도 됨)
   title       text not null,                 -- 거절된 영상 이름
   url         text,                          -- 영상 주소 (유튜브 등, 선택)
