@@ -68,7 +68,7 @@ begin
          (r->>'has_photo')::boolean, coalesce((r->>'file_resume')::boolean, false), nullif(r->>'applied_at', '')::date, r->>'link',
          r->>'result', coalesce(r->'reasons', '[]'::jsonb), coalesce(r->'notes', '[]'::jsonb),
          -- PC 가 통과자를 사람인 1차 면접 단계로 옮겼으면 status='면접'·site_done 을 함께 보냄 (2026-11-18)
-         case when r->>'status' = '면접' then '면접' else '대기' end, case when r->>'status' = '면접' then '자동' end, case when r->>'status' = '면접' then now() end,
+         case when r->>'status' = '면접' then '면접' else '대기' end, case when r->>'status' = '면접' then coalesce(nullif(r->>'decided_by', ''), '자동') end, case when r->>'status' = '면접' then now() end,
          left(r->>'site_done', 200), case when r ? 'site_done' then now() end
     from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) r
   on conflict (id) do update set

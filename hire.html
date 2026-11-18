@@ -33,6 +33,11 @@
   .bt button{border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--fg2);white-space:nowrap}
   .bt button:hover{border-color:var(--fg2);color:var(--fg)}
   .site{font-size:11px;color:var(--fg3);margin-top:3px}
+  .sum{border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;background:var(--bg2)}
+  .sum table{border-collapse:collapse;font-size:13px;margin-bottom:6px}
+  .sum th,.sum td{padding:4px 14px 4px 0;text-align:left}
+  .sum thead th{color:var(--fg3);font-weight:600;font-size:12px}
+  .sum td.num{text-align:right;padding-right:22px}
 </style>
 </head>
 <body>
@@ -50,7 +55,7 @@
 const RESULTS = ['통과', '애매', '탈락예정'];
 const JOBS = ['마케팅', '경영지원', '고객지원'];
 const TOKEN_KEY = 'think_token';
-let ROWS = null, loadErr = '', tab = '통과', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
+let ROWS = null, loadErr = '', tab = '전체', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
 
 const sbc = () => SupabaseStore.client;
 const myMember = () => members.find(m => m.name === me);
@@ -104,6 +109,17 @@ function rowHtml(r){
   </tr>`;
 }
 
+/* 맨 위 요약: 직무별로 몇 명이 어느 칸에 있는지, 마지막으로 읽은 때 (2026-11-18) */
+function sumHtml(){
+  if (!ROWS || !ROWS.length) return '<div class="hint" style="margin-bottom:12px">아직 올라온 지원자가 없습니다. 대표 PC 가 매일 09:10 에 사람인의 새 지원자를 읽어 올립니다.</div>';
+  const jobs = [...JOBS, ''], last = ROWS.reduce((m, r) => (r.screened_at || '') > m ? r.screened_at : m, '');
+  const n = (j, f) => ROWS.filter(r => (r.job || '') === j && f(r)).length;
+  const line = j => { const total = n(j, () => true); if (!total) return '';
+    return `<tr><th>${j || '직무 미정'}</th><td class="num">${total}</td><td class="num"><b>${n(j, r => r.status === '면접')}</b></td><td class="num">${n(j, r => r.result === '통과' && r.status !== '면접')}</td><td class="num">${n(j, r => r.result === '애매' && r.status !== '면접')}</td><td class="num">${n(j, r => r.result === '탈락예정' && r.status !== '면접')}</td></tr>`; };
+  return `<div class="sum"><table><thead><tr><th>직무</th><th>지원자</th><th>1차 면접으로 보냄</th><th>통과(아직 서류)</th><th>애매</th><th>탈락 예정</th></tr></thead><tbody>${jobs.map(line).join('')}</tbody></table>
+    <div class="sub">최근 ${days}일 지원자 기준 · 마지막으로 읽은 때 ${last ? fmtDateTime(last) : '-'} · 불합격 처리는 하지 않습니다. 애매·탈락 예정은 사람인 서류 전형에 그대로 있습니다.</div></div>`;
+}
+
 function render(){
   let body;
   if (store !== SupabaseStore) body = '<div class="empty">팀 저장소에 연결되지 않았습니다.</div>';
@@ -115,7 +131,7 @@ function render(){
     const val = r => sortKey === 'age' ? (r.age == null ? 999 : r.age) : sortKey === 'name' ? (r.name || '') : (r.applied_at || '');
     const list = ROWS.filter(r => base(r) && inTab(r, tab)).sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortDir);
     const th = (k, label) => `<th data-sort="${k}">${label}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-    body = `<div class="actions">
+    body = `${sumHtml()}<div class="actions">
         <div class="tabs2">${RESULTS.map(t => `<button data-tab="${t}" class="${tab === t ? 'on' : ''}">${t === '탈락예정' ? '탈락 예정' : t} ${cnt(t)}</button>`).join('')}<button data-tab="전체" class="${tab === '전체' ? 'on' : ''}">전체 ${cnt('전체')}</button></div>
         <select id="fjob"><option value="">직무 전체</option>${JOBS.map(j => `<option ${job === j ? 'selected' : ''}>${j}</option>`).join('')}<option value="미정" ${job === '미정' ? 'selected' : ''}>직무 미정</option></select>
         <select id="fdec">${[['대기', '결정 전'], ['결정', '결정한 것'], ['전체', '모두']].map(([v, l]) => `<option value="${v}" ${decided === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
