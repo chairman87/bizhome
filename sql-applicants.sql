@@ -9,7 +9,7 @@
 --  지원자 개인정보라 카톡 주문(sql-kakao-orders.sql)과 같은 방식으로 잠가 둡니다:
 --    · 규칙(policy)을 하나도 만들지 않음 = 공개키로는 읽기·쓰기 모두 막힘
 --    · 대표 PC 는 전용 열쇠(PC 의 C:\Users\PC\.claude\applicant-screen\token.txt)로 ap_push·ap_pull·ap_done 만 부름. 여기에는 열쇠의 지문(sha256)만 적음
---    · 직원은 메모장과 같은 출입증(think_login → think_who, sql-think-pin.sql)으로 ap_list·ap_update 를 부름
+--    · 관리자만 메모장과 같은 출입증(think_login → think_who, sql-think-pin.sql)으로 ap_list·ap_update 를 부름(관리자가 아니면 'admin' 오류)
 --  연락처(전화·이메일)·주소는 넣지 않습니다(사람인에서 봄). 지원한 지 180일 지난 줄은 ap_push 때 지웁니다.
 --
 --  Supabase 대시보드 → SQL Editor 에 붙여넣고 Run 하세요. 여러 번 실행해도 됩니다. (sql-think-pin.sql 이 먼저 실행돼 있어야 함)
@@ -107,6 +107,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare m uuid := think_who(p_token);
 begin
   if m is null then return jsonb_build_object('ok', false, 'err', 'session'); end if;
+  if not exists (select 1 from members where id::text = m::text and role = 'admin') then return jsonb_build_object('ok', false, 'err', 'admin'); end if;   -- 관리자만 (2026-11-18 대표 지시)
   return jsonb_build_object('ok', true, 'rows', coalesce((
     select jsonb_agg(to_jsonb(a) order by a.applied_at desc, a.created_at desc) from applicants a
      where a.applied_at >= current_date - least(greatest(coalesce(p_days, 30), 1), 180)), '[]'::jsonb));
@@ -118,6 +119,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare m uuid := think_who(p_token); nm text;
 begin
   if m is null then return jsonb_build_object('ok', false, 'err', 'session'); end if;
+  if not exists (select 1 from members where id::text = m::text and role = 'admin') then return jsonb_build_object('ok', false, 'err', 'admin'); end if;   -- 관리자만 (2026-11-18 대표 지시)
   if p_patch ? 'status' and not (p_patch->>'status' in ('대기', '면접', '불합격', '보류')) then return jsonb_build_object('ok', false, 'err', 'status'); end if;
   select name into nm from members where id::text = m::text;
   update applicants set

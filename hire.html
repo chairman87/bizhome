@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>채용공고</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611101107">
-<script src="common.js?v=202611101107"></script>
+<link rel="stylesheet" href="common.css?v=202611181509">
+<script src="common.js?v=202611181509"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -123,6 +123,7 @@ function sumHtml(){
 function render(){
   let body;
   if (store !== SupabaseStore) body = '<div class="empty">팀 저장소에 연결되지 않았습니다.</div>';
+  else if (ROWS === null && loadErr === 'admin') body = '<div class="empty">관리자만 볼 수 있는 화면입니다.</div>';
   else if (ROWS === null) body = `<div class="empty">${loadErr ? '불러오지 못했습니다: ' + esc(loadErr) + (/function|does not exist|schema/i.test(loadErr) && isAdmin() ? '<br>sql-applicants.sql 을 Supabase SQL Editor 에서 실행하세요.' : '') : '불러오는 중…'}</div>`;
   else {
     const base = r => (!job || (job === '미정' ? !r.job : r.job === job)) && (decided === '전체' || (decided === '대기' ? (r.status || '대기') === '대기' : (r.status || '대기') !== '대기')) && (ageMax === '' || (r.age != null && r.age <= Number(ageMax)));
