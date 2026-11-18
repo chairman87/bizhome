@@ -55,14 +55,15 @@
 <script>
 /* ================================================================
    채용공고 — 사람인(나중에 잡코리아) 지원자를 대표가 정한 기준으로 미리 나눠 둔 목록 (2026-11-18)
-   대표 PC(lemon803)의 APPLICANT-SCREEN/screen.py 가 매일 새 지원자를 읽어 통과 / 탈락예정 / 애매 로 나눠 넣음. 기준은 APPLICANT-SCREEN/rules.py.
+   대표 PC(lemon803)의 APPLICANT-SCREEN/screen.py 가 매일 새 지원자를 읽어 통과 / 탈락예정 / 애매 로 나눠 넣음(저장 값 '탈락예정' 은 화면에 '불합격'으로 보임 — 분류 이름일 뿐 사이트 불합격 처리가 아님). 기준은 APPLICANT-SCREEN/rules.py.
    지원자 개인정보라 잠긴 표(applicants, sql-applicants.sql)에 있고, 메모장·카톡 주문과 같은 출입증(think_login)으로만 읽고 고침.
    '통과'는 PC 가 사람인 1차 면접 단계로 옮기고 '면접'으로 올림(decided_by='자동'). 불합격 처리는 없음(2026-11-18 대표 지시). 애매·탈락예정은 사람이 [면접]·[보류]로 표시. 나이는 자동 판정에 쓰지 않고 칸으로만 보여 줌(정렬·필터는 사람이 함).
 ================================================================ */
-const RESULTS = ['통과', '애매', '탈락예정'];
+const RESULTS = ['볼사람', '통과', '애매', '탈락예정'];   // 탭. '볼사람' = 통과+애매(불합격 분류를 뺀 것, 기본 화면 — 2026-11-18 대표: 너무 많다)
+const TAB_NAME = { 볼사람: '볼 사람', 탈락예정: '불합격' };   // 저장 값 '탈락예정' 은 화면에 '불합격'으로 보임. 인트라넷 분류일 뿐 사이트에서 불합격 처리한 것이 아님
 const JOBS = ['마케팅', '경영지원', '고객지원'];
 const TOKEN_KEY = 'think_token';
-let ROWS = null, loadErr = '', tab = '전체', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
+let ROWS = null, loadErr = '', tab = '볼사람', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
 
 const sbc = () => SupabaseStore.client;
 const myMember = () => members.find(m => m.name === me);
@@ -106,7 +107,7 @@ function rowHtml(r){
     <td>${esc(r.edu || '')}</td>
     <td>${esc(r.salary_wish || '')}</td>
     <td class="num">${md(r.applied_at)}</td>
-    <td><span class="rs rs-${esc(r.result)}">${esc(r.result === '탈락예정' ? '탈락 예정' : r.result)}</span></td>
+    <td><span class="rs rs-${esc(r.result)}">${esc(r.result === '탈락예정' ? '불합격' : r.result)}</span></td>
     <td><ul class="why">${why || '<li class="note">기준에 걸리는 점 없음</li>'}</ul>${r.memo ? `<div class="sub">메모: ${esc(r.memo)}</div>` : ''}</td>
     <td>${isDecided ? `<span class="st st-${esc(r.status)}">${esc(r.status)}</span><div class="site">${esc(r.decided_by || '')} ${r.decided_at ? fmtDateTime(r.decided_at) : ''}${r.site_done ? '<br>' + esc(r.site) + ': ' + esc(r.site_done) : ''}</div>` : ''}
       <div class="bt" style="margin-top:${isDecided ? 4 : 0}px">
@@ -135,7 +136,7 @@ function critHtml(){
       </ul>
       <div class="sub" style="margin-top:6px">희망연봉은 금액을 적은 경우만 봅니다("회사내규에 따름"·"면접 후 결정"은 통과).</div></div>
     </div>
-    <div class="cn"><b>처리 방식</b> · 기준에 맞는 사람(통과)만 사람인 <b>1차 면접</b> / 잡코리아 <b>면접</b> 단계로 옮깁니다. 불합격 처리와 안내 발송은 하지 않고, 나머지는 서류 단계에 그대로 둡니다.<br>
+    <div class="cn"><b>처리 방식</b> · 공통 탈락 조건에 걸리면 이 화면에서 <b>불합격</b>으로 분류합니다(분류만, 사이트에는 반영 안 함). 기준에 맞는 사람(통과)만 사람인 <b>1차 면접</b> / 잡코리아 <b>면접</b> 단계로 옮깁니다. 불합격 처리와 안내 발송은 하지 않고, 나머지는 서류 단계에 그대로 둡니다.<br>
       <b>나이</b> · 프로그램은 나이로 통과·탈락을 가르지 않습니다. 위 나이 기준은 아래 목록의 <b>"나이 ○세 이하"</b> 칸과 나이 정렬로 직접 보세요.<br>
       <b>애매</b> · 첨부 파일(PDF) 이력서, 직무를 알 수 없는 공고("직무별 담당자"), 학력·이직 횟수가 경계선인 경우.</div>
   </details>`;
@@ -148,8 +149,8 @@ function sumHtml(){
   const n = (j, f) => ROWS.filter(r => (r.job || '') === j && f(r)).length;
   const line = j => { const total = n(j, () => true); if (!total) return '';
     return `<tr><th>${j || '직무 미정'}</th><td class="num">${total}</td><td class="num"><b>${n(j, r => r.status === '면접')}</b></td><td class="num">${n(j, r => r.result === '통과' && r.status !== '면접')}</td><td class="num">${n(j, r => r.result === '애매' && r.status !== '면접')}</td><td class="num">${n(j, r => r.result === '탈락예정' && r.status !== '면접')}</td></tr>`; };
-  return `<div class="sum"><table><thead><tr><th>직무</th><th>지원자</th><th>1차 면접으로 보냄</th><th>통과(아직 서류)</th><th>애매</th><th>탈락 예정</th></tr></thead><tbody>${jobs.map(line).join('')}</tbody></table>
-    <div class="sub">최근 ${days}일 지원자 기준 · 마지막으로 읽은 때 ${last ? fmtDateTime(last) : '-'} · 불합격 처리는 하지 않습니다. 애매·탈락 예정은 사람인 서류 전형에 그대로 있습니다.</div></div>`;
+  return `<div class="sum"><table><thead><tr><th>직무</th><th>지원자</th><th>1차 면접으로 보냄</th><th>통과(아직 서류)</th><th>애매</th><th>불합격(분류)</th></tr></thead><tbody>${jobs.map(line).join('')}</tbody></table>
+    <div class="sub">최근 ${days}일 지원자 기준 · 마지막으로 읽은 때 ${last ? fmtDateTime(last) : '-'} · '불합격'은 이 화면의 분류일 뿐 사이트에서는 불합격 처리하지 않습니다. 애매·불합격 분류는 서류 전형에 그대로 있습니다.</div></div>`;
 }
 
 function render(){
@@ -159,13 +160,13 @@ function render(){
   else if (ROWS === null) body = `<div class="empty">${loadErr ? '불러오지 못했습니다: ' + esc(loadErr) + (/function|does not exist|schema/i.test(loadErr) && isAdmin() ? '<br>sql-applicants.sql 을 Supabase SQL Editor 에서 실행하세요.' : '') : '불러오는 중…'}</div>`;
   else {
     const base = r => (!job || (job === '미정' ? !r.job : r.job === job)) && (decided === '전체' || (decided === '대기' ? (r.status || '대기') === '대기' : (r.status || '대기') !== '대기')) && (ageMax === '' || (r.age != null && r.age <= Number(ageMax)));
-    const inTab = (r, t) => t === '전체' || r.result === t;
+    const inTab = (r, t) => t === '전체' || (t === '볼사람' ? r.result !== '탈락예정' : r.result === t);
     const cnt = t => ROWS.filter(r => base(r) && inTab(r, t)).length;
     const val = r => sortKey === 'age' ? (r.age == null ? 999 : r.age) : sortKey === 'name' ? (r.name || '') : (r.applied_at || '');
     const list = ROWS.filter(r => base(r) && inTab(r, tab)).sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortDir);
     const th = (k, label) => `<th data-sort="${k}">${label}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
     body = `${sumHtml()}<div class="actions">
-        <div class="tabs2">${RESULTS.map(t => `<button data-tab="${t}" class="${tab === t ? 'on' : ''}">${t === '탈락예정' ? '탈락 예정' : t} ${cnt(t)}</button>`).join('')}<button data-tab="전체" class="${tab === '전체' ? 'on' : ''}">전체 ${cnt('전체')}</button></div>
+        <div class="tabs2">${RESULTS.map(t => `<button data-tab="${t}" class="${tab === t ? 'on' : ''}">${TAB_NAME[t] || t} ${cnt(t)}</button>`).join('')}<button data-tab="전체" class="${tab === '전체' ? 'on' : ''}">전체 ${cnt('전체')}</button></div>
         <select id="fjob"><option value="">직무 전체</option>${JOBS.map(j => `<option ${job === j ? 'selected' : ''}>${j}</option>`).join('')}<option value="미정" ${job === '미정' ? 'selected' : ''}>직무 미정</option></select>
         <select id="fdec">${[['대기', '결정 전'], ['결정', '결정한 것'], ['전체', '모두']].map(([v, l]) => `<option value="${v}" ${decided === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <label class="sub">나이 <input id="fage" type="number" min="18" max="70" placeholder="전체" value="${esc(ageMax)}"> 세 이하</label>
@@ -179,8 +180,8 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '📋', title: '채용공고' }) + `<main class="wrap" style="max-width:1200px">
     ${critHtml()}
     ${body}
-    <div class="hint" style="margin-top:12px">대표 PC 가 매일 사람인의 새 지원자를 읽어 기준에 따라 <b>통과 · 애매 · 탈락 예정</b>으로 나눠 올립니다. 이름을 누르면 사람인 이력서가 열립니다.
-    <b>'통과'인 사람은 대표 PC 가 사람인에서 1차 면접 단계로 바로 옮깁니다(안내 메일은 보내지 않음). 불합격 처리는 하지 않습니다.</b> 애매·탈락 예정은 서류 전형에 그대로 두니, 보시고 [면접]·[보류]로 표시해 주세요. 첨부 파일(PDF) 이력서와 직무를 알 수 없는 지원자는 프로그램이 못 읽어 '애매'로 올립니다.
+    <div class="hint" style="margin-top:12px">대표 PC 가 매일 사람인의 새 지원자를 읽어 기준에 따라 <b>통과 · 애매 · 불합격</b>으로 나눠 올립니다. <b>'불합격'은 공통 기준에 맞지 않는다는 이 화면의 분류이고, 사람인·잡코리아에서 실제로 불합격 처리한 것이 아닙니다</b>(지원자에게 아무것도 가지 않음). 기본 화면 '볼 사람'에는 불합격 분류를 뺀 사람만 나옵니다. 이름을 누르면 사람인 이력서가 열립니다.
+    <b>'통과'인 사람은 대표 PC 가 사람인에서 1차 면접 단계로 바로 옮깁니다(안내 메일은 보내지 않음). 사이트에서 불합격 처리는 하지 않습니다.</b> 애매·불합격 분류는 서류 전형에 그대로 두니, 보시고 [면접]·[보류]로 표시해 주세요. 첨부 파일(PDF) 이력서와 직무를 알 수 없는 지원자는 프로그램이 못 읽어 '애매'로 올립니다.
     나이는 판정에 쓰지 않습니다. 이름·나이·지원일 제목을 누르면 정렬됩니다.</div></main>`;
   const cd = document.querySelector('details.crit'); if (cd) cd.ontoggle = () => { critOpen = cd.open; try { localStorage.setItem('hire_crit', cd.open ? '1' : '0'); } catch (e) {} };
   bindHeader(() => {}, null, () => ROWS ? `결정 전 지원자 ${ROWS.filter(r => (r.status || '대기') === '대기').length}명` : '');
