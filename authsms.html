@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인증문자</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202611181509">
+<script src="common.js?v=202611181509"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .sp{flex:1}
+  .sub{font-size:12px;color:var(--fg3)}
+  .cards{display:grid;gap:10px}
+  .sms{border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;background:var(--bg);display:grid;grid-template-columns:auto 1fr auto;gap:6px 16px;align-items:center}
+  .sms.fresh{border-color:#93c5fd;background:#eff6ff}
+  .sms.old{opacity:.6}
+  .sms .code{font-size:30px;font-weight:800;letter-spacing:3px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .sms .code.none{font-size:14px;font-weight:600;letter-spacing:0;color:var(--fg3)}
+  .sms .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--fg3)}
+  .sms .body{grid-column:1 / -1;font-size:13px;color:var(--fg2);white-space:pre-wrap;word-break:break-all;line-height:1.6}
+  .ph{font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap;background:#f4f4f5;color:#52525b}
+  .ph-식이해법{background:#dcfce7;color:#15803d}.ph-피에이치뷰티{background:#e0e7ff;color:#3730a3}
+  .ago.fresh{color:#1d4ed8;font-weight:700}
+  .allow{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;padding:6px 0}
+  .allow label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;width:auto;font-size:13px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--bg)}
+  .allow label:has(input:checked){background:#dbeafe;border-color:#93c5fd}
+  .allow label.adm{color:var(--fg3);background:var(--bg2)!important;border-color:var(--line)!important}
+  @media (max-width:520px){ .sms{grid-template-columns:1fr auto} .sms .meta{grid-column:1 / -1;grid-row:1} .sms .code{font-size:26px} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   인증문자 — 사무실 아이폰 2대(식이해법 · 피에이치뷰티 정산/세금용)에 온 인증 문자 (2026-11-19)
+   아이폰 단축어 자동화가 '인증'이 든 문자를 as_in() 으로 보냄(서버가 '인증' + 숫자 있는 것만 받음). 설정 순서는 README.md.
+   정산·세금 계정의 2차 인증이라 잠긴 표(auth_sms, sql-auth-sms.sql)에 있고, 메모장과 같은 출입증(think_login)으로
+   관리자와 관리자가 지정한 사람만 읽음. 24시간 지난 문자는 서버가 지움. 5초마다 새로 읽음(탭이 보일 때만).
+================================================================ */
+const TOKEN_KEY = 'think_token';
+const FRESH_MIN = 10;   // 이 시간(분) 안에 온 문자는 파랗게 강조. 인증번호는 보통 3~5분이면 못 씀
+let ROWS = null, VIEWERS = [], AM_ADMIN = false, loadErr = '', loading = false, phone = '', lastTop = null, timer = null;
+
+const sbc = () => SupabaseStore.client;
+const myMember = () => members.find(m => m.name === me);
+const tokenOf = m => { try { return localStorage.getItem(TOKEN_KEY + '_' + m.id) || ''; } catch (e) { return ''; } };
+async function token(){
+  const m = myMember(); if (!m) return '';
+  let t = tokenOf(m); if (t) return t;
+  const { data, error } = await sbc().rpc('think_login', { p_member: m.id, p_pin: m.password || '1234' });
+  if (error || !data || !data.ok) throw new Error('출입증을 받지 못했습니다' + (data && data.err ? ` (${data.err})` : ''));
+  try { localStorage.setItem(TOKEN_KEY + '_' + m.id, data.token); } catch (e) {}
+  return data.token;
+}
+async function call(name, args, retry = true){
+  const { data, error } = await sbc().rpc(name, { p_token: await token(), ...args });
+  if (error) throw error;
+  if (data && data.ok === false && data.err === 'session' && retry) { const m = myMember(); try { localStorage.removeItem(TOKEN_KEY + '_' + m.id); } catch (e) {} return call(name, args, false); }
+  if (data && data.ok === false) throw new Error(data.err);
+  return data;
+}
+async function load(quiet){
+  if (loading || store !== SupabaseStore || !myMember()) return;
+  if (document.querySelector('#modal > *')) return;   // 창이 열려 있을 때는 건드리지 않음
+  loading = true;
+  try {
+    const d = await call('as_list', {});
+    ROWS = d.rows || []; VIEWERS = d.viewers || []; AM_ADMIN = !!d.admin; loadErr = '';
+    const top = ROWS.length ? ROWS[0].id : 0;
+    if (quiet && lastTop !== null && top > lastTop) toast('새 인증문자가 왔습니다');
+    lastTop = top;
+  } catch (e) { loadErr = e.message || String(e); }
+  loading = false; render();
+}
+
+/* 본문에서 인증번호 뽑기: 4~8자리 숫자 중 '인증'이라는 낱말에 가장 가까운 것. 전화번호(1588-1234)·금액(12,000) 조각은 뺌 */
+function codeOf(body){
+  const s = String(body || ''), at = s.indexOf('인증'), re = /(?<![\d,.\-])\d{4,8}(?![\d,\-]|\.\d)/g;
+  let m, best = null, bd = 1e9;
+  while ((m = re.exec(s))) {
+    if (/^(19|20)\d{2}$/.test(m[0]) && /^\s*[년.\/-]/.test(s.slice(m.index + 4))) continue;   // 2026년 · 2026.11
+    const d = at < 0 ? m.index : Math.min(Math.abs(m.index - at), Math.abs(m.index + m[0].length - at));
+    if (d < bd) { bd = d; best = m[0]; }
+  }
+  return best;
+}
+const minsAgo = iso => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+const agoText = n => n < 1 ? '방금' : n < 60 ? `${n}분 전` : `${Math.floor(n / 60)}시간 ${n % 60}분 전`;
+const hm = iso => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+function cardHtml(r){
+  const code = codeOf(r.body), n = minsAgo(r.received_at), fresh = n < FRESH_MIN;
+  return `<div class="sms ${fresh ? 'fresh' : 'old'}">
+    <div class="code ${code ? '' : 'none'}">${code ? esc(code) : '번호를 못 찾음'}</div>
+    <div class="meta"><span class="ph ph-${esc(r.phone || '')}">${esc(r.phone || '핸드폰 미지정')}</span>
+      <span class="ago ${fresh ? 'fresh' : ''}">${agoText(n)}</span><span>${hm(r.received_at)}</span>${r.sender ? `<span>${esc(r.sender)}</span>` : ''}
+      ${fresh ? '' : '<span>· 시간이 지나 못 쓸 수 있음</span>'}</div>
+    ${code ? `<button class="btn ${fresh ? 'primary' : ''}" data-copy="${esc(code)}">복사</button>` : '<span></span>'}
+    <div class="body">${esc(r.body)}</div>
+  </div>`;
+}
+
+function render(){
+  let body;
+  if (store !== SupabaseStore) body = '<div class="empty">팀 저장소에 연결되지 않았습니다.</div>';
+  else if (ROWS === null && loadErr === 'denied') body = '<div class="empty">볼 수 있는 사람으로 지정되지 않았습니다.<br>관리자에게 요청해 주세요.</div>';
+  else if (ROWS === null) body = `<div class="empty">${loadErr ? '불러오지 못했습니다: ' + esc(loadErr) + (/function|does not exist|schema/i.test(loadErr) && isAdmin() ? '<br>sql-auth-sms.sql 을 Supabase SQL Editor 에서 실행하세요.' : '') : '불러오는 중…'}</div>`;
+  else {
+    const phones = [...new Set(ROWS.map(r => r.phone || '').filter(Boolean))];
+    const list = ROWS.filter(r => !phone || (r.phone || '') === phone);
+    body = `<div class="actions">
+        <select id="fphone"><option value="">핸드폰 전체</option>${phones.map(p => `<option ${phone === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+        <span class="sub">5초마다 자동으로 새로 읽습니다</span><span class="sp"></span>
+        ${AM_ADMIN ? '<button class="btn" id="viewersBtn">볼 수 있는 사람</button>' : ''}
+        <button class="btn" id="reloadBtn">새로고침</button>
+      </div>
+      ${loadErr ? `<div class="hint warn">⚠ ${esc(loadErr)}</div>` : ''}
+      ${list.length ? `<div class="cards">${list.map(cardHtml).join('')}</div>` : '<div class="empty">최근 24시간 동안 온 인증문자가 없습니다.</div>'}`;
+  }
+  $('#app').innerHTML = headerHtml({ icon: '🔑', title: '인증문자' }) + `<main class="wrap" style="max-width:760px">
+    ${body}
+    <div class="hint" style="margin-top:12px">사무실 핸드폰(식이해법 · 피에이치뷰티)에 온 문자 중 <b>'인증'이라는 낱말과 숫자가 들어 있는 것</b>만 올라옵니다. 최근 ${FRESH_MIN}분 안에 온 문자는 파랗게 보이고, 24시간이 지나면 지워집니다.
+    정산·세금 계정에 들어가는 번호라 관리자와 관리자가 지정한 사람만 볼 수 있습니다. 문자가 안 올라오면 핸드폰이 와이파이에 연결돼 있는지 확인해 주세요.</div></main>`;
+  bindHeader(() => {}, null, () => '');
+  const fp = $('#fphone'); if (fp) fp.onchange = () => { phone = fp.value; render(); };
+  const rb = $('#reloadBtn'); if (rb) rb.onclick = () => load();
+  const vb = $('#viewersBtn'); if (vb) vb.onclick = openViewers;
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast(`${b.dataset.copy} 복사했습니다`); }
+    catch (e) { toast('복사하지 못했습니다. 번호를 직접 적어 주세요.', true); }
+  });
+  if (ROWS === null && !loading && !loadErr) load();
+  if (!timer) timer = setInterval(() => { if (document.visibilityState === 'visible' && (ROWS !== null || loadErr !== 'denied')) load(true); }, 5000);
+}
+
+function openViewers(){
+  openModal(`${modalHead('인증문자를 볼 수 있는 사람')}
+    <div class="mb">
+      <div class="hint">체크한 사람만 이 화면에서 인증번호를 볼 수 있습니다. 관리자는 항상 볼 수 있습니다.</div>
+      <div class="allow">${members.map(m => `<label class="${m.role === 'admin' ? 'adm' : ''}"><input type="checkbox" data-v="${esc(m.id)}" ${m.role === 'admin' ? 'checked disabled' : (VIEWERS.includes(String(m.id)) ? 'checked' : '')}> ${esc(fullName(m.name))}</label>`).join('')}</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="vSave">저장</button></div>`);
+  $('#vSave').onclick = async () => {
+    const ids = [...document.querySelectorAll('[data-v]:checked:not(:disabled)')].map(el => el.dataset.v);
+    try { await call('as_viewers_set', { p_members: ids }); VIEWERS = ids; closeModal(); toast('저장했습니다'); }
+    catch (e) { toast('저장 실패: ' + (e.message || e), true); }
+  };
+}
+
+boot({ icon: '🔑', title: '인증문자', tables: [], render });
+</script>
+</body>
+</html>
