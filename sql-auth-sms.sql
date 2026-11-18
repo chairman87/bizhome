@@ -78,7 +78,7 @@ declare m uuid := think_who(p_token);
 begin
   if m is null then return jsonb_build_object('ok', false, 'err', 'session'); end if;
   if not exists (select 1 from members where id::text = m::text and role = 'admin') then return jsonb_build_object('ok', false, 'err', 'admin'); end if;
-  delete from auth_sms_viewers;
+  delete from auth_sms_viewers where true;   -- Supabase 는 조건 없는 delete 를 막음
   insert into auth_sms_viewers(member)
   select distinct v from jsonb_array_elements_text(coalesce(p_members, '[]'::jsonb)) v
    where exists (select 1 from members where id::text = v);
