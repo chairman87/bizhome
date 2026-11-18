@@ -45,12 +45,12 @@
    채용공고 — 사람인(나중에 잡코리아) 지원자를 대표가 정한 기준으로 미리 나눠 둔 목록 (2026-11-18)
    대표 PC(lemon803)의 APPLICANT-SCREEN/screen.py 가 매일 새 지원자를 읽어 통과 / 탈락예정 / 애매 로 나눠 넣음. 기준은 APPLICANT-SCREEN/rules.py.
    지원자 개인정보라 잠긴 표(applicants, sql-applicants.sql)에 있고, 메모장·카톡 주문과 같은 출입증(think_login)으로만 읽고 고침.
-   사람이 [면접]·[불합격]·[보류]를 눌러 최종 결정함. 나이는 자동 판정에 쓰지 않고 칸으로만 보여 줌(정렬·필터는 사람이 함).
+   '통과'는 PC 가 사람인 1차 면접 단계로 옮기고 '면접'으로 올림(decided_by='자동'). 불합격 처리는 없음(2026-11-18 대표 지시). 애매·탈락예정은 사람이 [면접]·[보류]로 표시. 나이는 자동 판정에 쓰지 않고 칸으로만 보여 줌(정렬·필터는 사람이 함).
 ================================================================ */
 const RESULTS = ['통과', '애매', '탈락예정'];
 const JOBS = ['마케팅', '경영지원', '고객지원'];
 const TOKEN_KEY = 'think_token';
-let ROWS = null, loadErr = '', tab = '통과', job = '', decided = '대기', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
+let ROWS = null, loadErr = '', tab = '통과', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
 
 const sbc = () => SupabaseStore.client;
 const myMember = () => members.find(m => m.name === me);
@@ -99,7 +99,7 @@ function rowHtml(r){
     <td>${isDecided ? `<span class="st st-${esc(r.status)}">${esc(r.status)}</span><div class="site">${esc(r.decided_by || '')} ${r.decided_at ? fmtDateTime(r.decided_at) : ''}${r.site_done ? '<br>' + esc(r.site) + ': ' + esc(r.site_done) : ''}</div>` : ''}
       <div class="bt" style="margin-top:${isDecided ? 4 : 0}px">
         ${isDecided ? `<button data-st="대기" data-sid="${esc(r.id)}">되돌리기</button>`
-          : `<button data-st="면접" data-sid="${esc(r.id)}">면접</button><button data-st="불합격" data-sid="${esc(r.id)}">불합격</button><button data-st="보류" data-sid="${esc(r.id)}">보류</button>`}
+          : `<button data-st="면접" data-sid="${esc(r.id)}" title="면접 볼 사람으로 표시(사람인 단계는 직접 옮겨 주세요)">면접</button><button data-st="보류" data-sid="${esc(r.id)}">보류</button>`}
         <button data-memo="${esc(r.id)}">메모</button></div></td>
   </tr>`;
 }
@@ -130,7 +130,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '📋', title: '채용공고' }) + `<main class="wrap" style="max-width:1200px">
     ${body}
     <div class="hint" style="margin-top:12px">대표 PC 가 매일 사람인의 새 지원자를 읽어 기준에 따라 <b>통과 · 애매 · 탈락 예정</b>으로 나눠 올립니다. 이름을 누르면 사람인 이력서가 열립니다.
-    <b>판정은 프로그램이 한 것이고, 결정은 사람이 [면접]·[불합격]·[보류]로 누릅니다.</b> 첨부 파일(PDF) 이력서와 직무를 알 수 없는 지원자는 프로그램이 못 읽어 '애매'로 올립니다.
+    <b>'통과'인 사람은 대표 PC 가 사람인에서 1차 면접 단계로 바로 옮깁니다(안내 메일은 보내지 않음). 불합격 처리는 하지 않습니다.</b> 애매·탈락 예정은 서류 전형에 그대로 두니, 보시고 [면접]·[보류]로 표시해 주세요. 첨부 파일(PDF) 이력서와 직무를 알 수 없는 지원자는 프로그램이 못 읽어 '애매'로 올립니다.
     나이는 판정에 쓰지 않습니다. 이름·나이·지원일 제목을 누르면 정렬됩니다.</div></main>`;
   bindHeader(() => {}, null, () => ROWS ? `결정 전 지원자 ${ROWS.filter(r => (r.status || '대기') === '대기').length}명` : '');
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });

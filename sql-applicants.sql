@@ -3,7 +3,8 @@
 --
 --  대표 PC(lemon803)의 APPLICANT-SCREEN/screen.py 가 매일 사람인(나중에 잡코리아)의 새 지원자를 읽어
 --  대표가 정한 기준(APPLICANT-SCREEN/rules.py)으로 통과 / 탈락예정 / 애매 로 나눠 이 표에 넣습니다.
---  화면(인사 > 채용공고)에서 사유를 보고 사람이 최종 결정을 누릅니다.
+--  '통과'인 사람은 PC 가 사람인에서 1차 면접 단계로 옮기고 여기에 '면접'으로 표시합니다. 불합격 처리는 하지 않습니다(2026-11-18 대표 지시).
+--  나머지(애매·탈락예정)는 대표가 화면에서 사유를 보고 직접 정합니다.
 --
 --  지원자 개인정보라 카톡 주문(sql-kakao-orders.sql)과 같은 방식으로 잠가 둡니다:
 --    · 규칙(policy)을 하나도 만들지 않음 = 공개키로는 읽기·쓰기 모두 막힘
@@ -60,11 +61,15 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare n int;
 begin
   if not ap_pc_ok(p_token) then return jsonb_build_object('ok', false, 'err', 'forbidden'); end if;
-  insert into applicants (id, site, rec_id, posting, job, name, age, career, last_company, edu, salary_wish, has_photo, file_resume, applied_at, link, result, reasons, notes)
+  insert into applicants (id, site, rec_id, posting, job, name, age, career, last_company, edu, salary_wish, has_photo, file_resume, applied_at, link, result, reasons, notes,
+                          status, decided_by, decided_at, site_done, site_done_at)
   select r->>'id', r->>'site', r->>'rec_id', left(r->>'posting', 200), r->>'job', left(r->>'name', 50), nullif(r->>'age', '')::int,
          left(r->>'career', 60), left(r->>'last_company', 100), left(r->>'edu', 100), left(r->>'salary_wish', 80),
          (r->>'has_photo')::boolean, coalesce((r->>'file_resume')::boolean, false), nullif(r->>'applied_at', '')::date, r->>'link',
-         r->>'result', coalesce(r->'reasons', '[]'::jsonb), coalesce(r->'notes', '[]'::jsonb)
+         r->>'result', coalesce(r->'reasons', '[]'::jsonb), coalesce(r->'notes', '[]'::jsonb),
+         -- PC 가 통과자를 사람인 1차 면접 단계로 옮겼으면 status='면접'·site_done 을 함께 보냄 (2026-11-18)
+         case when r->>'status' = '면접' then '면접' else '대기' end, case when r->>'status' = '면접' then '자동' end, case when r->>'status' = '면접' then now() end,
+         left(r->>'site_done', 200), case when r ? 'site_done' then now() end
     from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) r
   on conflict (id) do update set
     job = excluded.job, age = excluded.age, career = excluded.career, last_company = excluded.last_company, edu = excluded.edu,
