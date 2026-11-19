@@ -54,6 +54,10 @@
 - 대화(2026-10-28): 대상을 하나 고르고 클로드와 글로 주고받으며 고침("지금 어떻게 돼 있어?"도 됨). lemon803 의 chat_worker.py 가 30초~2분 안에 답. 관리자가 고치라고 한 것은 즉시 반영되고(지금 Claude 와 대화하듯), 직원 대화는 복사본에 쌓였다가 **반영 요청** → 관리자 승인 뒤 적용. 작업 현황의 줄을 눌러도 바로 그 작업과의 대화가 열림. 표: `sql-routines-chat.sql` (routine_chats / routine_chat_messages)
 - 수정요청 흐름: 요청 → lemon803 의 클로드가 고침(10분 안에) → 검토대기(관리자가 "바꾼 내용"을 보고 승인/반려) → 반영완료. 인트라넷은 승인 1~2분 뒤 phb.kr 반영. 승인 전에는 아무것도 안 바뀜
 - 관리자만 보기(🔒) 작업은 직원에게 목록·기록·요청 어디에도 안 보임. 관리자는 줄을 열어 "설정"에서 담당자·관리자만 보기·설명을 고침
+- **대화·수정요청 잠금(2026-11-19)**: 예전에는 대화·메시지·수정요청 표가 공개키로 쓰여서, 밖에서 관리자 이름을 적은 글이나 '승인'된 요청을 넣으면 lemon803 의 클로드가 그대로 반영했습니다. 지금은 세 표가 공개키로는 **읽기만** 되고, 쓰기는 전부 서버 함수 `rt_*` 가 합니다(`sql-routines-lock-1.sql` 함수 · `sql-routines-lock-2.sql` 잠그기).
+  - 화면은 `rt('rt_chat_send' …)` 처럼 로그인 출입증(`bzToken()`)으로 부릅니다: `rt_chat_send`(글 보내기·대화 만들기) · `rt_chat_apply`(반영: 관리자=바로 승인, 직원=검토대기) · `rt_chat_close` · `rt_chat_delete`(관리자) · `rt_req_new` · `rt_req_remove` · `rt_req_review`(승인/반려, 관리자만) · `rt_req_comment`. 글쓴이·승인한 사람(이름과 번호 `author_id`·`requester_id`·`reviewer_id`)은 서버가 적습니다.
+  - 이 세 표에는 `saveRow`·`removeRow`·`insert` 를 쓰지 않습니다(막혀 있어 "저장 실패"가 뜸). 읽기와 실시간 갱신은 예전 그대로입니다.
+  - lemon803 의 처리기는 PC 전용 열쇠로 `rt_pc_*` 함수를 부릅니다. 작업 목록·실행 기록(routines · routine_runs)은 예전처럼 공개키로 읽고 쓰는 표입니다(처리기는 고칠 폴더를 이 표가 아니라 routines.json 에서 읽음).
 - lemon803 쪽 프로그램(결과 보고 report.py, 처리기 process_requests.py, 설치)은 `클로드코드\ROUTINE-BOARD\README.md`
 
 ### 광고 영상 리스트 (`ads.html`) — 성과(CPA·ROAS)·영상 리뷰 (2026-11-09)
