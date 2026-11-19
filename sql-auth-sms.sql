@@ -7,7 +7,7 @@
 --  인증번호는 정산·세금 계정의 2차 인증이라 은행 문자(sql-bank-sms.sql)·채용공고(sql-applicants.sql)처럼 잠가 둡니다:
 --    · 규칙(policy)을 하나도 만들지 않음 = 공개키로는 읽기·쓰기 모두 막힘
 --    · 아이폰은 전용 열쇠로 as_in 만 부름. 여기에는 열쇠의 지문(sha256)만 적음(열쇠는 맥북 ~/.claude/auth-sms/token.txt)
---    · 읽기는 메모장과 같은 출입증(think_login → think_who, sql-think-pin.sql)으로, 관리자와 관리자가 지정한 사람만
+--    · 읽기는 메모장과 같은 출입증(think_login → think_who, sql-think-pin.sql)으로, 관리자·운영진(members.ops)과 관리자가 지정한 사람만
 --  본문에 '인증'이 있고 숫자가 있는 문자만 받습니다. 받은 지 24시간 지난 줄은 다음 문자가 올 때 지웁니다.
 --
 --  Supabase 대시보드 → SQL Editor 에 붙여넣고 Run 하세요. 여러 번 실행해도 됩니다. (sql-think-pin.sql 이 먼저 실행돼 있어야 함)
@@ -53,6 +53,7 @@ end $$;
 create or replace function as_can(m uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from members where id::text = m::text and role = 'admin')
+      or exists (select 1 from members where id::text = m::text and ops is true)   -- 운영진(sql-members-ops.sql, 2026-11-19)
       or exists (select 1 from auth_sms_viewers where member = m::text)
 $$;
 revoke all on function as_can(uuid) from public, anon, authenticated;

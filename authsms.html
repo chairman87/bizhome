@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인증문자</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611181509">
-<script src="common.js?v=202611181509"></script>
+<link rel="stylesheet" href="common.css?v=202611190930">
+<script src="common.js?v=202611190930"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .sp{flex:1}
@@ -124,7 +124,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '🔑', title: '인증문자' }) + `<main class="wrap" style="max-width:760px">
     ${body}
     <div class="hint" style="margin-top:12px">사무실 핸드폰(식이해법 · 피에이치뷰티)에 온 문자 중 <b>'인증'이라는 낱말과 숫자가 들어 있는 것</b>만 올라옵니다. 최근 ${FRESH_MIN}분 안에 온 문자는 파랗게 보이고, 24시간이 지나면 지워집니다.
-    정산·세금 계정에 들어가는 번호라 관리자와 관리자가 지정한 사람만 볼 수 있습니다. 문자가 안 올라오면 핸드폰이 와이파이에 연결돼 있는지 확인해 주세요.</div></main>`;
+    정산·세금 계정에 들어가는 번호라 관리자·운영진과 관리자가 지정한 사람만 볼 수 있습니다. 문자가 안 올라오면 핸드폰이 와이파이에 연결돼 있는지 확인해 주세요.</div></main>`;
   bindHeader(() => {}, null, () => '');
   const fp = $('#fphone'); if (fp) fp.onchange = () => { phone = fp.value; render(); };
   const rb = $('#reloadBtn'); if (rb) rb.onclick = () => load();
@@ -140,8 +140,8 @@ function render(){
 function openViewers(){
   openModal(`${modalHead('인증문자를 볼 수 있는 사람')}
     <div class="mb">
-      <div class="hint">체크한 사람만 이 화면에서 인증번호를 볼 수 있습니다. 관리자는 항상 볼 수 있습니다.</div>
-      <div class="allow">${members.map(m => `<label class="${m.role === 'admin' ? 'adm' : ''}"><input type="checkbox" data-v="${esc(m.id)}" ${m.role === 'admin' ? 'checked disabled' : (VIEWERS.includes(String(m.id)) ? 'checked' : '')}> ${esc(fullName(m.name))}</label>`).join('')}</div>
+      <div class="hint">관리자와 운영진(팀원 관리에서 지정)은 항상 볼 수 있습니다. 그 밖에 보여 줄 사람만 여기서 체크합니다.</div>
+      <div class="allow">${members.map(m => `<label class="${(m.role === 'admin' || m.ops === true) ? 'adm' : ''}"><input type="checkbox" data-v="${esc(m.id)}" ${(m.role === 'admin' || m.ops === true) ? 'checked disabled' : (VIEWERS.includes(String(m.id)) ? 'checked' : '')}> ${esc(fullName(m.name))}${m.ops === true && m.role !== 'admin' ? ' · 운영진' : ''}</label>`).join('')}</div>
     </div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="vSave">저장</button></div>`);
   $('#vSave').onclick = async () => {

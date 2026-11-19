@@ -177,7 +177,7 @@ async function checkAccess(){
     const row = rows.find(r => decodeURIComponent(r.href || '') === key);
     const allowed = row && Array.isArray(row.allowed) ? row.allowed : [];
     const locked = allowed.length || ADMIN_ONLY_PAGES.includes(location.pathname.split('/').pop());
-    accessState = (locked && !isAdmin() && !allowed.includes(me)) ? 'denied' : 'ok';
+    accessState = (locked && !isAdmin() && !allowedFor(allowed)) ? 'denied' : 'ok';
   } catch { accessState = (ADMIN_ONLY_PAGES.includes(location.pathname.split('/').pop()) && !isAdmin()) ? 'denied' : 'ok'; }   // 메뉴를 못 읽으면 관리자 전용 화면만 막음
   renderApp();
 }
@@ -233,6 +233,11 @@ async function removeRow(table, id){
 /* 관리자: 메뉴 편집, 팀원 삭제, 관리자 지정 가능. 처음 등록한 사람이 자동으로 관리자 */
 const isAdmin = () => { const m = members.find(x => x.name === me); return !!(m && m.role === 'admin'); };
 const admins = () => members.filter(m => m.role === 'admin');
+/* 운영진 그룹 (2026-11-19): 관리자가 팀원 관리에서 지정(members.ops, sql-members-ops.sql). 메뉴의 '볼 수 있는 사람'에 OPS 를 넣으면 운영진 전원에게 보임 → 사람이 바뀌어도 메뉴를 하나씩 고치지 않음 */
+const OPS = '@운영진';
+const isOps = (name = me) => members.some(m => m.name === name && m.ops === true);
+const allowedFor = (allowed, name = me) => Array.isArray(allowed) && (allowed.includes(name) || (allowed.includes(OPS) && isOps(name)));
+const allowedLabel = a => a === OPS ? '운영진' : a;
 /* 비밀번호: 처음은 1234. 1234인 상태로 로그인하면 바꾸는 화면이 먼저 뜸 */
 const DEFAULT_PW = '1234';
 const pwOf = m => m.password || DEFAULT_PW;            // 비밀번호가 비어 있으면 초기값
@@ -309,6 +314,12 @@ async function setRole(id, role){
   const m = members.find(x => x.id === id); if (!m) return;
   if (m.role === 'admin' && role !== 'admin' && admins().length <= 1) { toast('관리자가 최소 한 명은 있어야 합니다', true); return; }
   await saveRow('members', { ...m, role });
+}
+async function setOps(id, on){
+  if (!isAdmin()) { toast('관리자만 할 수 있습니다', true); return; }
+  const m = members.find(x => x.id === id); if (!m) return;
+  await saveRow('members', { ...m, ops: !!on });
+  toast(`${m.name}님을 운영진${on ? '으로 지정했습니다' : '에서 뺐습니다'}`);
 }
 /* 예전 데이터에 관리자가 없으면 첫 팀원을 관리자로 */
 async function ensureAdmin(){
@@ -571,19 +582,20 @@ function commentsHtml(list){
 let showPw = false;   // 관리자 화면에서 비밀번호 보이기 상태
 function openMembers(counter){
   const admin = isAdmin();
-  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${!admin && m.title ? ' <span class="cnt">' + esc(m.title) + '</span>' : ''}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
+  const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${!admin && m.title ? ' <span class="cnt">' + esc(m.title) + '</span>' : ''}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.ops === true ? ' ' + tag('운영진', '#dbeafe', '#1d4ed8') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
       ${admin ? `<input value="${esc(m.title || '')}" data-title="${m.id}" placeholder="직급" maxlength="20" style="width:80px;border:1px solid var(--line2);border-radius:4px;padding:3px 6px;font-size:13px" title="직급 (예: 주임, 대리, 과장)">` : ''}
       ${admin ? `<span class="cnt" style="min-width:110px;font-family:monospace" title="비밀번호">${mustChangePw(m) ? '<span style="color:var(--orange)">1234 (초기)</span>' : (showPw ? esc(pwOf(m)) : '••••••')}</span>` : ''}
       <span class="cnt">${counter ? esc(counter(m)) : ''}</span>
       ${m.name === me ? `<button class="btn sm" data-pw="${m.id}">내 비밀번호 바꾸기</button>` : ''}
       ${admin && m.name !== me ? `<button class="btn sm" data-reset="${m.id}" ${mustChangePw(m) ? 'disabled' : ''} title="1234로 되돌리기">초기화</button>` : ''}
+      ${admin ? `<button class="btn sm" data-ops="${m.id}" data-on="${m.ops === true ? '' : '1'}" title="운영진이면 '운영진'으로 지정된 메뉴와 인증문자가 보입니다">${m.ops === true ? '운영진 해제' : '운영진 지정'}</button>` : ''}
       ${admin && m.name !== me ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
       <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button>` : ''}</div>`).join('');
   openModal(`${modalHead('팀원 관리', admin ? `<button class="btn sm" id="mmShowPw">${showPw ? '🙈 비밀번호 가리기' : '👁 비밀번호 보기'}</button>` : '')}
     <div class="mb">
       <div>${rows || '<span class="hint">팀원이 없습니다</span>'}</div>
       ${admin ? `<div class="addrow" style="justify-content:flex-start"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><button class="btn" id="mmAdd">추가</button><span class="hint">새 팀원은 비밀번호 1234로 시작합니다</span></div>` : ''}
-      <div class="hint">${admin ? '"1234 (초기)"인 사람은 아직 로그인해서 비밀번호를 바꾸지 않은 사람입니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
+      <div class="hint">${admin ? '"1234 (초기)"인 사람은 아직 로그인해서 비밀번호를 바꾸지 않은 사람입니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요. <b>운영진</b>으로 지정한 사람은 메뉴 편집에서 \'운영진\'으로 묶은 메뉴와 인증문자를 봅니다. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
     </div>
     <div class="mf"><button class="btn left" id="mmLogout">로그아웃</button><button class="btn primary" data-close>닫기</button></div>`, { wide: admin });
   $('#mmLogout').onclick = () => { closeModal(); logout(); };
@@ -596,6 +608,7 @@ function openMembers(counter){
   document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { const m = members.find(x => x.id === b.dataset.pw); closeModal(); openSetPassword(m, { after: () => openMembers(counter) }); });
   document.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { const m = members.find(x => x.id === b.dataset.reset); if (m && confirm(`${m.name}님 비밀번호를 1234로 초기화할까요?\n다음 로그인 때 새 비밀번호를 정하게 됩니다.`)) { await setPassword(m.id, DEFAULT_PW); openMembers(counter); } });
   document.querySelectorAll('[data-role]').forEach(b => b.onclick = async () => { await setRole(b.dataset.role, b.dataset.to); openMembers(counter); });
+  document.querySelectorAll('[data-ops]').forEach(b => b.onclick = async () => { await setOps(b.dataset.ops, !!b.dataset.on); openMembers(counter); });
   document.querySelectorAll('[data-title]').forEach(inp => inp.onchange = async () => { const m = members.find(x => x.id === inp.dataset.title); if (!m) return; await saveRow('members', { ...m, title: inp.value.trim() || null }); toast(`${m.name}님 직급: ${inp.value.trim() || '없음'}`); });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const m = members.find(x => x.id === b.dataset.del);
