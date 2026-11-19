@@ -89,6 +89,9 @@
    관리자만 보기(admin_only)인 작업은 관리자가 아니면 목록·기록·요청·대화 어디에도 안 보임. 프로그램 쪽 설명은 클로드코드\ROUTINE-BOARD\README.md
 ================================================================ */
 const INTRANET = '인트라넷';
+/* 인트라넷 수정 요청 화면(2026-11-19): 메뉴 '계정관리 > 인트라넷 수정 요청'은 이 파일을 ?req=intranet 으로 엶.
+   자동작업 탭들은 감추고, 인트라넷 화면을 고쳐 달라는 요청만 올리고 보는 단순한 화면이 됨(요청 → 클로드가 고침 → 관리자 승인 → 반영, 길은 수정요청과 같음) */
+const REQ_ONLY = new URLSearchParams(location.search).get('req') === 'intranet';
 const KINDS = ['스케줄러', '클로드', '상시', '예정'];
 const KIND_LABEL = { 스케줄러: '윈도우 작업 스케줄러 (Claude 앱이 꺼져 있어도 돎)', 클로드: 'Claude 앱 예약작업 (lemon803 의 Claude 앱이 켜져 있어야 돎)', 상시: '항상 켜져 있는 프로그램', 예정: '아직 자동작업 없음 (자리만)' };
 const OPEN_STATES = ['요청', '처리중', '검토대기', '승인'];
@@ -96,7 +99,7 @@ const ST = { 요청: ['#e0e7ff', '#3730a3'], 처리중: ['#fef3c7', '#92400e'], 
 const RS = { 성공: ['#dcfce7', '#15803d'], 실패: ['#fee2e2', '#b91c1c'], 경고: ['#fef3c7', '#92400e'] };
 const stTag = s => ST[s] ? tag(s, ST[s][0], ST[s][1]) : tag(s || '?', '#f3f4f6', '#4b5563');
 const runTag = s => RS[s] ? tag(s, RS[s][0], RS[s][1]) : tag('기록 없음', '#f3f4f6', '#9ca3af');
-let view = 'board', reqTab = 'open', runKey = '', runLimit = 60;
+let view = REQ_ONLY ? 'requests' : 'board', reqTab = 'open', runKey = '', runLimit = 60;
 let RUNS = [], runsFor = null;   // 실행 기록은 필요한 만큼만 읽어 여기에 둠 (runsFor: 어떤 조건으로 읽었는지)
 let chatTarget = '', chatId = '', MSGS = [], chatDraft = '', msgCh = null, chatPoll = null;   // 대화 탭: 고른 대상, 열린 대화,   // 대화 탭: 열린 대화, 그 메시지(필요할 때만 읽음), 적다 만 글, 실시간 구독, 답 기다릴 때의 보조 새로고침
 const CS = { 반영대기: ['#ffedd5', '#9a3412'], 반영완료: ['#dcfce7', '#15803d'], 닫힘: ['#f3f4f6', '#4b5563'] };
@@ -106,7 +109,7 @@ const rel = iso => { if (!iso) return ''; const m = Math.round((Date.now() - new
 const R = () => (DATA.routines || []).filter(r => isAdmin() || !r.admin_only).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 const routineOf = key => (DATA.routines || []).find(r => r.key === key);
 const visibleKey = key => key === INTRANET || R().some(r => r.key === key);
-const REQS = () => (DATA.routine_requests || []).filter(q => visibleKey(q.target)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+const REQS = () => (DATA.routine_requests || []).filter(q => visibleKey(q.target) && (!REQ_ONLY || q.target === INTRANET)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 const late = r => { if (!r.enabled || !(r.expect_hours > 0) || r.report === 'none') return false; if (!r.last_run_at) return true; return Date.now() - new Date(r.last_run_at) > r.expect_hours * 3600000; };
 const canEdit = r => !!(r && r.repo_path);
 const CHATS = () => (DATA.routine_chats || []).filter(c => visibleKey(c.target)).sort((a, b) => String(b.last_message_at || b.created_at || '').localeCompare(String(a.last_message_at || a.created_at || '')));
@@ -159,10 +162,10 @@ function render(){
   const nChatWait = CHATS().filter(c => c.status === '반영대기').length;
   const tabs = [{ key: 'board', label: '작업 현황' }, { key: 'chat', label: '대화', badge: admin ? (nChatWait || '') : '', badgeTitle: '반영 승인을 기다리는 대화' }, { key: 'requests', label: '수정요청', badge: admin ? (nWait || '') : (nMine || ''), badgeTitle: admin ? '승인 기다리는 요청' : '진행 중인 내 요청' }, { key: 'runs', label: '실행 기록' }];
   const missing = !DATA.routines || !DATA.routine_requests;
-  $('#app').innerHTML = headerHtml({ icon: '🤖', title: '자동작업', tabs, active: view, newLabel: '대화 생성' }) + `<main class="wrap" style="max-width:1200px">
+  $('#app').innerHTML = headerHtml(REQ_ONLY ? { icon: '🛠️', title: '인트라넷 수정 요청', newLabel: '수정 요청' } : { icon: '🤖', title: '자동작업', tabs, active: view, newLabel: '대화 생성' }) + `<main class="wrap" style="max-width:1200px">
     ${missing ? `<div class="empty">자동작업 저장 표가 아직 없습니다.${admin ? '<br>Supabase SQL Editor 에서 <b>sql-routines.sql</b> 을 한 번 실행하세요.' : ''}</div>` : view === 'board' ? boardHtml() : view === 'requests' ? requestsHtml(reqs) : view === 'chat' ? chatHtml() : runsHtml()}
   </main>`;
-  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, openNewProject, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
+  bindHeader(v => { view = v; if (v === 'runs') refreshRuns(); render(); }, REQ_ONLY ? () => openNew(INTRANET) : openNewProject, m => { const n = REQS().filter(q => q.requester === m.name && OPEN_STATES.includes(q.status)).length; return n ? `진행 중인 수정요청 ${n}건` : ''; });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { reqTab = b.dataset.tab; render(); });
   bindChat();
   document.querySelectorAll('tr.r[data-key]').forEach(el => el.onclick = () => openChatModal(el.dataset.key));
@@ -197,9 +200,9 @@ function boardHtml(){
 function requestsHtml(all){
   const list = all.filter(q => reqTab === 'all' || (reqTab === 'mine' ? q.requester === me : OPEN_STATES.includes(q.status)));
   const nOpen = all.filter(q => OPEN_STATES.includes(q.status)).length;
-  return `<div class="actions"><div class="tabs2"><button data-tab="open" class="${reqTab === 'open' ? 'on' : ''}">진행 중 ${nOpen}</button><button data-tab="mine" class="${reqTab === 'mine' ? 'on' : ''}">내 요청 ${all.filter(q => q.requester === me).length}</button><button data-tab="all" class="${reqTab === 'all' ? 'on' : ''}">전체 ${all.length}</button></div></div>
+  return `${REQ_ONLY ? `<div class="hint" style="margin-bottom:12px">인트라넷(phb.kr) 화면에서 불편한 점, 고치고 싶은 점, 새로 필요한 화면을 적어 주세요. 오른쪽 위 <b>+ 수정 요청</b>을 누르면 됩니다. 올린 요청은 클로드가 먼저 고쳐 보고, 관리자가 확인한 뒤 반영합니다.</div>` : ''}<div class="actions"><div class="tabs2"><button data-tab="open" class="${reqTab === 'open' ? 'on' : ''}">진행 중 ${nOpen}</button><button data-tab="mine" class="${reqTab === 'mine' ? 'on' : ''}">내 요청 ${all.filter(q => q.requester === me).length}</button><button data-tab="all" class="${reqTab === 'all' ? 'on' : ''}">전체 ${all.length}</button></div></div>
     ${list.length ? `<div class="list">${list.map(q => `<div class="a" data-id="${q.id}">${stTag(q.status)}<div class="mid"><div class="t"><span class="src">${esc(q.target_label || q.target || '')}</span>${esc(q.title || '(제목 없음)')}</div><div class="d">${esc(q.requester || '')} · ${esc((q.status === '실패' ? (q.error || q.result) : q.result) || q.body || '')}</div></div><span class="m">${fmtDateTime(q.created_at)}</span></div>`).join('')}</div>`
-      : `<div class="empty">${reqTab === 'open' ? '진행 중인 수정요청이 없습니다.' : reqTab === 'mine' ? '내가 올린 수정요청이 없습니다.' : '아직 수정요청이 없습니다.'}<br><span class="hint">고칠 것은 <b>대화</b> 탭에서 클로드에게 바로 말하면 됩니다. 이 탭에는 직원 대화의 반영 요청(승인 대기)만 쌓입니다.</span></div>`}
+      : `<div class="empty">${reqTab === 'open' ? '진행 중인 수정요청이 없습니다.' : reqTab === 'mine' ? '내가 올린 수정요청이 없습니다.' : '아직 수정요청이 없습니다.'}${REQ_ONLY ? '' : '<br><span class="hint">고칠 것은 <b>대화</b> 탭에서 클로드에게 바로 말하면 됩니다. 이 탭에는 직원 대화의 반영 요청(승인 대기)만 쌓입니다.</span>'}</div>`}
     <div class="hint" style="margin-top:12px">흐름: <b>요청</b> → lemon803 의 클로드가 고침(10분 안에 시작) → <b>검토대기</b>(관리자가 바꾼 내용을 보고 승인/반려) → <b>반영완료</b>. 인트라넷은 승인 1~2분 뒤 phb.kr 에 반영됩니다. 승인 전에는 아무것도 바뀌지 않습니다.</div>`;
 }
 
@@ -299,9 +302,9 @@ function chatTargetOptions(sel){
 }
 function openNew(targetKey){
   const sel = typeof targetKey === 'string' ? targetKey : INTRANET;
-  openModal(`${modalHead('수정요청')}
+  openModal(`${modalHead(REQ_ONLY ? '인트라넷 수정 요청' : '수정요청')}
     <div class="mb">
-      <div class="f"><label>무엇을 고칠까요</label><select id="nTarget">${targetOptions(sel)}</select></div>
+      <div class="f" ${REQ_ONLY ? 'hidden' : ''}><label>무엇을 고칠까요</label><select id="nTarget">${targetOptions(sel)}</select></div>
       <div class="f"><label>제목 (한 줄)</label><input id="nTitle" placeholder="예: 업무 화면에 마감일 지난 건 빨간색으로"></div>
       <div class="f"><label>내용 — 어느 화면·어느 부분을, 지금은 어떻게 되는데, 어떻게 바꾸고 싶은지</label><textarea id="nBody" style="min-height:140px" placeholder="예) 업무 화면의 '받은 업무' 탭에서 마감일이 지난 업무는 제목을 빨간색으로 보여 주세요. 지금은 회색이라 눈에 안 띕니다."></textarea></div>
       <div class="hint">올리면 10분 안에 lemon803 의 클로드가 고쳐서 "검토대기"로 올립니다. 관리자가 바꾼 내용을 보고 승인해야 실제로 반영됩니다. 예약작업의 실행 시간(몇 시에 도는지)은 이 방법으로 바꿀 수 없고 사장님이 Claude 앱에서 바꿉니다.</div>
@@ -493,7 +496,7 @@ async function delChat(){
   chatId = ''; MSGS = []; watchChat(''); toast('지웠습니다'); render();
 }
 
-boot({ icon: '🤖', title: '자동작업', tables: ['routines', 'routine_requests', 'routine_chats'], render, normalize,
+boot({ icon: REQ_ONLY ? '🛠️' : '🤖', title: REQ_ONLY ? '인트라넷 수정 요청' : '자동작업', tables: ['routines', 'routine_requests', 'routine_chats'], render, normalize,
   open: id => { if ((DATA.routine_requests || []).some(q => q.id === id)) { view = 'requests'; render(); openRequest(id); } else if ((DATA.routine_chats || []).some(c => c.id === id)) openChat(id); else if ((DATA.routines || []).some(r => r.id === id)) openRoutine(id); } });   // 텔레그램 알림의 ?open=요청번호 로 들어오면 그 요청(또는 대화)을 바로 엶
 </script>
 </body>
