@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611190930">
-<script src="common.js?v=202611190930"></script>
+<link rel="stylesheet" href="common.css?v=202611191728">
+<script src="common.js?v=202611191728"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -197,6 +197,7 @@ const SCREENS = [
   ['rnr.html', '업무 분장'],
   ['alarms.html', '알람 (회사 운영 알람 메시지 모음)'],
   ['hire.html', '채용공고 (사람인 지원자 서류 분류 — 통과·애매·탈락 예정)'],
+  ['recruit.html', '채용 관리 (채용 6단계 진행판 · 수습 3개월 평가 · 정규직 전환 — 관리자·운영진만)'],
   ['authsms.html', '인증문자 (사무실 핸드폰에 온 인증번호 보기)'],
   ['kakao-orders.html', '카톡 주문 (카톡 채널 무통장 주문 접수·처리)'],
   ['kakao-cancels.html', '카톡 주문취소 (카톡 취소·환불·반품 요청 → 카페24 즉시 취소)'],
@@ -384,7 +385,7 @@ async function seedDefault(){
 
 /* ---------- 화면 ---------- */
 function render(){
-  if (members.length && admins().length === 0) { ensureAdmin(); return; }
+  if (store !== SupabaseStore && members.length && admins().length === 0) { ensureAdmin(); return; }   // 임시 저장 모드(시험용)에서만. 실제 저장소는 서버가 마지막 관리자를 지킴
   if (srchComposing) { srchRenderWaiting = true; return; }   // 검색창에 한글을 조합하는 중이면 끝난 뒤에 그림
   const srchFocus = document.activeElement && document.activeElement.id === 'srchIn' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const keepScroll = PENDING_SCROLL || scrollState();   // 다시 그리면 페이지가 잠깐 비어 스크롤이 맨 위로 튀므로, 그린 뒤 이 자리로 되돌림

@@ -154,7 +154,6 @@ async function reload(only){   // only: 다시 읽을 표 목록(없으면 전�
   members = DATA.members || [];
   // 설정 SQL 이 덜 실행된 경우 관리자에게 안내
   const warns = [];
-  if (store === SupabaseStore && members.length && !('password' in members[0])) warns.push('비밀번호 칸이 없어 비밀번호가 저장되지 않습니다 → alter table members add column if not exists password text;');
   if (store === SupabaseStore && members.length && !('hire_date' in members[0])) warns.push('입사일 칸이 없어 연차 자동 계산이 저장되지 않습니다 → sql-hire.sql 을 Supabase SQL Editor 에서 실행하세요.');
   if (store === SupabaseStore && members.length && !('title' in members[0])) warns.push('직급 칸이 없어 직급이 저장되지 않습니다 → alter table members add column if not exists title text;');
   if (missing.length) warns.push(`저장소에 "${missing.join(', ')}" 표가 없어 이 기능이 동작하지 않습니다 → supabase-setup.sql 의 해당 부분을 Supabase SQL Editor 에서 실행하세요.`);
@@ -182,6 +181,7 @@ async function checkAccess(){
   renderApp();
 }
 function renderApp(){
+  if (me && members.some(m => m.name === me) && store === SupabaseStore && !bzToken()) { if (!loginPick) loginPick = me; me = ''; }   // 이름만 기억돼 있고 출입증이 없음(2026-11-19 로그인 방식 변경 전 로그인 등) → 비밀번호를 다시 받음
   if (!me || !members.some(m => m.name === me)) { me = ''; accessState = null; renderLogin(); return; }
   document.body.classList.remove('login-bg');
   if (APP.title !== BRAND.name) {   // 홈이 아닌 화면만 확인
@@ -218,14 +218,14 @@ async function saveRow(table, row){
   const i = list.findIndex(x => x.id === row.id);
   if (i >= 0) list[i] = row; else list.push(row);
   renderApp();
-  try { await store.upsert(table, row); }
+  try { if (table === 'members' && store === SupabaseStore) await bzMemberCall('bz_member_save', { p_row: (({ password, ...r }) => r)(row) }); else await store.upsert(table, row); }
   catch (e) { toast('저장 실패: ' + (e.message || e), true); reload(); }
 }
 async function removeRow(table, id){
   DATA[table] = (DATA[table] || []).filter(x => x.id !== id);
   if (table === 'members') members = DATA.members;
   renderApp();
-  try { await store.delete(table, id); }
+  try { if (table === 'members' && store === SupabaseStore) await bzMemberCall('bz_member_delete', { p_id: id }); else await store.delete(table, id); }
   catch (e) { toast('삭제 실패: ' + (e.message || e), true); reload(); }
 }
 
@@ -239,9 +239,37 @@ const isOps = (name = me) => members.some(m => m.name === name && m.ops === true
 const allowedFor = (allowed, name = me) => Array.isArray(allowed) && (allowed.includes(name) || (allowed.includes(OPS) && isOps(name)));
 const allowedLabel = a => a === OPS ? '운영진' : a;
 /* 비밀번호: 처음은 1234. 1234인 상태로 로그인하면 바꾸는 화면이 먼저 뜸 */
+/* 2026-11-19: 비밀번호는 더 이상 팀원 표에 없습니다(공개키로 밖에서 읽히던 문제). 암호화돼 잠긴 표(member_secrets)에 있고,
+   맞는지는 서버(think_login)가 확인해 출입증(token)을 줍니다. 출입증은 이 기기에 사람마다 따로 기억하고,
+   잠긴 화면(채용·인증문자·카톡 주문·메모장)과 팀원 관리가 이 출입증으로 서버 함수를 부릅니다. 표: sql-login-1.sql · sql-login-2.sql */
 const DEFAULT_PW = '1234';
-const pwOf = m => m.password || DEFAULT_PW;            // 비밀번호가 비어 있으면 초기값
-const mustChangePw = m => pwOf(m) === DEFAULT_PW;
+const BZ_TOKEN = 'think_token';   // 메모장(think.html)과 같은 출입증
+const bzMem = {};                 // localStorage 를 못 쓰는 브라우저용(창을 닫으면 사라짐)
+const bzTokenOf = m => m ? (LS.get(BZ_TOKEN + '_' + m.id) || bzMem[m.id] || '') : '';
+const bzSetToken = (m, t) => { if (t) { LS.set(BZ_TOKEN + '_' + m.id, t); bzMem[m.id] = t; } else { LS.del(BZ_TOKEN + '_' + m.id); delete bzMem[m.id]; } };
+const bzMe = () => members.find(m => m.name === me);
+const bzToken = () => bzTokenOf(bzMe());
+async function bzRpc(name, args){ const { data, error } = await SupabaseStore.client.rpc(name, args); if (error) throw error; return data; }
+/* 출입증이 서버에서 거절됨(만료·다른 기기에서 비밀번호를 바꿈) → 다시 로그인 */
+function bzExpired(){ const m = bzMe(); if (m) bzSetToken(m, ''); location.reload(); }   // 출입증만 버리고 새로고침 → 이름이 골라진 로그인 화면이 뜸(화면이 제각각 다시 그리는 것과 엉키지 않게 통째로 새로 엶)
+const BZ_ERR = { denied: '관리자만 할 수 있습니다', lastadmin: '관리자가 최소 한 명은 있어야 합니다', rule: '쓸 수 없는 비밀번호입니다', nomember: '팀원 목록에 없는 사람입니다' };
+async function bzMemberCall(name, args){
+  const d = await bzRpc(name, { p_token: bzToken(), ...args });
+  if (d && d.ok === false) { if (d.err === 'session') { bzExpired(); throw new Error('다시 로그인해 주세요'); } throw new Error(BZ_ERR[d.err] || d.err); }
+  return d;
+}
+/* 비밀번호 확인. 돌아오는 값: { ok, must_change } 또는 { ok:false, err:'pin'|'locked'|…, left, until } */
+async function checkPassword(m, pw){
+  if (store !== SupabaseStore) { const cur = m.password || DEFAULT_PW; return pw === cur ? { ok: true, must_change: cur === DEFAULT_PW } : { ok: false, err: 'pin' }; }   // 임시 저장 모드(시험용)
+  const r = await bzRpc('think_login', { p_member: m.id, p_pin: pw });
+  if (r && r.ok) bzSetToken(m, r.token);
+  return r || { ok: false };
+}
+function pwErrMsg(r){
+  if (r.err === 'locked') { const d = r.until ? new Date(r.until) : null; return `여러 번 틀려 잠겼습니다. ${d ? pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' 이후에' : '10분 뒤'} 다시 해 주세요`; }
+  if (r.err === 'pin') return '비밀번호가 맞지 않습니다' + (r.left ? ` (${r.left}번 더 틀리면 10분 잠김)` : r.left === 0 ? ' — 10분 동안 잠겼습니다' : '');
+  return '로그인하지 못했습니다' + (r.err ? ` (${BZ_ERR[r.err] || r.err})` : '');
+}
 const PW_RULE = '4자 이상 (초기 비밀번호 1234 는 쓸 수 없음)';
 function pwProblem(pw){
   if (pw.length < 4) return '4자 이상이어야 합니다';
@@ -253,7 +281,7 @@ async function addMember(name){
   name = (name || '').trim(); if (!name) return null;
   const dup = members.find(m => m.name === name);
   if (dup) { toast('이미 있는 이름입니다', true); return dup; }
-  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length, role: members.length === 0 ? 'admin' : 'member', password: DEFAULT_PW };
+  const m = { id: uid(), name, color: COLORS[members.length % COLORS.length], sort_order: members.length, role: members.length === 0 ? 'admin' : 'member' };
   await saveRow('members', m);
   return m;
 }
@@ -261,7 +289,13 @@ async function addMember(name){
 async function setPassword(id, password, { quiet = false, verified = false } = {}){
   const m = members.find(x => x.id === id); if (!m) return false;
   if (!verified && !isAdmin() && m.name !== me) { toast('본인 비밀번호만 바꿀 수 있습니다', true); return false; }
-  await saveRow('members', { ...m, password });
+  if (store !== SupabaseStore) await saveRow('members', { ...m, password });
+  else {
+    try {
+      const d = await bzRpc('bz_set_pw', { p_token: (verified || m.name === me) ? bzTokenOf(m) : bzToken(), p_member: m.id, p_new: password });   // 본인 것은 본인 출입증, 남의 것은 관리자 출입증
+      if (!d || d.ok === false) { if (d && d.err === 'session' && !verified) bzExpired(); else toast('비밀번호를 저장하지 못했습니다: ' + ((d && (BZ_ERR[d.err] || d.err)) || ''), true); return false; }
+    } catch (e) { toast('비밀번호를 저장하지 못했습니다: ' + (e.message || e), true); return false; }
+  }
   if (!quiet) toast(password === DEFAULT_PW ? `${m.name}님 비밀번호를 1234로 초기화했습니다` : `${m.name}님 비밀번호를 저장했습니다`);
   return true;
 }
@@ -273,10 +307,11 @@ function askPassword(m, onOk){
       <div class="hint">비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.</div></div>
     <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="pwOk">확인</button></div>`);
   const inp = $('#pwIn'); inp.focus();
-  const go = () => {
-    if (inp.value !== pwOf(m)) { toast('비밀번호가 맞지 않습니다', true); inp.select(); return; }
+  const go = async () => {
+    let r; try { r = await checkPassword(m, inp.value); } catch (e) { toast('확인하지 못했습니다: ' + (e.message || e), true); return; }
+    if (!r.ok) { toast(pwErrMsg(r), true); inp.select(); return; }
     closeModal();
-    if (mustChangePw(m)) openSetPassword(m, { force: true, after: onOk }); else onOk();
+    if (r.must_change) openSetPassword(m, { force: true, after: onOk }); else onOk();
   };
   $('#pwOk').onclick = go;
   inp.onkeydown = e => { if (e.key === 'Enter') go(); };
@@ -290,7 +325,6 @@ function openSetPassword(m, opts = {}){
       <div class="f"><label>새 비밀번호</label><input type="password" id="pw1" autocomplete="new-password" maxlength="30"><div class="hint" id="pwHint">${PW_RULE}</div></div>
       <div class="f"><label>한 번 더</label><input type="password" id="pw2" autocomplete="new-password" maxlength="30"></div>
       <label class="hint" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="pwShow"> 입력한 글자 보기</label>
-      ${isAdmin() && !force ? '<div class="hint">관리자는 팀원 관리에서 모든 비밀번호를 볼 수 있습니다.</div>' : ''}
     </div>
     <div class="mf">${force ? '' : '<button class="btn" data-close>취소</button>'}<button class="btn primary" id="pwSave">저장</button></div>`, { locked: force });
   const p1 = $('#pw1'), p2 = $('#pw2'), hint = $('#pwHint');
@@ -323,7 +357,7 @@ async function setOps(id, on){
 }
 /* 예전 데이터에 관리자가 없으면 첫 팀원을 관리자로 */
 async function ensureAdmin(){
-  if (members.length && admins().length === 0) { const m = [...members].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]; await saveRow('members', { ...m, role: 'admin' }); }
+  if (store !== SupabaseStore && members.length && admins().length === 0) { const m = [...members].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]; await saveRow('members', { ...m, role: 'admin' }); }
 }
 function memberColor(name){ const m = members.find(x => x.name === name); return m ? m.color : '#adb5bd'; }
 const avatar = name => `<span class="av" style="background:${memberColor(name)}">${esc(String(name || '?').charAt(0))}</span>`;
@@ -352,27 +386,36 @@ function renderLogin(){
     ${connError ? `<p class="err">저장소 연결 오류: ${esc(connError)}</p>` : ''}
     <div class="names">${byRank(members).map(m => `<button data-login="${esc(m.name)}" class="${m.name === loginPick ? 'on' : ''}"><span class="av" style="background:${m.color}">${esc(m.name.charAt(0))}</span>${esc(m.name)}${m.title ? `<span class="hint" style="font-weight:400">${esc(m.title)}</span>` : ''}</button>`).join('')}</div>
     ${picked ? `<div class="pwrow"><input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" id="loginBtn">들어가기</button></div>
-    <p class="hint">${mustChangePw(picked) ? '처음이면 초기 비밀번호 1234 를 넣으세요. 들어가면서 새 비밀번호를 정하게 됩니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요.'}</p>` : ''}
+    <p class="hint">처음이면 초기 비밀번호 1234 를 넣으세요(들어가면서 새 비밀번호를 정합니다). 잊었으면 관리자에게 초기화를 부탁하세요.</p>` : ''}
     ${members.length ? (picked ? '' : '<p class="hint">이름이 없으면 관리자에게 등록을 부탁하세요.</p>') : connError ? '' : `<div class="pwrow"><input id="newName" placeholder="이름 (예: 홍길동)" maxlength="20"><button class="btn primary" id="addNameBtn">등록하고 시작</button></div>`}
     ${connError || store !== SupabaseStore ? `<div class="foot">${esc(connError ? "저장소 연결 오류: " + connError : store.label)}</div>` : ""}
   </div></div>`;
   const inp = $('#newName'); if (inp) {
-    const go = async () => { const m = await addMember(inp.value); if (m) openSetPassword(m, { force: true, after: () => login(m.name) }); };
+    const go = async () => { const m = await addMember(inp.value); if (!m) return; try { await checkPassword(m, DEFAULT_PW); } catch (e) {} openSetPassword(m, { force: true, after: () => login(m.name) }); };
     $('#addNameBtn').onclick = go;
     inp.onkeydown = e => { if (e.key === 'Enter') go(); };
   }
   document.querySelectorAll('[data-login]').forEach(b => b.onclick = () => { loginPick = b.dataset.login; renderLogin(); $('#loginPw').focus(); });
+  if (picked && $('#loginPw') && !document.querySelector('#modal > *')) $('#loginPw').focus();
   const lb = $('#loginBtn'); if (lb) {
-    const tryLogin = () => {
-      if ($('#loginPw').value !== pwOf(picked)) { toast('비밀번호가 맞지 않습니다', true); $('#loginPw').select(); return; }
+    let busy = false;
+    const tryLogin = async () => {
+      if (busy) return; busy = true; lb.disabled = true;
+      let r; try { r = await checkPassword(picked, $('#loginPw').value); } catch (e) { r = { ok: false, err: e.message || String(e) }; }
+      busy = false; lb.disabled = false;
+      if (!r.ok) { toast(pwErrMsg(r), true); const i = $('#loginPw'); if (i) i.select(); return; }
       loginPick = '';
-      if (mustChangePw(picked)) openSetPassword(picked, { force: true, after: () => login(picked.name) }); else login(picked.name);
+      if (r.must_change) openSetPassword(picked, { force: true, after: () => login(picked.name) }); else login(picked.name);
     };
     lb.onclick = tryLogin; $('#loginPw').onkeydown = e => { if (e.key === 'Enter') tryLogin(); };
   }
 }
 function login(name){ me = name; LS.set('bizhome_me', name); renderApp(); }
-function logout(){ me = ''; LS.del('bizhome_me'); renderApp(); }
+function logout(){
+  const m = bzMe(), t = bzToken();
+  if (m && t && store === SupabaseStore) { bzRpc('think_logout', { p_token: t }).catch(() => {}); bzSetToken(m, ''); }   // 이 기기의 출입증도 버림
+  me = ''; LS.del('bizhome_me'); renderApp();
+}
 
 /* ---------- 모달(팝업 창) ---------- */
 /* 팝업 창. 바깥을 클릭해도 닫히지 않음(입력 중 실수 방지). 취소·✕·Esc 로 닫고, 입력한 내용이 있으면 Esc 때 한 번 물어봄 */
@@ -579,27 +622,24 @@ function commentsHtml(list){
   </div>`;
 }
 
-let showPw = false;   // 관리자 화면에서 비밀번호 보이기 상태
 function openMembers(counter){
   const admin = isAdmin();
   const rows = members.map(m => `<div class="mrow">${avatar(m.name)}<span class="nm">${esc(m.name)}${!admin && m.title ? ' <span class="cnt">' + esc(m.title) + '</span>' : ''}${m.role === 'admin' ? ' ' + tag('관리자', '#fbeccc', '#9a6700') : ''}${m.ops === true ? ' ' + tag('운영진', '#dbeafe', '#1d4ed8') : ''}${m.name === me ? ' <span class="cnt">(나)</span>' : ''}</span>
       ${admin ? `<input value="${esc(m.title || '')}" data-title="${m.id}" placeholder="직급" maxlength="20" style="width:80px;border:1px solid var(--line2);border-radius:4px;padding:3px 6px;font-size:13px" title="직급 (예: 주임, 대리, 과장)">` : ''}
-      ${admin ? `<span class="cnt" style="min-width:110px;font-family:monospace" title="비밀번호">${mustChangePw(m) ? '<span style="color:var(--orange)">1234 (초기)</span>' : (showPw ? esc(pwOf(m)) : '••••••')}</span>` : ''}
       <span class="cnt">${counter ? esc(counter(m)) : ''}</span>
       ${m.name === me ? `<button class="btn sm" data-pw="${m.id}">내 비밀번호 바꾸기</button>` : ''}
-      ${admin && m.name !== me ? `<button class="btn sm" data-reset="${m.id}" ${mustChangePw(m) ? 'disabled' : ''} title="1234로 되돌리기">초기화</button>` : ''}
+      ${admin && m.name !== me ? `<button class="btn sm" data-reset="${m.id}" title="비밀번호를 1234로 되돌리기">초기화</button>` : ''}
       ${admin ? `<button class="btn sm" data-ops="${m.id}" data-on="${m.ops === true ? '' : '1'}" title="운영진이면 '운영진'으로 지정된 메뉴와 인증문자가 보입니다">${m.ops === true ? '운영진 해제' : '운영진 지정'}</button>` : ''}
       ${admin && m.name !== me ? `<button class="btn sm" data-role="${m.id}" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '관리자 해제' : '관리자 지정'}</button>
       <button class="btn sm danger" data-del="${m.id}" title="팀원 삭제">삭제</button>` : ''}</div>`).join('');
-  openModal(`${modalHead('팀원 관리', admin ? `<button class="btn sm" id="mmShowPw">${showPw ? '🙈 비밀번호 가리기' : '👁 비밀번호 보기'}</button>` : '')}
+  openModal(`${modalHead('팀원 관리')}
     <div class="mb">
       <div>${rows || '<span class="hint">팀원이 없습니다</span>'}</div>
       ${admin ? `<div class="addrow" style="justify-content:flex-start"><input id="mmName" placeholder="새 팀원 이름" maxlength="20"><button class="btn" id="mmAdd">추가</button><span class="hint">새 팀원은 비밀번호 1234로 시작합니다</span></div>` : ''}
-      <div class="hint">${admin ? '"1234 (초기)"인 사람은 아직 로그인해서 비밀번호를 바꾸지 않은 사람입니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요. <b>운영진</b>으로 지정한 사람은 메뉴 편집에서 \'운영진\'으로 묶은 메뉴와 인증문자를 봅니다. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
+      <div class="hint">${admin ? '비밀번호는 암호화되어 저장되므로 관리자도 볼 수 없습니다. 잊어버린 팀원은 <b>초기화</b>로 1234로 되돌려 주세요(다음 로그인 때 새로 정함). <b>운영진</b>으로 지정한 사람은 메뉴 편집에서 \'운영진\'으로 묶은 메뉴와 인증문자를 봅니다. 팀원을 삭제해도 그 사람 이름이 들어간 내용은 남습니다.' : '비밀번호를 잊었으면 관리자에게 초기화를 부탁하세요. 팀원 추가·삭제와 관리자 지정은 관리자만 할 수 있습니다.'}</div>
     </div>
     <div class="mf"><button class="btn left" id="mmLogout">로그아웃</button><button class="btn primary" data-close>닫기</button></div>`, { wide: admin });
   $('#mmLogout').onclick = () => { closeModal(); logout(); };
-  const sp = $('#mmShowPw'); if (sp) sp.onclick = () => { showPw = !showPw; openMembers(counter); };
   const ma = $('#mmAdd'); if (ma) {
     const add = async () => { const m = await addMember($('#mmName').value); if (m) openMembers(counter); };
     ma.onclick = add;

@@ -1187,8 +1187,7 @@
 
     // ── 비즈홈 로그인 이어받기 (2026-10-18) ──
     // 비즈홈(index.html)에 로그인하면 같은 주소의 localStorage 에 이름(bizhome_me)이 남습니다. 그 사람이 이 기기에 출입증이 없으면
-    // 비밀번호를 다시 묻지 않고, 팀원 표의 비밀번호로 think_login 을 대신 불러 출입증을 받습니다(비즈홈 로그인 = 메모장 로그인).
-    // 팀원 표의 비밀번호는 비즈홈 자체가 공개키로 읽어 맞히는 값이라, 여기서 읽어도 새로 열리는 것은 없습니다.
+    // 비즈홈이 로그인할 때 받은 출입증이 이 기기에 있으면 비밀번호를 다시 묻지 않습니다(비즈홈 로그인 = 메모장 로그인).
     // 돌아오는 값: 들어갈 사람 {id, name} 또는 null(비즈홈 로그인 없음·실패)
     async function autoFromBizhome() {
       let bizName = null, noauto = null;
@@ -1198,15 +1197,7 @@
       const m = MEMBERS.find(x => x.name === bizName);
       if (!m) return null;
       if (getToken(m.id)) { try { localStorage.setItem(LOGIN_KEY, m.id); } catch (e) {} return { id: m.id, name: m.name }; }   // 출입증이 이미 있으면 그 사람으로
-      try {
-        step("비즈홈 로그인을 이어받는 중…");
-        const { data: row, error } = await sb.from("members").select("id,password").eq("id", m.id).maybeSingle();
-        if (error || !row) return null;
-        const r = await rpc("think_login", { p_member: m.id, p_pin: row.password || DEFAULT_PW });
-        if (!r || !r.ok) { dbg("비즈홈 이어받기 실패", r && r.err); return null; }
-        try { localStorage.setItem(TOKEN_KEY + "_" + m.id, r.token); localStorage.setItem(LOGIN_KEY, m.id); } catch (e) {}
-        return { id: m.id, name: m.name };
-      } catch (e) { dbg("비즈홈 이어받기 오류", e && e.message); return null; }
+      return null;   // 2026-11-19: 비즈홈이 로그인할 때 같은 출입증(think_token_<id>)을 받아 두므로 위에서 끝남. 출입증이 없으면 비밀번호를 물음(팀원 표에 비밀번호 칸이 없어짐)
     }
 
     // ── 내용 불러오기 ─────────────────────────

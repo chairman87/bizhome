@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>카톡 주문취소</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611190930">
-<script src="common.js?v=202611190930"></script>
+<link rel="stylesheet" href="common.css?v=202611191728">
+<script src="common.js?v=202611191728"></script>
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
@@ -66,18 +66,14 @@ const pick = {};   // 카드별로 고른 주문번호
 const sbc = () => SupabaseStore.client;
 const myMember = () => members.find(m => m.name === me);
 const tokenOf = m => { try { return localStorage.getItem(TOKEN_KEY + '_' + m.id) || ''; } catch (e) { return ''; } };
-async function token(){
-  const m = myMember(); if (!m) return '';
-  let t = tokenOf(m); if (t) return t;
-  const { data, error } = await sbc().rpc('think_login', { p_member: m.id, p_pin: m.password || '1234' });
-  if (error || !data || !data.ok) throw new Error('출입증을 받지 못했습니다' + (data && data.err ? ` (${data.err})` : ''));
-  try { localStorage.setItem(TOKEN_KEY + '_' + m.id, data.token); } catch (e) {}
-  return data.token;
+async function token(){   // 로그인할 때 받은 출입증(common.js). 없으면 다시 로그인
+  const t = bzToken(); if (!t) { bzExpired(); throw new Error('다시 로그인해 주세요'); }
+  return t;
 }
 async function call(name, args, retry = true){
   const { data, error } = await sbc().rpc(name, { p_token: await token(), ...args });
   if (error) throw error;
-  if (data && data.ok === false && data.err === 'session' && retry) { const m = myMember(); try { localStorage.removeItem(TOKEN_KEY + '_' + m.id); } catch (e) {} return call(name, args, false); }
+  if (data && data.ok === false && data.err === 'session') { bzExpired(); throw new Error('다시 로그인해 주세요'); }
   if (data && data.ok === false) throw new Error(data.err);
   return data;
 }
