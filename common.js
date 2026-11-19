@@ -93,20 +93,24 @@ const SupabaseStore = {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flushOnVisible(); });
   },
   async load(table){
-    if (LOCKED[table]) { const d = await lockedCall(LOCKED[table].list, {}, false); return d ? (d.rows || []) : []; }   // 잠긴 표: 로그인 전이면 빈 목록
+    if (LOCKED[table]) { const d = await lockedCall(LOCKED[table].list, lkArg(table), false); return d ? (d.rows || []) : []; }   // 잠긴 표: 로그인 전이면 빈 목록
     let q = this.client.from(table).select((APP.columns && APP.columns[table]) || '*');   // 화면이 boot({ columns: { 표: '칸,칸' } }) 로 알려 준 표는 그 칸만 읽음(큰 칸 제외용)
     if (table === 'members') q = q.order('sort_order');
     const { data, error } = await q; if (error) throw error; return data;
   },
-  async upsert(table, row){ if (LOCKED[table]) { await lockedCall(LOCKED[table].save, { p_row: row }); return; } const { error } = await this.client.from(table).upsert(row); if (error) throw error; },
-  async delete(table, id){ if (LOCKED[table]) { await lockedCall(LOCKED[table].del, { p_id: id }); return; } const { error } = await this.client.from(table).delete().eq('id', id); if (error) throw error; },
+  async upsert(table, row){ if (LOCKED[table]) { await lockedCall(LOCKED[table].save, { ...lkArg(table), p_row: row }); return; } const { error } = await this.client.from(table).upsert(row); if (error) throw error; },
+  async delete(table, id){ if (LOCKED[table]) { await lockedCall(LOCKED[table].del, { ...lkArg(table), p_id: id }); return; } const { error } = await this.client.from(table).delete().eq('id', id); if (error) throw error; },
 };
 /* 잠긴 표 (2026-11-19): 공개키로는 읽기·쓰기가 모두 막혀 있고, 로그인 출입증을 확인하는 서버 함수로만 다룸.
    화면 코드는 그대로 boot({ tables }) · saveRow · removeRow 를 쓰면 됨(여기서 서버 함수로 바꿔 부름).
-   표를 더 잠그려면 서버 함수 셋(목록·저장·삭제)을 만들고 아래에 한 줄 추가. 계정 관리: sql-accounts-lock-1.sql · -2.sql
+   계정 관리는 전용 함수(sql-accounts-lock-1.sql · -2.sql), 나머지는 공용 함수 lk_*(sql-lock-tables-1.sql · -2.sql).
+   표를 더 잠그려면: sql-lock-tables-1.sql 의 lk_ok 목록과 -2.sql 의 목록에 표 이름을 넣고, 아래 LK_TABLES 에 추가.
    주의: 잠긴 표는 실시간 알림이 오지 않아, 남이 고친 내용은 새로고침하거나 10분마다 다시 읽을 때 보임 */
-const LOCKED = { accounts: { list: 'acc_list', save: 'acc_save', del: 'acc_delete' } };
-const LOCK_ERR = { denied: '관리자만 할 수 있습니다', id: '잘못된 항목입니다', service: '서비스 이름을 입력하세요' };
+const LK = { list: 'lk_list', save: 'lk_save', del: 'lk_delete', generic: true };
+const LK_TABLES = ['payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners'];
+const LOCKED = { accounts: { list: 'acc_list', save: 'acc_save', del: 'acc_delete' }, ...Object.fromEntries(LK_TABLES.map(t => [t, LK])) };
+const lkArg = table => LOCKED[table].generic ? { p_table: table } : {};
+const LOCK_ERR = { denied: '관리자만 할 수 있습니다', id: '잘못된 항목입니다', service: '서비스 이름을 입력하세요', table: '잠긴 표 목록에 없는 표입니다' };
 async function lockedCall(fn, args, must = true){
   const t = bzToken(); if (!t) { if (must) throw new Error('다시 로그인해 주세요'); return null; }
   const d = await bzRpc(fn, { p_token: t, ...args });
