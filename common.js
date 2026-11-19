@@ -93,13 +93,26 @@ const SupabaseStore = {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flushOnVisible(); });
   },
   async load(table){
+    if (LOCKED[table]) { const d = await lockedCall(LOCKED[table].list, {}, false); return d ? (d.rows || []) : []; }   // 잠긴 표: 로그인 전이면 빈 목록
     let q = this.client.from(table).select((APP.columns && APP.columns[table]) || '*');   // 화면이 boot({ columns: { 표: '칸,칸' } }) 로 알려 준 표는 그 칸만 읽음(큰 칸 제외용)
     if (table === 'members') q = q.order('sort_order');
     const { data, error } = await q; if (error) throw error; return data;
   },
-  async upsert(table, row){ const { error } = await this.client.from(table).upsert(row); if (error) throw error; },
-  async delete(table, id){ const { error } = await this.client.from(table).delete().eq('id', id); if (error) throw error; },
+  async upsert(table, row){ if (LOCKED[table]) { await lockedCall(LOCKED[table].save, { p_row: row }); return; } const { error } = await this.client.from(table).upsert(row); if (error) throw error; },
+  async delete(table, id){ if (LOCKED[table]) { await lockedCall(LOCKED[table].del, { p_id: id }); return; } const { error } = await this.client.from(table).delete().eq('id', id); if (error) throw error; },
 };
+/* 잠긴 표 (2026-11-19): 공개키로는 읽기·쓰기가 모두 막혀 있고, 로그인 출입증을 확인하는 서버 함수로만 다룸.
+   화면 코드는 그대로 boot({ tables }) · saveRow · removeRow 를 쓰면 됨(여기서 서버 함수로 바꿔 부름).
+   표를 더 잠그려면 서버 함수 셋(목록·저장·삭제)을 만들고 아래에 한 줄 추가. 계정 관리: sql-accounts-lock-1.sql · -2.sql
+   주의: 잠긴 표는 실시간 알림이 오지 않아, 남이 고친 내용은 새로고침하거나 10분마다 다시 읽을 때 보임 */
+const LOCKED = { accounts: { list: 'acc_list', save: 'acc_save', del: 'acc_delete' } };
+const LOCK_ERR = { denied: '관리자만 할 수 있습니다', id: '잘못된 항목입니다', service: '서비스 이름을 입력하세요' };
+async function lockedCall(fn, args, must = true){
+  const t = bzToken(); if (!t) { if (must) throw new Error('다시 로그인해 주세요'); return null; }
+  const d = await bzRpc(fn, { p_token: t, ...args });
+  if (d && d.ok === false) { if (d.err === 'session') { bzExpired(); throw new Error('다시 로그인해 주세요'); } throw new Error(LOCK_ERR[d.err] || d.err); }
+  return d;
+}
 
 const store = (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase) ? SupabaseStore : LocalStore;
 
@@ -134,13 +147,13 @@ const missingTables = new Set();   // 설정 SQL 이 덜 실행돼 아직 없는
 const PROJ_TABLES = ['projects', 'project_logs', 'project_cards', 'project_decisions', 'project_reads', 'tasks', 'decisions'];
 let pnForce = true;   // 프로젝트 소식(왼쪽 위 탭 숫자)을 이번 그리기 때 새로 읽을지
 async function reload(only){   // only: 다시 읽을 표 목록(없으면 전부)
-  const all = [...new Set([...APP.tables, 'members'])];
+  const all = [...new Set(['members', ...APP.tables])];   // 팀원 표 먼저: 잠긴 표(LOCKED)는 내 출입증이 있어야 읽히는데, 출입증은 팀원 목록에서 나를 찾아야 나옴
   for (const t of only ? all.filter(t => only.includes(t)) : all) {
     try {
       let rows = await store.load(t);
       if (APP.normalize && t !== 'members') rows = rows.map(r => APP.normalize(t, r));
       DATA[t] = rows; missingTables.delete(t);
-      if (t === 'members') connError = '';
+      if (t === 'members') { connError = ''; members = rows; }
     } catch (e) {
       const msg = e.message || String(e);
       if (t === 'members') connError = msg;                       // 팀원 표를 못 읽으면 진짜 연결 오류
@@ -410,7 +423,7 @@ function renderLogin(){
     lb.onclick = tryLogin; $('#loginPw').onkeydown = e => { if (e.key === 'Enter') tryLogin(); };
   }
 }
-function login(name){ me = name; LS.set('bizhome_me', name); renderApp(); }
+function login(name){ me = name; LS.set('bizhome_me', name); renderApp(); const lk = (APP.tables || []).filter(t => LOCKED[t]); if (lk.length && store === SupabaseStore) reload(lk); }   // 잠긴 표는 로그인 전에 빈 목록으로 읽혔으므로 다시 읽음
 function logout(){
   const m = bzMe(), t = bzToken();
   if (m && t && store === SupabaseStore) { bzRpc('think_logout', { p_token: t }).catch(() => {}); bzSetToken(m, ''); }   // 이 기기의 출입증도 버림
