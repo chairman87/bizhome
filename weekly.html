@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주간 업무 리스트</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202611191728">
+<script src="common.js?v=202611192224"></script>
+<style>
+  .guide{background:#fff7d6;border:1px solid #f0d98a;color:#6b4e00;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;margin-bottom:12px}
+  .guide .hint{display:block;font-weight:400;font-size:12px;color:#8a6d1a;margin-top:4px;line-height:1.6}
+  .weeks{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .weeks .wk{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--fg)}
+  .weeks .wk.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+  .weeks .wk .sub{font-size:11px;opacity:.75;margin-left:4px}
+  .weeks select{border:1px solid var(--line2);border-radius:var(--radius);padding:5px 8px;font-size:13px}
+  .weeks .sp{flex:1}
+  .wtitle{font-size:16px;font-weight:700;margin:4px 2px 8px}
+  .wtitle .hint{font-weight:400;font-size:12px;margin-left:6px}
+  table.xl{width:100%;border-collapse:collapse;background:var(--bg);font-size:14px;table-layout:fixed}
+  table.xl th,table.xl td{border:1px solid #c9ccd1;padding:0}
+  table.xl thead th{background:#eef1f5;font-size:13px;font-weight:700;color:var(--fg2);padding:7px 10px;text-align:left}
+  table.xl col.c1{width:130px}
+  table.xl td.pn{background:#f6f8fa;vertical-align:top;padding:9px 10px;font-weight:700}
+  table.xl td.pn.mine{background:#eaf2ff}
+  table.xl td.pn .cnt{display:block;font-weight:400;font-size:11px;color:var(--fg3);margin-top:3px}
+  table.xl tr.first td{border-top:2px solid #9aa1ab}
+  table.xl td.cell .cw{display:flex;align-items:center;min-height:32px}
+  table.xl td.cell .n{flex:0 0 26px;text-align:right;padding-right:6px;font-size:11px;color:var(--fg3);user-select:none}
+  table.xl td.cell input{flex:1;border:0;outline:0;background:transparent;font-size:14px;padding:7px 8px 7px 2px;min-width:0;color:var(--fg)}
+  table.xl td.cell:focus-within{box-shadow:inset 0 0 0 2px var(--blue)}
+  table.xl td.cell .ro{flex:1;padding:7px 8px 7px 2px;white-space:pre-wrap;word-break:break-word}
+  table.xl td.cell .none{color:var(--fg3)}
+  @media (max-width:600px){ table.xl col.c1{width:82px} table.xl td.pn{padding:8px 6px;font-size:13px} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   주간 업무 리스트 (2026-11-20) — 운영진(대표 제외)이 그 주에 할 업무를 한 줄씩 적는 엑셀 같은 표
+   · 한 주 = 월요일 하나(week_start). "11월 4주차"처럼 그 주의 목요일이 든 달 기준으로 셈
+   · 주차 칸은 START 주부터 이번 주까지 있고, 다음 주 칸은 이번 주 금요일부터 생김
+   · 저장: weekly_plans 표(sql-weekly.sql) 한 사람·한 주에 한 줄 { id, week_start, author, items:[…] }
+   · 적는 사람 명단: settings id='weekly' → {people:[…]} (관리자가 ⚙ 에서 바꿈). 없으면 DEFAULT_PEOPLE
+   · 자기 이름 줄에만 적을 수 있고(관리자는 모두), 칸을 벗어나거나 잠시 멈추면 저절로 저장
+================================================================ */
+const START = '2026-11-16';   // 첫 주 (11월 3주차)
+const DEFAULT_PEOPLE = ['홍주', '김상우', '김홍석', '이유나', '전예솔'];
+const SETTING_ID = 'weekly';
+const PEOPLE = () => { const v = ((DATA.settings || []).find(s => s.id === SETTING_ID) || {}).value || {}; return Array.isArray(v.people) && v.people.length ? v.people : DEFAULT_PEOPLE; };
+const canEdit = p => p === me || isAdmin();
+
+const addDays = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
+const mondayOf = d => addDays(d, -((d.getDay() + 6) % 7));
+/* 보이는 주차들(새것이 앞). 금·토·일이면 다음 주 칸도 */
+function weeks(){
+  const now = new Date(), wd = now.getDay();
+  let last = mondayOf(now); if (wd === 5 || wd === 6 || wd === 0) last = addDays(last, 7);
+  const out = []; for (let m = last; ymd(m) >= START; m = addDays(m, -7)) out.push(ymd(m));
+  return out;
+}
+function weekLabel(s){
+  const mon = parseYmd(s), thu = addDays(mon, 3), n = Math.floor((thu.getDate() - 1) / 7) + 1;
+  return `${thu.getFullYear() !== new Date().getFullYear() ? thu.getFullYear() + '년 ' : ''}${thu.getMonth() + 1}월 ${n}주차`;
+}
+const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
+const weekRange = s => { const m = parseYmd(s); return `${md(m)}(월) ~ ${md(addDays(m, 4))}(금)`; };
+const weekTag = s => { const cur = ymd(mondayOf(new Date())); return s === cur ? '이번 주' : s > cur ? '다음 주' : s === ymd(addDays(parseYmd(cur), -7)) ? '지난 주' : ''; };
+
+let sel = null;              // 보고 있는 주(월요일)
+const drafts = {};           // 고치는 중인 줄들 { 이름: ['…', …] } — 저장 전·저장 중에도 화면이 이 값을 씀
+const timers = {};
+const rowOf = (p, w = sel) => (DATA.weekly_plans || []).find(r => r.week_start === w && r.author === p);
+const itemsOf = p => drafts[p] || ((rowOf(p) || {}).items || []);
+
+function normalize(table, r){ return table === 'weekly_plans' ? { ...r, items: Array.isArray(r.items) ? r.items : [] } : r; }
+
+function render(){
+  if (composing) { needRender = true; return; }   // 한글 조합이 끝난 뒤에 다시 그림
+  const ws = weeks();
+  if (!sel || !ws.includes(sel)) { const q = new URLSearchParams(location.search).get('w'); sel = ws.includes(q) ? q : ws[0]; }
+  const ae = document.activeElement, f = ae && ae.dataset && ae.dataset.p != null ? { p: ae.dataset.p, i: +ae.dataset.i, s: ae.selectionStart, e: ae.selectionEnd } : null;
+  const chips = ws.slice(0, 6), older = ws.slice(6);
+  $('#app').innerHTML = headerHtml({ icon: '🗓️', title: '주간 업무 리스트' }) + `<main class="wrap" style="max-width:1000px">
+    <div class="guide">📌 금주 진행 예정인 업무 리스트를 작성해주세요
+      <span class="hint">자기 이름 옆 칸에 한 줄에 하나씩 적으면 저절로 저장됩니다. <b>Enter</b> = 다음 줄 · 빈 줄에서 <b>Backspace</b> = 그 줄 지우기. 다음 주 칸은 이번 주 <b>금요일</b>에 생깁니다.</span></div>
+    <div class="weeks">${chips.map(w => `<button class="wk ${w === sel ? 'on' : ''}" data-w="${w}">${esc(weekLabel(w))}${weekTag(w) ? `<span class="sub">${weekTag(w)}</span>` : ''}</button>`).join('')}
+      ${older.length ? `<select id="wOld"><option value="">지난 주차 보기 ▾</option>${older.map(w => `<option value="${w}" ${w === sel ? 'selected' : ''}>${esc(weekLabel(w))} · ${weekRange(w)}</option>`).join('')}</select>` : ''}
+      <span class="sp"></span>${isAdmin() ? '<button class="btn sm" id="setBtn" title="표에 나오는 담당자 정하기">⚙ 담당자</button>' : ''}</div>
+    ${DATA.weekly_plans ? `<div class="wtitle">${esc(weekLabel(sel))}<span class="hint">${weekRange(sel)}${weekTag(sel) ? ' · ' + weekTag(sel) : ''}</span></div>${tableHtml()}`
+      : `<div class="empty">주간 업무 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' sql-weekly.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`}
+  </main>`;
+  bindHeader(() => {});
+  document.querySelectorAll('[data-w]').forEach(b => b.onclick = () => go(b.dataset.w));
+  const wo = $('#wOld'); if (wo) wo.onchange = () => wo.value && go(wo.value);
+  const sb = $('#setBtn'); if (sb) sb.onclick = openSettings;
+  bindTable();
+  if (f) { const el = cellInput(f.p, f.i); if (el) { el.focus(); try { el.setSelectionRange(f.s, f.e); } catch (e) {} } }
+}
+function go(w){ flushAll(); sel = w; history.replaceState(null, '', `${location.pathname}?w=${w}`); render(); }
+
+function tableHtml(){
+  return `<table class="xl"><colgroup><col class="c1"><col></colgroup><thead><tr><th>담당자</th><th>업무 내용</th></tr></thead><tbody>${PEOPLE().map(p => {
+    const lines = itemsOf(p), ed = canEdit(p), r = rowOf(p);
+    const rows = ed ? [...lines, ''] : (lines.length ? lines : ['']);
+    const filled = lines.filter(t => t.trim()).length;
+    return rows.map((t, i) => `<tr class="${i === 0 ? 'first' : ''}">${i === 0 ? `<td class="pn ${p === me ? 'mine' : ''}" rowspan="${rows.length}">${esc(fullName(p))}<span class="cnt">${filled ? `${filled}건${r && r.updated_at ? ' · ' + fmtDateTime(r.updated_at) : ''}` : '아직 안 적음'}</span></td>` : ''}<td class="cell"><div class="cw"><span class="n">${ed && i === rows.length - 1 && !t ? '+' : i + 1}</span>${ed
+      ? `<input data-p="${esc(p)}" data-i="${i}" value="${esc(t)}" placeholder="${i === rows.length - 1 ? (i ? '다음 업무' : '이번 주 할 업무를 적어 주세요') : ''}">`
+      : `<div class="ro">${t ? esc(t) : '<span class="none">-</span>'}</div>`}</div></td></tr>`).join('');
+  }).join('')}</tbody></table>`;
+}
+const inputsOf = p => [...document.querySelectorAll('input[data-p]')].filter(x => x.dataset.p === p);
+const cellInput = (p, i) => inputsOf(p).find(x => +x.dataset.i === i);
+const collect = p => { const v = inputsOf(p).map(x => x.value); while (v.length && !v[v.length - 1].trim()) v.pop(); return v; };
+
+/* 화면을 통째로 다시 그리지 않고 새 빈 줄만 끼움(한글 입력 중에 다시 그리면 글자가 깨짐) */
+function addBlankRow(p, el){
+  const tr = el.closest('tr'), i = +el.dataset.i, who = inputsOf(p)[0].closest('tr').querySelector('td.pn');
+  el.closest('td').querySelector('.n').textContent = i + 1; el.placeholder = '';
+  const nt = document.createElement('tr');
+  nt.innerHTML = `<td class="cell"><div class="cw"><span class="n">+</span><input data-p="${esc(p)}" data-i="${i + 1}" placeholder="다음 업무"></div></td>`;
+  tr.after(nt);
+  if (who) who.rowSpan = who.rowSpan + 1;
+  bindTable();
+}
+let composing = false, needRender = false;
+function bindTable(){
+  const all = [...document.querySelectorAll('input[data-p]')];
+  all.forEach((el, k) => {
+    const p = el.dataset.p, i = +el.dataset.i;
+    el.oninput = () => {
+      drafts[p] = collect(p);
+      const ins = inputsOf(p);
+      if (el === ins[ins.length - 1] && el.value) addBlankRow(p, el);   // 마지막 빈 줄에 쓰기 시작하면 그 아래에 새 빈 줄
+      clearTimeout(timers[p]); timers[p] = setTimeout(() => save(p), 800);
+    };
+    el.oncompositionstart = () => { composing = true; };
+    el.oncompositionend = () => { composing = false; if (needRender) { needRender = false; setTimeout(render, 0); } };
+    el.onblur = () => setTimeout(() => {   // 포커스가 옮겨 간 뒤에 저장(같은 사람 칸 안에서 옮기면 빈 줄을 그대로 둠)
+      const a = document.activeElement, still = a && a.dataset && a.dataset.p === p;
+      save(p, !still);
+    }, 0);
+    el.onkeydown = e => {
+      if (e.isComposing || e.keyCode === 229) return;   // 한글 조합 중
+      if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); const n = all[k + 1]; if (n) n.focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); const n = all[k - 1]; if (n) n.focus(); }
+      else if (e.key === 'Backspace' && !el.value && i > 0) {
+        e.preventDefault();
+        const v = inputsOf(p).map(x => x.value); v.splice(i, 1); while (v.length && !v[v.length - 1].trim()) v.pop();
+        drafts[p] = v; render();
+        const prev = cellInput(p, i - 1); if (prev) { prev.focus(); prev.setSelectionRange(prev.value.length, prev.value.length); }
+        clearTimeout(timers[p]); timers[p] = setTimeout(() => save(p), 800);
+      }
+    };
+  });
+}
+/* 저장: 빈 줄은 빼고. done=true 면 고치던 값(drafts)을 내려놓음 */
+async function save(p, done){
+  clearTimeout(timers[p]);
+  if (!drafts[p] || !canEdit(p)) return;
+  const items = drafts[p].map(t => t.trim()).filter(Boolean), r = rowOf(p);
+  const same = JSON.stringify(items) === JSON.stringify(r ? r.items : []);
+  if (done) delete drafts[p];
+  if (same) { if (done) render(); return; }
+  await saveRow('weekly_plans', r ? { ...r, items, updated_by: me }
+    : { id: uid(), week_start: sel, author: p, items, created_by: me, created_at: nowIso(), updated_by: me });
+}
+function flushAll(){ Object.keys(drafts).forEach(p => save(p, true)); }
+window.addEventListener('beforeunload', flushAll);
+
+/* 담당자 정하기 (관리자) */
+function openSettings(){
+  if (!isAdmin()) return;
+  const cur = PEOPLE();
+  const names = [...cur, ...members.map(m => m.name).filter(n => !cur.includes(n))];
+  openModal(`${modalHead('주간 업무 리스트 담당자')}
+    <div class="mb"><div class="f"><label>표 왼쪽에 나오는 사람 (위에서부터 이 순서)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 10px;padding:6px 0">${names.map(n => `<label style="display:inline-flex;gap:5px;align-items:center;width:auto;font-weight:400"><input type="checkbox" data-pp value="${esc(n)}" ${cur.includes(n) ? 'checked' : ''}> ${esc(fullName(n))}</label>`).join('')}</div>
+      <div class="hint">새로 체크한 사람은 맨 아래에 붙습니다. 빼도 그 사람이 적었던 내용은 지워지지 않습니다.</div></div></div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="ppSave">저장</button></div>`);
+  $('#ppSave').onclick = async () => {
+    const people = [...document.querySelectorAll('[data-pp]:checked')].map(x => x.value);
+    if (!people.length) { toast('한 사람 이상 골라 주세요', true); return; }
+    closeModal(); await saveRow('settings', { id: SETTING_ID, value: { people }, updated_by: me }); toast('담당자를 저장했습니다');
+  };
+}
+
+boot({ icon: '🗓️', title: '주간 업무 리스트', tables: ['weekly_plans', 'settings'], render, normalize });
+</script>
+</body>
+</html>
