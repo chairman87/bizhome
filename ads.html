@@ -478,6 +478,7 @@ function perfBlock(a){
 /* 집행 현황 (2026-11-02): 메타·구글·틱톡 광고 집행 금액(부가세 전)을 달별로 편집자별 합계 → 큰 순서. 예전 "예산 현황"(하루 예산 합계)을 대신함 —
    매체가 캠페인 하나에 영상 여러 개를 넣는 구조로 바뀌어 예산을 영상별로 나눌 수 없음. 값은 매일 10시 자동 반영 (2026-10 부터, meta_spend·google_spend·tiktok_spend) */
 let budOpen = '';      // 펼쳐 본 편집자
+const BUD_ETC = ['하은', '주파수'];   // 집행 현황에서 '기타' 한 줄로 묶는 편집자 (편집자가 비어 있는 영상도 기타. 2026-11-22 사장님 요청)
 let budProd = '';      // 집행 현황: 브랜드 카드를 눌러 그 브랜드만 편집자별로 보기 (비어 있으면 전체)
 let spendMonth = '';   // 보는 달 (비어 있으면 가장 최근 달)
 function budgetHtml(){
@@ -492,7 +493,7 @@ function budgetHtml(){
   const shown = PRODUCTS.includes(budProd) ? live.filter(a => a.product === budProd) : live, onlyP = shown !== live ? budProd : '';   // 아래 편집자 표에 넣을 영상 (브랜드 카드를 누르면 그 브랜드만)
   const sT = sum(shown) || 1, sME = sum(shown, 'me'), sMO = sum(shown, 'mo'), sMP = sum(shown, 'mp'), sGG = sum(shown, 'g'), sTT = sum(shown, 't');
   const byEd = {};
-  shown.forEach(a => { const e = a.editor || '편집자 미지정'; (byEd[e] = byEd[e] || []).push(a); });
+  shown.forEach(a => { const e = !a.editor || BUD_ETC.includes(a.editor) ? '기타' : a.editor; (byEd[e] = byEd[e] || []).push(a); });
   const rank = Object.entries(byEd).map(([e, list]) => ({ e, list: list.sort((x, y) => y.v - x.v), v: sum(list), mo: sum(list, 'mo'), mp: sum(list, 'mp'), g: sum(list, 'g'), t: sum(list, 't') })).sort((x, y) => y.v - x.v);
   const max = rank.length ? rank[0].v : 1;
   const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
@@ -515,7 +516,7 @@ function budgetHtml(){
     ${rank.map((r, i) => `<tr class="ed" data-ed="${esc(r.e)}"><td class="rk">${i + 1}</td><td class="l nm">${esc(r.e)} <span style="font-weight:400;color:var(--fg3);font-size:11px">${budOpen === r.e ? '▴' : '▾'}</span></td><td>${r.list.length}</td>
         <td class="mg">${r.mo ? fmtWon(r.mo) : dash}</td><td class="mg">${r.mp ? fmtWon(r.mp) : dash}</td><td class="mg">${r.g ? fmtWon(r.g) : dash}</td><td class="mg">${r.t ? fmtWon(r.t) : dash}</td><td class="tot">${fmtWon(r.v)}</td>
         <td class="sh">${bars(r)}${(r.v / sT * 100).toFixed(1)}%</td></tr>
-      ${budOpen === r.e ? `<tr class="det"><td colspan="9"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}${mstateOf(a) === 'OFF' ? ' <span class="off">OFF</span>' : ''}</span><span class="amt">${chips(a)} = <b>${fmtWon(a.v)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
+      ${budOpen === r.e ? `<tr class="det"><td colspan="9"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}${r.e === '기타' ? ` <span style="color:var(--fg3)">· ${esc(a.editor || '편집자 미지정')}</span>` : ''}${mstateOf(a) === 'OFF' ? ' <span class="off">OFF</span>' : ''}</span><span class="amt">${chips(a)} = <b>${fmtWon(a.v)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
     <tr class="sumrow"><td></td><td class="l">${onlyP ? esc(onlyP) + ' ' : ''}합계</td><td>${shown.length}</td><td>${fmtWon(sMO)}</td><td>${fmtWon(sMP)}</td><td>${fmtWon(sGG)}</td><td>${fmtWon(sTT)}</td><td class="tot">${fmtWon(sum(shown))}</td><td class="sh">메타 ${(sME / sT * 100).toFixed(1)}% · 구글 ${(sGG / sT * 100).toFixed(1)}% · 틱톡 ${(sTT / sT * 100).toFixed(1)}%</td></tr>
     </tbody></table></div>`}`;
 }
