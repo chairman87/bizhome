@@ -653,7 +653,6 @@
   <div class="topbar" id="topbar" hidden>
     <div class="topbar-left">
       <nav class="sw" title="인트라넷·프로젝트·메모장 사이를 오갑니다"><a class="swt" href="index.html"><img src="favicon.svg" class="logo-sm" alt="">인트라넷</a><a class="swt" href="projects.html">🗂️ 프로젝트</a><a class="swt on" href="think.html">📝 메모장</a></nav>
-      <button id="addTopic" class="add-board" title="생각노트형 탭 새로 만들기 (고민을 제목으로 적고 그 아래에 생각을 적어 나가는 탭)">+ 생각노트</button>
       <button id="addMemo" class="add-board" title="메모장형 탭 새로 만들기">+ 메모장</button>
       <button id="exportBtn" class="add-board" title="모든 탭의 주제와 내용을 메모장용 텍스트 파일(.txt) 하나로 내려받습니다">📄 전체 추출</button>
     </div>
@@ -686,7 +685,7 @@
     // ── 판 확인 ────────────────────────────────
     // 브라우저가 옛 파일을 들고 있으면 고쳐도 전달되지 않습니다.
     // 그래서 열 때마다 서버의 최신 파일을 살짝 확인하고, 다르면 새로 받아옵니다.
-    const BUILD = "2026-10-18 19:40";
+    const BUILD = "2026-11-23 08:48";
     let lastBuildCheck = 0;
     async function checkBuild() {
       if (Date.now() - lastBuildCheck < 60000) return;      // 1분에 한 번이면 충분
@@ -1272,12 +1271,13 @@
       }
 
       // 화면 그리기. 여기서 문제가 나면 빈 화면이 되지 않도록 붙잡아 알립니다
+      let turned = false;
       try {
         migrateBoards();
+        turned = topicsToMemos();   // 생각노트형 탭을 메모장형으로 (2026-11-23)
         dbg("D. 탭 목록 준비", storeGet("boards") || "(없음)");
         drawLayout();
         dbg("E. 화면 그리기 끝", "탭 " + document.querySelectorAll(".card").length + "개");
-        document.getElementById("addTopic").addEventListener("click", () => addBoard("topic"));
         document.getElementById("addMemo").addEventListener("click", () => addBoard("memo"));
         document.querySelectorAll("#viewSeg button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
       } catch (e) {
@@ -1291,6 +1291,7 @@
 
       appReady = true;
       showStoreStatus(cache && cache.dirty ? "saving" : "ready");
+      if (turned) markEdited();   // 메모장으로 바꾼 것을 서버에 저장
     }
 
     // ── 처음 한 번: 쓰던 파일에서 가져오기 ────
@@ -1481,11 +1482,7 @@
           key: "notes", trashKey: "notesTrash", width: 444, compact: true
         });
       }
-      if (!list.length) {   // 처음 들어온 사람: 생각노트형 탭 하나 + 메모장형 탭 하나를 켜 둠 (2026-10-18, 둘 다 보여야 쓰기 쉬움)
-        list.push({
-          id: "dig", title: "생각노트",
-          key: "dig", trashKey: "digTrash", width: DEFAULT_W, compact: false
-        });
+      if (!list.length) {   // 처음 들어온 사람: 메모장 탭 하나를 켜 둠 (2026-11-23 생각노트형은 없앰)
         const mid = newId();
         list.push({
           id: mid, title: "메모장",
@@ -1494,6 +1491,51 @@
         });
       }
       storeSet(BOARDS_KEY, JSON.stringify(list));
+    }
+
+    // ── 생각노트형 탭 없애기 (2026-11-23 사장님 결정: 아무도 안 써서 메모장만 씀) ──
+    // 열 때마다 생각노트형 탭을 찾아, 적은 것이 있으면 같은 이름의 메모장형 탭으로 바꾸고(주제·내용·결정·보관함을 글로 옮김)
+    // 적은 것이 없으면 탭을 지웁니다. 탭 id 는 그대로 두므로 다른 기기와 엇갈려 저장돼도 탭이 두 개로 늘지 않습니다.
+    // 예전 주제 자료(board.key, _archive, 휴지통)는 지우지 않고 그대로 남겨 둡니다(화면에는 안 보임. 만일을 위한 원본).
+    function topicBoardText(board) {
+      const clean = (t) => (t || "").replace(/\r\n/g, "\n").trim();
+      const L = [];
+      const put = (note, extra) => {
+        if (note.head) { L.push("── " + (clean(note.title) || "구분") + " ──", ""); return; }
+        const title = clean(note.title), body = clean(note.body), dec = clean(note.decision);
+        if (!title && !body && !dec) return;   // 빈 주제는 건너뜀
+        L.push("▶ " + (title || "제목 없음") + (extra || ""));
+        if (body) L.push(body);
+        if (dec) L.push("◆ 결정: " + dec);
+        L.push("");
+      };
+      const has = (n) => !n.head && (clean(n.title) || clean(n.body) || clean(n.decision));
+      const list = readList(board.key), arch = readList(board.key + "_archive");
+      if (list.some(has)) list.forEach((n) => put(n));
+      if (arch.some(has)) {
+        L.push("[보관함]", "");
+        arch.forEach((n) => put(n, n.archivedAt ? "  (" + n.archivedAt + " 보관)" : ""));
+      }
+      return list.some(has) || arch.some(has) ? L.join("\n").trim() : "";
+    }
+    function topicsToMemos() {
+      const boards = loadBoards();
+      if (!boards.some(b => b.kind !== "memo")) return false;
+      const out = [];
+      boards.forEach((b) => {
+        if (b.kind === "memo") { out.push(b); return; }
+        const text = topicBoardText(b);
+        if (!text) return;                                   // 적은 것이 없는 생각노트 탭은 지움
+        const key = "board_" + b.id + "_memo";
+        storeSet(key, JSON.stringify([{ id: memoItemId(key), body: text }]));
+        out.push(Object.assign({}, b, { kind: "memo", key: key, trashKey: key + "_trash", compact: false, fromTopic: b.key }));
+      });
+      if (!out.length) {                                     // 탭이 하나도 안 남으면 빈 메모장 하나
+        const mid = newId();
+        out.push({ id: mid, title: "메모장", key: "board_" + mid, trashKey: "board_" + mid + "_trash", width: DEFAULT_W, compact: false, kind: "memo" });
+      }
+      saveBoards(out);
+      return true;
     }
 
     // kind: "topic"(생각노트형, 기본. 2026-10-18 "주제" → "생각노트"로 이름만 바뀜, 안의 항목은 그대로 "주제") 또는 "memo"(메모장형)
@@ -2007,7 +2049,7 @@
       if (!shown.length) {
         const p = document.createElement("div");
         p.className = "layout-empty";
-        p.textContent = active.length ? "위에서 탭 이름을 누르면 여기에 펼쳐집니다." : "아직 탭이 없습니다. 위 '+ 새 탭'을 눌러보세요.";
+        p.textContent = active.length ? "위에서 탭 이름을 누르면 여기에 펼쳐집니다." : "아직 탭이 없습니다. 위 '+ 메모장'을 눌러보세요.";
         layout.appendChild(p);
       }
       fitLayout();
