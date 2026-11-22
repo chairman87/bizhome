@@ -254,8 +254,8 @@ const cpaOf = s => s.conv ? s.spend / s.conv : null;      // CPA = 광고비 ÷ 
 const roasOf = s => s.spend ? s.value / s.spend : null;   // ROAS = 구매 금액 ÷ 광고비 (광고관리자와 같은 기준)
 const roasTxt = r => r == null ? '-' : r.toFixed(2);      // perf.html 과 같게 '배' 없이 숫자만
 const DASH = '<span style="color:var(--fg3)">–</span>';
-/* 결과값(구매·CPA·ROAS = 매출 기준)은 관리자만 (2026-11-20 사장님 요청: 직원에게는 광고비만 보이고 매출·결과값은 안 보이게) */
-const RES = () => isAdmin();
+/* 결과값(구매·CPA·ROAS = 매출 기준)을 누구에게 보여줄지. 2026-11-20 관리자만 → 2026-11-22 사장님 요청으로 다시 팀원 모두에게. 관리자만으로 되돌리려면 isAdmin() */
+const RES = () => true;
 const spendHtml = s => s.spend ? fmtWon(s.spend) : DASH;
 const convHtml = s => s.spend || s.conv ? fmtNum(Math.round(s.conv * 10) / 10) : DASH;
 const cpaHtml = s => s.spend ? (s.conv ? fmtWon(cpaOf(s)) : '<span class="nopurchase">구매 0</span>') : DASH;
