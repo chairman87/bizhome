@@ -130,6 +130,14 @@
   table.bud .bar{display:inline-block;height:10px;border-radius:5px;background:#0866FF;vertical-align:middle;margin-right:8px;min-width:2px}
   table.bud td.sh{width:34%;text-align:left;color:var(--fg2);font-size:12px}
   table.bud tr.sumrow td{font-weight:700;border-top:2px solid var(--line2);background:var(--bg2)}
+  /* 편집자 줄을 펼쳤을 때: 영상 하나가 한 줄, 금액은 위 표와 같은 칸에 맞춤 (2026-11-22 사장님 요청) */
+  table.bud tr.vrow td{background:var(--bg2);font-size:12px;padding-top:4px;padding-bottom:4px;border-bottom:1px dashed var(--line);font-weight:400}
+  table.bud tr.vrow{cursor:pointer}
+  table.bud tr.vrow:hover td{background:#fffbea}
+  table.bud tr.vrow td.vt{text-align:left;white-space:normal;padding-left:22px}
+  table.bud tr.vrow td.vt .vd{color:var(--fg3);font-variant-numeric:tabular-nums;margin-right:2px}
+  table.bud tr.vrow td.tot{font-weight:600}
+  table.bud tr.vrow td.sh{font-size:11px;color:var(--fg3)}
   table.bud tr.det td{background:var(--bg2);text-align:left;white-space:normal;padding:6px 10px 12px 54px}
   .vlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px 18px;font-size:12px}
   .vlist div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:2px 0}
@@ -516,7 +524,9 @@ function budgetHtml(){
     ${rank.map((r, i) => `<tr class="ed" data-ed="${esc(r.e)}"><td class="rk">${i + 1}</td><td class="l nm">${esc(r.e)} <span style="font-weight:400;color:var(--fg3);font-size:11px">${budOpen === r.e ? '▴' : '▾'}</span></td><td>${r.list.length}</td>
         <td class="mg">${r.mo ? fmtWon(r.mo) : dash}</td><td class="mg">${r.mp ? fmtWon(r.mp) : dash}</td><td class="mg">${r.g ? fmtWon(r.g) : dash}</td><td class="mg">${r.t ? fmtWon(r.t) : dash}</td><td class="tot">${fmtWon(r.v)}</td>
         <td class="sh">${bars(r)}${(r.v / sT * 100).toFixed(1)}%</td></tr>
-      ${budOpen === r.e ? `<tr class="det"><td colspan="9"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}${r.e === '기타' ? ` <span style="color:var(--fg3)">· ${esc(a.editor || '편집자 미지정')}</span>` : ''}${mstateOf(a) === 'OFF' ? ' <span class="off">OFF</span>' : ''}</span><span class="amt">${chips(a)} = <b>${fmtWon(a.v)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
+      ${budOpen === r.e ? r.list.map(a => `<tr class="vrow" data-open="${a.id}" title="${esc(a.title)} (누르면 상세 창)"><td></td><td class="l vt" colspan="2"><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> <span class="vd">${mmdd(a.date)}</span> ${esc(a.title)}${r.e === '기타' ? ` <span style="color:var(--fg3)">· ${esc(a.editor || '편집자 미지정')}</span>` : ''}${mstateOf(a) === 'OFF' ? ' <span class="off">OFF</span>' : ''}</td>
+        <td class="mg">${a.mo ? fmtWon(a.mo) : dash}</td><td class="mg">${a.mp ? fmtWon(a.mp) : dash}</td><td class="mg">${a.g ? fmtWon(a.g) : dash}</td><td class="mg">${a.t ? fmtWon(a.t) : dash}</td><td class="tot">${fmtWon(a.v)}</td>
+        <td class="sh">${esc(r.e)} 안에서 ${(a.v / (r.v || 1) * 100).toFixed(1)}%</td></tr>`).join('') : ''}`).join('')}
     <tr class="sumrow"><td></td><td class="l">${onlyP ? esc(onlyP) + ' ' : ''}합계</td><td>${shown.length}</td><td>${fmtWon(sMO)}</td><td>${fmtWon(sMP)}</td><td>${fmtWon(sGG)}</td><td>${fmtWon(sTT)}</td><td class="tot">${fmtWon(sum(shown))}</td><td class="sh">메타 ${(sME / sT * 100).toFixed(1)}% · 구글 ${(sGG / sT * 100).toFixed(1)}% · 틱톡 ${(sTT / sT * 100).toFixed(1)}%</td></tr>
     </tbody></table></div>`}`;
 }
