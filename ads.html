@@ -104,6 +104,9 @@
   .bsum .k .v{font-size:20px;font-weight:700;margin-top:2px}
   .bsum .k .v small{font-size:12px;font-weight:500;color:var(--fg2);margin-left:4px}
   .bsum .k.big{border-color:#e0c25a;background:#fffbea}
+  .bsum .k.pk{cursor:pointer}
+  .bsum .k.pk:hover{border-color:#93c5fd;background:#f8fbff}
+  .bsum .k.pk.on{border-color:#1d4ed8;background:#eff6ff;box-shadow:inset 0 0 0 1px #1d4ed8}
   .bsum .k.big .t,.bsum .k.big .v{color:#292524}
   .bsum .k .t .brand,table.bud th .brand,.actions .brand{display:inline-flex;align-items:center;gap:5px;vertical-align:middle}
   .bsum .k .t .brand svg,table.bud th .brand svg,.actions .brand svg{width:14px;height:14px;display:block}
@@ -475,6 +478,7 @@ function perfBlock(a){
 /* 집행 현황 (2026-11-02): 메타·구글·틱톡 광고 집행 금액(부가세 전)을 달별로 편집자별 합계 → 큰 순서. 예전 "예산 현황"(하루 예산 합계)을 대신함 —
    매체가 캠페인 하나에 영상 여러 개를 넣는 구조로 바뀌어 예산을 영상별로 나눌 수 없음. 값은 매일 10시 자동 반영 (2026-10 부터, meta_spend·google_spend·tiktok_spend) */
 let budOpen = '';      // 펼쳐 본 편집자
+let budProd = '';      // 집행 현황: 브랜드 카드를 눌러 그 브랜드만 편집자별로 보기 (비어 있으면 전체)
 let spendMonth = '';   // 보는 달 (비어 있으면 가장 최근 달)
 function budgetHtml(){
   const months = spendMonths();
@@ -485,8 +489,10 @@ function budgetHtml(){
     .map(a => ({ ...a, pt: isPt(a), mo: isPt(a) ? 0 : a.me, mp: isPt(a) ? a.me : 0 }));
   const sum = (list, k = 'v') => list.reduce((t, a) => t + a[k], 0);
   const T = sum(live), ME = sum(live, 'me'), MO = sum(live, 'mo'), MP = sum(live, 'mp'), GG = sum(live, 'g'), TT = sum(live, 't');
+  const shown = PRODUCTS.includes(budProd) ? live.filter(a => a.product === budProd) : live, onlyP = shown !== live ? budProd : '';   // 아래 편집자 표에 넣을 영상 (브랜드 카드를 누르면 그 브랜드만)
+  const sT = sum(shown) || 1, sME = sum(shown, 'me'), sMO = sum(shown, 'mo'), sMP = sum(shown, 'mp'), sGG = sum(shown, 'g'), sTT = sum(shown, 't');
   const byEd = {};
-  live.forEach(a => { const e = a.editor || '편집자 미지정'; (byEd[e] = byEd[e] || []).push(a); });
+  shown.forEach(a => { const e = a.editor || '편집자 미지정'; (byEd[e] = byEd[e] || []).push(a); });
   const rank = Object.entries(byEd).map(([e, list]) => ({ e, list: list.sort((x, y) => y.v - x.v), v: sum(list), mo: sum(list, 'mo'), mp: sum(list, 'mp'), g: sum(list, 'g'), t: sum(list, 't') })).sort((x, y) => y.v - x.v);
   const max = rank.length ? rank[0].v : 1;
   const last = (DATA.ads_sync || []).slice().sort((a, b) => (b.synced_at || '').localeCompare(a.synced_at || ''))[0];
@@ -500,15 +506,17 @@ function budgetHtml(){
       <div class="k"><div class="t">${LOGO['메타']}</div><div class="v">${fmtWon(ME)}<small>원</small></div><div class="s">제작영상 ${fmtWon(MO)} · 파트너스 ${fmtWon(MP)}</div></div>
       <div class="k"><div class="t">${LOGO['구글']}</div><div class="v">${fmtWon(GG)}<small>원</small></div><div class="s">영상 ${live.filter(a => a.g).length}개</div></div>
       <div class="k"><div class="t">${LOGO['틱톡']}</div><div class="v">${fmtWon(TT)}<small>원</small></div><div class="s">영상 ${live.filter(a => a.t).length}개</div></div>
-      ${PRODUCTS.map(p => { const l = live.filter(a => a.product === p); return `<div class="k"><div class="t">${p}</div><div class="v" style="font-size:16px">${fmtWon(sum(l))}</div><div class="s">영상 ${l.length}개</div></div>`; }).join('')}
+      ${PRODUCTS.map(p => { const l = live.filter(a => a.product === p); return `<div class="k pk ${onlyP === p ? 'on' : ''}" data-bprod="${p}" title="누르면 ${p}만 편집자별로 봅니다 (다시 누르면 전체)"><div class="t">${p} <span style="color:var(--fg3)">${onlyP === p ? '▴' : '▾'}</span></div><div class="v" style="font-size:16px">${fmtWon(sum(l))}</div><div class="s">영상 ${l.length}개</div></div>`; }).join('')}
     </div>
-    <div class="hint" style="margin-bottom:8px">메타·구글·틱톡 광고 관리자가 보고한 <b>${monthLabel(m)} 집행 금액</b>을 편집자별로 더해 큰 순서로 보여 줍니다 (한 캠페인에 영상 여러 개가 들어 있어도 광고별로 나눠 셉니다). 메타는 <b>제작영상</b>(직접 만든 영상)과 <b>파트너스</b>(타이틀에 "파트너스"가 들어가는 영상)로 나눴습니다. 편집자 줄을 누르면 그 사람의 영상이 펼쳐집니다.</div>
+    <div class="hint" style="margin-bottom:8px">메타·구글·틱톡 광고 관리자가 보고한 <b>${monthLabel(m)} 집행 금액</b>을 편집자별로 더해 큰 순서로 보여 줍니다 (한 캠페인에 영상 여러 개가 들어 있어도 광고별로 나눠 셉니다). 메타는 <b>제작영상</b>(직접 만든 영상)과 <b>파트너스</b>(타이틀에 "파트너스"가 들어가는 영상)로 나눴습니다. 편집자 줄을 누르면 그 사람의 영상이 펼쳐지고, 위의 <b>브랜드 칸</b>(${PRODUCTS.join('·')})을 누르면 그 브랜드만 편집자별로 볼 수 있습니다.</div>
+    ${onlyP ? `<div class="actions" style="margin-bottom:8px"><span class="count" style="margin-left:0;font-size:13px"><b>${esc(onlyP)}</b>만 보는 중 · 영상 ${shown.length}개 · ${fmtWon(sum(shown))}원 · <a href="#" data-bprod="" style="color:var(--blue)">전체 보기</a></span></div>` : ''}
+    ${onlyP && !shown.length ? `<div class="empty">${monthLabel(m)}에 ${esc(onlyP)} 집행이 없습니다.</div>` : ''}
     <div class="tablewrap"><table class="bud"><thead><tr><th>순위</th><th class="l">편집자</th><th>영상 수</th><th>${LOGO['메타']} 제작영상</th><th>${LOGO['메타']} 파트너스</th><th>${LOGO['구글']}</th><th>${LOGO['틱톡']}</th><th>합계</th><th class="l">비중 <span style="font-weight:400;font-size:11px;color:#57534e">(파랑 메타 · 초록 구글 · 검정 틱톡)</span></th></tr></thead><tbody>
     ${rank.map((r, i) => `<tr class="ed" data-ed="${esc(r.e)}"><td class="rk">${i + 1}</td><td class="l nm">${esc(r.e)} <span style="font-weight:400;color:var(--fg3);font-size:11px">${budOpen === r.e ? '▴' : '▾'}</span></td><td>${r.list.length}</td>
         <td class="mg">${r.mo ? fmtWon(r.mo) : dash}</td><td class="mg">${r.mp ? fmtWon(r.mp) : dash}</td><td class="mg">${r.g ? fmtWon(r.g) : dash}</td><td class="mg">${r.t ? fmtWon(r.t) : dash}</td><td class="tot">${fmtWon(r.v)}</td>
-        <td class="sh">${bars(r)}${(r.v / T * 100).toFixed(1)}%</td></tr>
+        <td class="sh">${bars(r)}${(r.v / sT * 100).toFixed(1)}%</td></tr>
       ${budOpen === r.e ? `<tr class="det"><td colspan="9"><div class="vlist">${r.list.map(a => `<div data-open="${a.id}" style="cursor:pointer" title="${esc(a.title)}"><span><b class="p-${PCODE[a.product]}">(${PCODE[a.product]})</b> ${mmdd(a.date)} ${esc(a.title)}${mstateOf(a) === 'OFF' ? ' <span class="off">OFF</span>' : ''}</span><span class="amt">${chips(a)} = <b>${fmtWon(a.v)}</b></span></div>`).join('')}</div></td></tr>` : ''}`).join('')}
-    <tr class="sumrow"><td></td><td class="l">합계</td><td>${live.length}</td><td>${fmtWon(MO)}</td><td>${fmtWon(MP)}</td><td>${fmtWon(GG)}</td><td>${fmtWon(TT)}</td><td class="tot">${fmtWon(T)}</td><td class="sh">메타 ${(ME / T * 100).toFixed(1)}% · 구글 ${(GG / T * 100).toFixed(1)}% · 틱톡 ${(TT / T * 100).toFixed(1)}%</td></tr>
+    <tr class="sumrow"><td></td><td class="l">${onlyP ? esc(onlyP) + ' ' : ''}합계</td><td>${shown.length}</td><td>${fmtWon(sMO)}</td><td>${fmtWon(sMP)}</td><td>${fmtWon(sGG)}</td><td>${fmtWon(sTT)}</td><td class="tot">${fmtWon(sum(shown))}</td><td class="sh">메타 ${(sME / sT * 100).toFixed(1)}% · 구글 ${(sGG / sT * 100).toFixed(1)}% · 틱톡 ${(sTT / sT * 100).toFixed(1)}%</td></tr>
     </tbody></table></div>`}`;
 }
 
@@ -572,6 +580,7 @@ function bindView(){
   document.querySelectorAll('[data-edit]').forEach(el => el.ondblclick = e => { e.stopPropagation(); inlineEdit(el); });
   document.querySelectorAll('[data-note]').forEach(el => el.onclick = e => { e.stopPropagation(); if (e.detail > 1) return; openNote(el.dataset.note); });   // 콘티 한 번 클릭 → 전체 보기 창 (두 번 클릭은 바로 고치기)
   document.querySelectorAll('table.bud tr.ed').forEach(tr => tr.onclick = () => { budOpen = budOpen === tr.dataset.ed ? '' : tr.dataset.ed; render(); });
+  document.querySelectorAll('[data-bprod]').forEach(el => el.onclick = e => { e.preventDefault(); budProd = budProd === el.dataset.bprod ? '' : el.dataset.bprod; budOpen = ''; render(); });   // 집행 현황: 브랜드 카드 → 그 브랜드만
   const smn = $('#spendMonth'); if (smn) smn.onchange = () => { spendMonth = smn.value; render(); };   // 집행 현황: 보는 달 바꾸기
   const pp = $('#perfPeriod'); if (pp) pp.onchange = () => { perfPeriod = pp.value; LS.set('ads_perf_period', perfPeriod); render(); };   // 성과 기간 (제품 탭·영상 리뷰 공통)
   const rb = $('#rvBrand'); if (rb) rb.onchange = () => { rvBrand = rb.value; render(); };
