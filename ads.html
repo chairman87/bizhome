@@ -280,7 +280,7 @@ const LOGO = {
 const TSTATES = ['운영중', 'OFF', '거부됨', '없음'];
 const tstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.tiktok_state) ? a.tiktok_state : '없음';   // 틱톡에서 실제로 송출 중인지 (매일 10시 크롬으로 읽어 자동 반영)
 const tstateHtml = a => { const t = tstateOf(a); return t === '운영중' ? '<span class="run">운영중</span>' : t === 'OFF' ? '<span class="off">OFF</span>' : t === '거부됨' ? '<span class="del" title="틱톡 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : '<span style="color:var(--fg3)" title="틱톡 광고 관리자에서 이 영상을 찾지 못했습니다. 틱톡에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
-const NO_GOOGLE = ['레모너리'];   // 구글 광고를 하지 않는 제품: 표에서 구글 열 두 개를 숨김
+const NO_GOOGLE = [];   // 구글 광고를 하지 않는 제품: 표에서 구글 열을 숨김 (레모너리는 2026-11-22 구글 시작으로 뺌)
 const hasGoogle = p => !NO_GOOGLE.includes(p);
 const GSTATES = ['운영중', 'OFF', '거부됨', '없음'];
 const gstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.google_state) ? a.google_state : '없음';   // 구글애즈에서 실제로 켜져 있는지 (매일 10시 자동 반영, 서리맥스·흑생마)
