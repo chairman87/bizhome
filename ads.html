@@ -228,6 +228,7 @@ const fmtBudget = b => { if (b == null || b === '') return ''; const n = Number(
 const SPEND_SINCE = '2026-10';
 const SPEND_CH = [['meta_spend', '메타'], ['google_spend', '구글'], ['tiktok_spend', '틱톡']];   // 매체별 칸 (구글·틱톡은 2026-11-02 추가, 모두 부가세 전·별도 금액)
 const fmtWon = v => Math.round(v).toLocaleString('ko-KR');
+const fmtK = v => v < 1000 ? fmtWon(v) : (Math.round(v / 1000) * 1000).toLocaleString('ko-KR');   // 표 칸용: 천 원 단위로 반올림 (69,717 → 70,000). 1,000원 미만은 그대로. 정확한 금액은 칸에 마우스를 올리면 보임 (2026-11-22 사장님 요청)
 /* 집행 금액: m(달) 없으면 10월부터 합계, k(칸) 없으면 세 매체 합계 */
 const spendOf = (a, m, k) => (k ? [k] : SPEND_CH.map(x => x[0])).reduce((t, kk) => { const s = a[kk] || {}; return t + (m ? Number(s[m]) || 0 : Object.entries(s).filter(([x]) => x >= SPEND_SINCE).reduce((u, [, v]) => u + (Number(v) || 0), 0)); }, 0);
 const spendMonths = () => [...new Set(G().flatMap(a => SPEND_CH.flatMap(([k]) => Object.keys(a[k] || {}))))].filter(m => m >= SPEND_SINCE).sort().reverse();
@@ -266,9 +267,9 @@ const roasTxt = r => r == null ? '-' : r.toFixed(2);      // perf.html 과 같�
 const DASH = '<span style="color:var(--fg3)">–</span>';
 /* 결과값(구매·CPA·ROAS = 매출 기준)을 누구에게 보여줄지. 2026-11-20 관리자만 → 2026-11-22 사장님 요청으로 다시 팀원 모두에게. 관리자만으로 되돌리려면 isAdmin() */
 const RES = () => true;
-const spendHtml = s => s.spend ? fmtWon(s.spend) : DASH;
+const spendHtml = s => s.spend ? fmtK(s.spend) : DASH;
 const convHtml = s => s.spend || s.conv ? fmtNum(Math.round(s.conv * 10) / 10) : DASH;
-const cpaHtml = s => s.spend ? (s.conv ? fmtWon(cpaOf(s)) : '<span class="nopurchase">구매 0</span>') : DASH;
+const cpaHtml = s => s.spend ? (s.conv ? fmtK(cpaOf(s)) : '<span class="nopurchase">구매 0</span>') : DASH;
 const roasHtml = s => s.spend ? (s.value ? roasTxt(roasOf(s)) : '<span class="nopurchase">0</span>') : DASH;
 const pfCells = (s, off) => { const c = off ? 'perf pfoff' : 'perf', t = off ? ' title="이 매체에서는 지금 꺼져 있음 (매일 10시 자동 반영 기준)"' : ''; if (!RES()) return `<td class="${c}"${t}>${spendHtml(s)}</td>`; return `<td class="${c}"${t}>${spendHtml(s)}</td><td class="${c}"${t}>${convHtml(s)}</td><td class="${c}"${t}>${cpaHtml(s)}</td><td class="${c}"${t}>${roasHtml(s)}</td>`; };
 const perfTitle = a => PERF_CH.map(([k, n]) => { const s = perfOf(a, k); return s.spend ? `${n} 광고비 ${fmtWon(s.spend)}` + (!RES() ? '' : ` · 구매 ${fmtNum(Math.round(s.conv))} · CPA ${s.conv ? fmtWon(cpaOf(s)) : '-'} · ROAS ${roasTxt(roasOf(s))}`) : ''; }).filter(Boolean).join('\n') || `${perfLabel()} 광고 집행 없음`;
@@ -406,7 +407,7 @@ function productHtml(p){
       ${hasGoogle(p) ? `<td class="c gs" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
       <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
       ${pf ? pfCells(a._pc.google) : ''}` : ''}
-      <td class="spend gs" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtWon(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
+      <td class="spend gs" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtK(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       ${pf && !RES() ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td>` : ''}${pf && RES() ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${convHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${cpaHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${roasHtml(a._pf)}</td>` : ''}
       <td class="note" data-edit="note" data-id="${a.id}">${(a.note || '').trim() ? `<span class="nt" data-note="${a.id}" title="누르면 콘티 전체가 보입니다 (더블클릭: 바로 고치기)">${esc(String(a.note).trim().split(/\r?\n/)[0])}</span>` : ''}${(a.files || []).length ? `<span class="cmt" data-note="${a.id}" title="콘티 파일 ${a.files.length}개 (누르면 열림)" style="cursor:pointer">📎 ${a.files.length}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`;
