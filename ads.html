@@ -25,6 +25,7 @@
   td.spend{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   /* 앞 세 칸(게재일·영상 타이틀·편집자)은 옆으로 넘겨도 제자리에 고정 (2026-11-22 사장님 요청). 둘째·셋째 칸의 왼쪽 자리(--fx2·--fx3)는 fixCols() 가 실제 칸 폭을 재서 넣음 */
   table.ads{border-collapse:separate;border-spacing:0}
+  .tablewrap{overscroll-behavior-x:none}   /* 표 끝에서 더 밀어도 표가 고무줄처럼 튕기거나 '뒤로 가기'로 넘어가지 않게 */
   table.ads thead tr:first-child th:nth-child(-n+3),table.ads tbody td:nth-child(-n+3){position:sticky;left:0;z-index:2}
   table.ads thead tr:first-child th:nth-child(-n+3){z-index:3}
   table.ads thead tr:first-child th:nth-child(2),table.ads tbody td:nth-child(2){left:var(--fx2,0px)}
@@ -313,6 +314,9 @@ function fixCols(){
   const h = t.querySelectorAll('thead tr:first-child th'); if (h.length < 3) return;
   const w1 = h[0].getBoundingClientRect().width, w2 = h[1].getBoundingClientRect().width;
   t.style.setProperty('--fx2', w1 + 'px'); t.style.setProperty('--fx3', (w1 + w2) + 'px');
+  /* 옆으로 넘길 때는 옆으로만 움직이게 (손가락이 조금 비스듬해도 화면이 위아래로 같이 흔들리지 않음) */
+  const w = t.closest('.tablewrap');
+  if (w && !w._axis) { w._axis = true; w.addEventListener('wheel', e => { if (e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; e.preventDefault(); w.scrollLeft += e.deltaX; }, { passive: false }); }
 }
 window.addEventListener('resize', fixCols);
 
