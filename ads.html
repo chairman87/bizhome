@@ -23,6 +23,14 @@
   table.ads th.gl,table.rv th.gl{border-left:2px solid #e0c25a}
   table.ads tbody td.gs{border-left:2px solid var(--line)}   /* 묶음(메타·틱톡·구글·집행금액)의 첫 칸 */
   td.spend{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  /* 앞 세 칸(게재일·영상 타이틀·편집자)은 옆으로 넘겨도 제자리에 고정 (2026-11-22 사장님 요청). 둘째·셋째 칸의 왼쪽 자리(--fx2·--fx3)는 fixCols() 가 실제 칸 폭을 재서 넣음 */
+  table.ads{border-collapse:separate;border-spacing:0}
+  table.ads thead tr:first-child th:nth-child(-n+3),table.ads tbody td:nth-child(-n+3){position:sticky;left:0;z-index:2}
+  table.ads thead tr:first-child th:nth-child(-n+3){z-index:3}
+  table.ads thead tr:first-child th:nth-child(2),table.ads tbody td:nth-child(2){left:var(--fx2,0px)}
+  table.ads thead tr:first-child th:nth-child(3),table.ads tbody td:nth-child(3){left:var(--fx3,0px);box-shadow:2px 0 0 #e0c25a}
+  table.ads tbody td:nth-child(-n+3){background:var(--bg)}
+  table.ads tbody tr.row:hover td:nth-child(-n+3){background:var(--bg2)}
   table.bud .bar.t{background:#111;margin-left:-8px;border-radius:0 5px 5px 0}
   td.c{text-align:center;white-space:nowrap}
   td.ttl{font-weight:500;min-width:180px}
@@ -36,6 +44,7 @@
   .run{background:#dcfce7;color:#15803d;padding:0 8px;border-radius:3px;font-size:12px}
   tr.newrow td{background:transparent;padding:4px 6px}
   tr.newrow input,tr.newrow select{width:100%;border:1px solid var(--line2);border-radius:4px;padding:5px 6px;font:inherit;font-size:13px;background:#fff}
+  tr.newrow input[type=date]{width:106px;padding:5px 2px;font-size:12px}   /* 게재일 칸이 입력 상자 때문에 넓어지지 않게 */
   tr.newrow input:focus,tr.newrow select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
   [data-edit]{cursor:text}
   [data-edit]:hover{background:#fffbea;outline:1px dashed #e0c25a}
@@ -296,7 +305,16 @@ function render(){
     + `<main class="wrap wrap-wide">${!DATA.ads ? `<div class="empty">광고 리스트 저장 표가 아직 없습니다.${isAdmin() ? ' 위쪽 빨간 안내대로 SQL 을 실행하세요.' : ''}</div>` : view === 'month' ? monthHtml() : view === 'budget' ? budgetHtml() : view === 'review' ? reviewHtml() : productHtml(view)}</main>`;
   bindHeader(k => { view = k; LS.set('ads_view', k); filter = { ...freshFilter(), q: filter.q }; render(); }, null, m => `편집 ${G().filter(a => a.editor === m.name && !isRev(a)).length}건`);
   bindView();
+  fixCols();
 }
+/* 고정한 앞 세 칸의 왼쪽 자리를 실제 칸 폭에 맞춤 */
+function fixCols(){
+  const t = document.querySelector('table.ads'); if (!t) return;
+  const h = t.querySelectorAll('thead tr:first-child th'); if (h.length < 3) return;
+  const w1 = h[0].getBoundingClientRect().width, w2 = h[1].getBoundingClientRect().width;
+  t.style.setProperty('--fx2', w1 + 'px'); t.style.setProperty('--fx3', (w1 + w2) + 'px');
+}
+window.addEventListener('resize', fixCols);
 
 /* 메타 자동 반영 안내: 매일 오전 10시에 ADS-SYNC 프로그램이 메타·구글·틱톡의 켜짐/꺼짐과 집행 금액(2026-10~)을 읽어 이 표에 맞추고, 바뀐 점을 ads_sync 표에 남김 */
 let syncOpen = false;
