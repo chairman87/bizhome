@@ -439,8 +439,12 @@ function logout(){
 function openModal(html, opts = {}){
   $('#modal').innerHTML = `<div class="ov" id="ov"><div class="modal ${opts.wide ? 'wide' : ''} ${opts.cls || ''}">${html}</div></div>`;   // cls: 'xl' 이면 아주 넓은 창
   const snapshot = () => [...document.querySelectorAll('#modal input:not([type=hidden]), #modal textarea')].map(i => i.type === 'checkbox' ? String(i.checked) : i.value).join('');
-  const initial = snapshot();
-  const dirty = () => snapshot() !== initial;
+  // "입력한 내용이 사라집니다"는 사람이 실제로 고쳤을 때만 물음(2026-11-23).
+  // 창이 열린 직후 첨부 칸 등이 스스로 채워지는 것을 입력으로 착각하지 않도록, 사람이 창을 처음 건드리는 순간의 상태를 기준으로 삼음
+  let initial = null;
+  const touch = () => { if (initial === null) initial = snapshot(); };
+  const ov = $('#ov'); ['pointerdown', 'keydown', 'paste', 'drop'].forEach(t => ov.addEventListener(t, touch, true));
+  const dirty = () => initial !== null && snapshot() !== initial;
   const tryClose = () => { if (!dirty() || confirm('입력한 내용이 사라집니다. 창을 닫을까요?')) closeModal(); };
   if (!opts.locked) {   // locked: Esc·✕ 로도 닫을 수 없음(처음 비밀번호 정하기)
     document.onkeydown = e => { if (e.key === 'Escape' && !(e.target && e.target.closest && e.target.closest('select'))) tryClose(); };
