@@ -26,6 +26,8 @@
   table.docs .fi{display:flex;align-items:center;gap:6px;padding:2px 0;min-width:0}
   table.docs .fi .nm{flex:1;min-width:0;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   table.docs .fi .sz{font-size:11px;color:var(--fg3);white-space:nowrap}
+  table.docs .fi .nm:hover{text-decoration:underline}
+  table.docs .btn.ed{padding:2px 10px;font-size:12px;white-space:nowrap}
   table.docs .fi a.btn{padding:2px 8px;font-size:12px;text-decoration:none;white-space:nowrap}
   .co-tag{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
   .co-tag.a{background:#dcfce7;color:#166534}.co-tag.b{background:#fce7f3;color:#9d174d}.co-tag.c{background:var(--bg3);color:var(--fg2)}
@@ -68,22 +70,29 @@ function render(){
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 서류 올리기</button>
       <input type="search" id="fq" placeholder="검색 (제목, 종류, 파일 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
       <span class="count">${list.length}건${isAdmin() ? ` · 🔒 관리자만 ${D().filter(d => d.admin_only).length}건` : ''}</span></div>
-    <div class="hint" style="margin-bottom:8px">파일 옆 <b>내려받기</b>를 누르면 바로 저장되고, <b>열기</b>는 새 창에서 봅니다. 줄을 누르면 고칠 수 있습니다.</div>
+    <div class="hint" style="margin-bottom:8px">파일 옆 <b>내려받기</b>를 누르면 바로 저장되고, 줄을 누르면 파일을 <b>미리 봅니다</b>(Esc 로 닫기). 고칠 때는 줄 끝의 <b>수정</b>을 누릅니다.</div>
     ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'expire' ? '유효기간이 가까운 서류가 없습니다.' : '아직 올린 서류가 없습니다.<br>위 <b>＋ 서류 올리기</b>로 사업자등록증 등을 올려 두세요.'}</div>`}`}
   </main>`;
   bindHeader(k => { view = k; LS.set('docs_view', k); render(); }, null, m => `올린 서류 ${(DATA.docs || []).filter(d => d.created_by === m.name).length}건`);
   const nb = $('#newBtn2'); if (nb) nb.onclick = () => openDoc(null);
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
-  document.querySelectorAll('.doc[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openDoc(el.dataset.id); });
+  // 줄을 누르면 파일 미리보기(파일 이름을 누르면 그 파일, 그 밖은 첫 파일). 수정은 줄 끝 [수정] 버튼
+  document.querySelectorAll('.doc[data-id]').forEach(el => el.onclick = e => {
+    if (e.target.closest('a')) return;
+    const d = (DATA.docs || []).find(x => x.id === el.dataset.id); if (!d) return;
+    if (e.target.closest('.ed') || !d.files.length) { openDoc(d.id); return; }
+    const fi = e.target.closest('.fi');
+    openViewer(d.files[fi ? +fi.dataset.i : 0]);
+  });
 }
 /* 종류별로 묶어서 표(목록)로: 한 줄 = 서류 하나 */
 function groupsHtml(list){
   const order = types();
   const groups = {};
   list.forEach(d => { const k = d.doc_type || '기타'; (groups[k] = groups[k] || []).push(d); });
-  return `<div class="tablewrap"><table class="docs"><thead><tr><th>회사</th><th>제목</th><th>파일</th><th>발급일</th><th>유효기간</th><th>올린 사람</th></tr></thead><tbody>`
+  return `<div class="tablewrap"><table class="docs"><thead><tr><th>회사</th><th>제목</th><th>파일</th><th>발급일</th><th>유효기간</th><th>올린 사람</th><th></th></tr></thead><tbody>`
     + Object.keys(groups).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)).map(k => `
-    <tr class="gh"><td colspan="6">${esc(k)}<span class="n">${groups[k].length}건</span></td></tr>
+    <tr class="gh"><td colspan="7">${esc(k)}<span class="n">${groups[k].length}건</span></td></tr>
     ${groups[k].sort((a, b) => COMPANIES.indexOf(a.company) - COMPANIES.indexOf(b.company) || String(a.title).localeCompare(String(b.title))).map(rowHtml).join('')}`).join('')
     + `</tbody></table></div>`;
 }
@@ -91,10 +100,11 @@ function rowHtml(d){
   return `<tr class="doc" data-id="${d.id}">
     <td class="co"><span class="co-tag ${CO_CLS[d.company] || 'c'}">${esc(d.company)}</span></td>
     <td class="ti">${d.admin_only ? '<span title="관리자만 보기">🔒</span> ' : ''}${esc(d.title)}${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}</td>
-    <td>${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : /pdf$/i.test(f.name) ? '📕' : '📄'}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<span class="hint">파일이 없습니다</span>'}</td>
+    <td>${d.files.map((f, i) => `<div class="fi" data-i="${i}"><span>${isImg(f) ? '🖼️' : /pdf$/i.test(f.name) ? '📕' : '📄'}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<span class="hint">파일이 없습니다</span>'}</td>
     <td class="dt">${d.issued_date ? fmtDate(d.issued_date) : ''}</td>
     <td class="dt">${d.expire_date ? `<span class="exp ${expCls(d)}">${expText(d).replace('유효기간 ', '')}</span>` : ''}</td>
     <td class="dt">${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))}</td>
+    <td class="dt"><button type="button" class="btn ed">수정</button></td>
   </tr>`;
 }
 
