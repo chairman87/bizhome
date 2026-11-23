@@ -59,7 +59,6 @@
   table.acc td.act .btn + .btn{margin-left:4px}
   /* 사업자주소지 탭 */
   .addr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:14px;align-items:start}   /* 사업자 둘을 좌우로 나란히, 좁으면 위아래 (2026-11-23) */
-  .addr-card td.adr .rmemo{margin-top:3px;font-size:12px;color:var(--fg2)}
   .addr-card .note{padding:8px 12px;font-size:13px;color:#9a3412;background:#fff7ed;border-bottom:1px solid var(--line)}
   .addr-card table{width:100%;min-width:0;border-collapse:collapse}
   .addr-card th{font-size:12px;color:var(--fg2);font-weight:600;text-align:left;padding:7px 10px;background:var(--bg2);border-bottom:1px solid var(--line);white-space:nowrap}
@@ -69,7 +68,7 @@
   .addr-card td.adr{font-size:14px}
   .addr-card td.adr .ib{margin-left:4px;vertical-align:middle}
   .addr-card td.unt{white-space:nowrap;width:1%}
-  .addr-card td.mm{font-size:12px;color:var(--fg2)}
+  .addr-card td.brd{font-size:13px;font-weight:600;color:var(--fg)}   /* 브랜드 칸: 저장 이름은 예전 그대로 items[].memo */
   .addr-card h3{align-items:flex-start}
   .addr-card h3 .nm{white-space:nowrap;padding-top:6px}
   .addr-card h3 .hmemo{flex:1 1 auto;min-width:0;margin:0 8px;padding:6px 12px;border:1px solid #fde68a;border-radius:var(--radius);background:#fffbeb;color:#1f2937;font-size:14px;font-weight:500;line-height:1.5;white-space:pre-wrap;word-break:break-word}   /* 메모: 사업자 이름 오른쪽 칸 (2026-11-23) */
@@ -78,11 +77,11 @@
   .addr-memo-ta{width:100%;min-height:110px;border:1px solid var(--line2);border-radius:var(--radius);padding:8px;background:var(--bg);font:inherit;font-size:13px;resize:vertical}
   .addr-note{margin:0 0 12px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);font-size:13px;color:#92400e}
   .addr-rows{display:grid;gap:8px}
-  .addr-row{display:grid;grid-template-columns:150px 1fr 130px 1fr 32px;gap:6px;align-items:center}
+  .addr-row{display:grid;grid-template-columns:150px 1.4fr 1fr 130px 32px;gap:6px;align-items:center}
   .addr-row input{border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;width:100%;background:var(--bg)}
   .addr-row .x{border:0;background:none;color:var(--fg3);cursor:pointer;font-size:16px}
   .addr-row .x:hover{color:var(--red)}
-  .addr-rowh{display:grid;grid-template-columns:150px 1fr 130px 1fr 32px;gap:6px;font-size:12px;color:var(--fg2)}
+  .addr-rowh{display:grid;grid-template-columns:150px 1.4fr 1fr 130px 32px;gap:6px;font-size:12px;color:var(--fg2)}
   @media (max-width:700px){ .addr-rowh{display:none} .addr-row{grid-template-columns:1fr 1fr;padding-bottom:8px;border-bottom:1px dashed var(--line)} }   /* 휴대폰: 한 줄을 두 칸씩 접어서 보여줌 */
 </style>
 </head>
@@ -180,8 +179,8 @@ function addrHtml(){
     <div class="addr-grid">${d.companies.map((c, ci) => `<div class="card addr-card">
       <h3><span class="nm">🏢 ${esc(c.name)}</span>${c.memo ? `<div class="hmemo">${esc(c.memo)}</div>` : ''}<span class="stat"><button class="btn sm" data-addr-edit="${ci}">✏️ 수정</button></span></h3>
       ${c.note ? `<div class="note">📌 ${esc(c.note)}</div>` : ''}
-      <table><thead><tr><th>항목</th><th>주소</th><th>기한</th></tr></thead><tbody>
-        ${c.items.map(i => `<tr><td class="lbl">${esc(i.label)}</td><td class="adr">${esc(i.address || '')}${i.address ? `<button class="ib" data-copy="${esc(i.address)}">복사</button>` : ''}${i.memo ? `<div class="rmemo">└ ${esc(i.memo)}</div>` : ''}</td><td class="unt">${addrUntil(i.until)}</td></tr>`).join('')}
+      <table><thead><tr><th>항목</th><th>주소</th><th>브랜드</th><th>기한</th></tr></thead><tbody>
+        ${c.items.map(i => `<tr><td class="lbl">${esc(i.label)}</td><td class="adr">${esc(i.address || '')}${i.address ? `<button class="ib" data-copy="${esc(i.address)}">복사</button>` : ''}</td><td class="brd">${esc(i.memo || '')}</td><td class="unt">${addrUntil(i.until)}</td></tr>`).join('')}
       </tbody></table></div>`).join('')}</div>
     <div class="hint" style="margin-top:10px">${st ? `마지막 수정: ${esc(st.updated_by || '')} ${fmtDateTime(st.updated_at)}` : '아직 저장된 적이 없어 2026-10-18 기준 기본값이 보입니다. 수정 → 저장하면 팀 공용으로 저장됩니다.'}</div>`;
 }
@@ -193,7 +192,7 @@ function bindAddr(){
 function openAddrEdit(ci){
   const d = JSON.parse(JSON.stringify(addrData()));
   const c = d.companies[ci]; if (!c) return;
-  const rowHtml = (i = {}) => `<div class="addr-row"><input class="rl" value="${esc(i.label || '')}" placeholder="항목 (예: 사업자등록증 주소지)" list="addrLabels"><input class="ra" value="${esc(i.address || '')}" placeholder="주소"><input class="ru" type="date" value="${esc(i.until || '')}" title="이 주소를 언제까지 쓸 수 있는지 (없으면 비움)"><input class="rm" value="${esc(i.memo || '')}" placeholder="메모"><button type="button" class="x" title="이 줄 빼기">×</button></div>`;
+  const rowHtml = (i = {}) => `<div class="addr-row"><input class="rl" value="${esc(i.label || '')}" placeholder="항목 (예: 사업자등록증 주소지)" list="addrLabels"><input class="ra" value="${esc(i.address || '')}" placeholder="주소"><input class="rm" value="${esc(i.memo || '')}" placeholder="브랜드 (예: 레모너리, 서리맥스)"><input class="ru" type="date" value="${esc(i.until || '')}" title="이 주소를 언제까지 쓸 수 있는지 (없으면 비움)"><button type="button" class="x" title="이 줄 빼기">×</button></div>`;
   openModal(`${modalHead(`${c.name} 사업자주소지`)}
     <div class="mb">
       <div class="f2">
@@ -201,7 +200,7 @@ function openAddrEdit(ci){
         <div class="f"><label>메모 (카드 위에 크게 보임)</label><input id="adNote" value="${esc(c.note || '')}" placeholder="예: 신고 들어오면 그때 카페24 강남주소지로 변경"></div>
       </div>
       <div class="sec">주소</div>
-      <div class="addr-rowh"><span>항목</span><span>주소</span><span>기한 (까지)</span><span>메모</span><span></span></div>
+      <div class="addr-rowh"><span>항목</span><span>주소</span><span>브랜드</span><span>기한 (까지)</span><span></span></div>
       <div class="addr-rows" id="adRows">${c.items.map(rowHtml).join('')}</div>
       <datalist id="addrLabels">${ADDR_LABELS.map(l => `<option value="${esc(l)}">`).join('')}</datalist>
       <div><button type="button" class="btn sm" id="adAdd">＋ 줄 추가</button></div>
