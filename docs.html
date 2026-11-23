@@ -10,27 +10,23 @@
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn{padding:9px 16px;font-size:14px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
-  @media(max-width:480px){.grid{grid-template-columns:1fr}}
-  .doc{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;display:grid;gap:8px;cursor:pointer}
-  .doc:hover{box-shadow:var(--shadow);border-color:var(--line2)}
-  .doc .hd{display:flex;align-items:center;gap:8px}
-  .doc .ty{font-size:12px;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 7px;white-space:nowrap}
-  .doc .ti{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .doc .co{font-size:11px;color:var(--fg3);white-space:nowrap}
-  .doc > *{min-width:0}   /* 카드 안 내용이 카드보다 넓어지지 않게 */
-  .doc .fl{display:grid;gap:4px;min-width:0}
-  .doc .fi{display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:6px;padding:6px 8px;font-size:13px;min-width:0}
-  .doc .fi .nm{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-all;line-height:1.3}
-  .doc .fi .sz{font-size:11px;color:var(--fg3);white-space:nowrap}
-  .doc .fi a.btn{padding:2px 8px;font-size:12px;text-decoration:none;white-space:nowrap}
-  .doc .ft{display:flex;gap:10px;font-size:12px;color:var(--fg2);flex-wrap:wrap}
-  .doc .ft .exp.soon{color:var(--orange);font-weight:600}
-  .doc .ft .exp.over{color:var(--red);font-weight:600}
-  .doc .memo{font-size:12px;color:var(--fg2);white-space:pre-wrap}
-  .doc.lock{border-style:dashed}
-  .grp{margin:18px 0 8px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
-  .grp .n{font-weight:400;color:var(--fg3);font-size:12px}
+  /* 목록(표) 모양: 한 줄 = 서류 하나 (2026-11-23 카드에서 바꿈) */
+  table.docs{min-width:820px}
+  table.docs td{font-size:13px}
+  table.docs tr.doc{cursor:pointer}
+  table.docs tr.doc:hover td{background:var(--bg2)}
+  table.docs tr.gh td{background:var(--bg2);font-weight:600;font-size:13px;padding:7px 10px}
+  table.docs tr.gh .n{font-weight:400;color:var(--fg3);font-size:12px;margin-left:6px}
+  table.docs td.co{white-space:nowrap;width:1%}
+  table.docs td.ti{font-weight:600;min-width:180px}
+  table.docs td.ti .memo{font-weight:400;font-size:12px;color:var(--fg2);white-space:pre-wrap;margin-top:2px}
+  table.docs td.dt{white-space:nowrap;color:var(--fg2);font-size:12px}
+  table.docs td.dt .exp.soon{color:var(--orange);font-weight:600}
+  table.docs td.dt .exp.over{color:var(--red);font-weight:600}
+  table.docs .fi{display:flex;align-items:center;gap:6px;padding:2px 0;min-width:0}
+  table.docs .fi .nm{flex:1;min-width:0;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.docs .fi .sz{font-size:11px;color:var(--fg3);white-space:nowrap}
+  table.docs .fi a.btn{padding:2px 8px;font-size:12px;text-decoration:none;white-space:nowrap}
   .co-tag{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
   .co-tag.a{background:#dcfce7;color:#166534}.co-tag.b{background:#fce7f3;color:#9d174d}.co-tag.c{background:var(--bg3);color:var(--fg2)}
 </style>
@@ -72,7 +68,7 @@ function render(){
     <div class="actions"><button class="btn primary" id="newBtn2">＋ 서류 올리기</button>
       <input type="search" id="fq" placeholder="검색 (제목, 종류, 파일 이름)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;min-width:220px">
       <span class="count">${list.length}건${isAdmin() ? ` · 🔒 관리자만 ${D().filter(d => d.admin_only).length}건` : ''}</span></div>
-    <div class="hint" style="margin-bottom:8px">파일 옆 <b>내려받기</b>를 누르면 바로 저장되고, <b>열기</b>는 새 창에서 봅니다. 카드를 누르면 고칠 수 있습니다.</div>
+    <div class="hint" style="margin-bottom:8px">파일 옆 <b>내려받기</b>를 누르면 바로 저장되고, <b>열기</b>는 새 창에서 봅니다. 줄을 누르면 고칠 수 있습니다.</div>
     ${list.length ? groupsHtml(list) : `<div class="empty">${q ? '검색 결과가 없습니다.' : view === 'expire' ? '유효기간이 가까운 서류가 없습니다.' : '아직 올린 서류가 없습니다.<br>위 <b>＋ 서류 올리기</b>로 사업자등록증 등을 올려 두세요.'}</div>`}`}
   </main>`;
   bindHeader(k => { view = k; LS.set('docs_view', k); render(); }, null, m => `올린 서류 ${(DATA.docs || []).filter(d => d.created_by === m.name).length}건`);
@@ -80,22 +76,26 @@ function render(){
   const fq = $('#fq'); if (fq) fq.oninput = () => { q = fq.value; render(); $('#fq').focus(); $('#fq').setSelectionRange(q.length, q.length); };
   document.querySelectorAll('.doc[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; openDoc(el.dataset.id); });
 }
-/* 종류별로 묶어서 카드로 */
+/* 종류별로 묶어서 표(목록)로: 한 줄 = 서류 하나 */
 function groupsHtml(list){
   const order = types();
   const groups = {};
   list.forEach(d => { const k = d.doc_type || '기타'; (groups[k] = groups[k] || []).push(d); });
-  return Object.keys(groups).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)).map(k => `
-    <div class="grp">${esc(k)} <span class="n">${groups[k].length}건</span></div>
-    <div class="grid">${groups[k].sort((a, b) => COMPANIES.indexOf(a.company) - COMPANIES.indexOf(b.company) || String(a.title).localeCompare(String(b.title))).map(cardHtml).join('')}</div>`).join('');
+  return `<div class="tablewrap"><table class="docs"><thead><tr><th>회사</th><th>제목</th><th>파일</th><th>발급일</th><th>유효기간</th><th>올린 사람</th></tr></thead><tbody>`
+    + Object.keys(groups).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)).map(k => `
+    <tr class="gh"><td colspan="6">${esc(k)}<span class="n">${groups[k].length}건</span></td></tr>
+    ${groups[k].sort((a, b) => COMPANIES.indexOf(a.company) - COMPANIES.indexOf(b.company) || String(a.title).localeCompare(String(b.title))).map(rowHtml).join('')}`).join('')
+    + `</tbody></table></div>`;
 }
-function cardHtml(d){
-  return `<div class="doc ${d.admin_only ? 'lock' : ''}" data-id="${d.id}">
-    <div class="hd"><span class="co-tag ${CO_CLS[d.company] || 'c'}">${esc(d.company)}</span><span class="ti" title="${esc(d.title)}">${esc(d.title)}</span>${d.admin_only ? '<span title="관리자만 보기">🔒</span>' : ''}</div>
-    <div class="fl">${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : /pdf$/i.test(f.name) ? '📕' : '📄'}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<div class="hint">파일이 없습니다</div>'}</div>
-    <div class="ft">${d.issued_date ? `<span>발급 ${fmtDate(d.issued_date)}</span>` : ''}${d.expire_date ? `<span class="exp ${expCls(d)}">${expText(d)}</span>` : ''}<span>${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))}</span></div>
-    ${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}
-  </div>`;
+function rowHtml(d){
+  return `<tr class="doc" data-id="${d.id}">
+    <td class="co"><span class="co-tag ${CO_CLS[d.company] || 'c'}">${esc(d.company)}</span></td>
+    <td class="ti">${d.admin_only ? '<span title="관리자만 보기">🔒</span> ' : ''}${esc(d.title)}${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}</td>
+    <td>${d.files.map(f => `<div class="fi"><span>${isImg(f) ? '🖼️' : /pdf$/i.test(f.name) ? '📕' : '📄'}</span><span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="sz">${fmtSize(f.size)}</span><a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">열기</a><a class="btn primary" href="${esc(dlUrl(f))}" download="${esc(f.name)}">내려받기</a></div>`).join('') || '<span class="hint">파일이 없습니다</span>'}</td>
+    <td class="dt">${d.issued_date ? fmtDate(d.issued_date) : ''}</td>
+    <td class="dt">${d.expire_date ? `<span class="exp ${expCls(d)}">${expText(d).replace('유효기간 ', '')}</span>` : ''}</td>
+    <td class="dt">${esc(d.updated_by || d.created_by || '')} ${fmtDate((d.updated_at || d.created_at || '').slice(0, 10))}</td>
+  </tr>`;
 }
 
 /* 올리기·수정 창 */
