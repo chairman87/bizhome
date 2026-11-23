@@ -304,9 +304,9 @@ const tstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.tiktok_state)
 const tstateHtml = a => { const t = tstateOf(a); return t === '운영중' ? '<span class="run">운영중</span>' : t === 'OFF' ? '<span class="off">OFF</span>' : t === '거부됨' ? '<span class="del" title="틱톡 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : '<span style="color:var(--fg3)" title="틱톡 광고 관리자에서 이 영상을 찾지 못했습니다. 틱톡에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
 const NO_GOOGLE = [];   // 구글 광고를 하지 않는 제품: 표에서 구글 열을 숨김 (레모너리는 2026-11-22 구글 시작으로 뺌)
 const hasGoogle = p => !NO_GOOGLE.includes(p);
-const GSTATES = ['운영중', 'OFF', '거부됨', '없음'];
-const gstateOf = a => ['운영중', 'OFF', '거부됨'].includes(a.google_state) ? a.google_state : '없음';   // 구글애즈에서 실제로 켜져 있는지 (매일 10시 자동 반영, 서리맥스·흑생마)
-const gstateHtml = a => { const g = gstateOf(a); return g === '운영중' ? '<span class="run">운영중</span>' : g === 'OFF' ? '<span class="off">OFF</span>' : g === '거부됨' ? '<span class="del" title="구글애즈에서 캠페인은 켜져 있지만 광고가 전부 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : '<span style="color:var(--fg3)" title="구글애즈에 이 영상의 캠페인이 없습니다. 구글에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
+const GSTATES = ['운영중', 'OFF', '거부됨', '제한됨', '없음'];
+const gstateOf = a => ['운영중', 'OFF', '거부됨', '제한됨'].includes(a.google_state) ? a.google_state : '없음';   // 구글애즈에서 실제로 켜져 있는지 (매일 10시 자동 반영, 서리맥스·흑생마)
+const gstateHtml = a => { const g = gstateOf(a); return g === '운영중' ? '<span class="run">운영중</span>' : g === 'OFF' ? '<span class="off">OFF</span>' : g === '거부됨' ? '<span class="del" title="구글애즈에서 캠페인은 켜져 있지만 광고가 전부 심사에서 거부되어 노출되지 않고 있습니다">거부됨</span>' : g === '제한됨' ? '<span class="del" title="구글애즈에서 캠페인은 켜져 있지만 광고가 심사에서 운영 제한(제한적 승인)을 받아 거의 노출되지 않고 있습니다">제한됨</span>' : '<span style="color:var(--fg3)" title="구글애즈에 이 영상의 캠페인이 없습니다. 구글에 새로 올리면 다음 날 오전 10시에 자동으로 표시됩니다.">–</span>'; };
 const mmdd = d => d ? d.slice(5, 7) + d.slice(8, 10) : '';   // 0915 형식
 function normalize(table, a){ if (table !== 'ads') return a; return { ...a, product: PRODUCTS.includes(a.product) ? a.product : PRODUCTS[0], status: STATUSES.includes(a.status) ? a.status : '운영중', google: !!a.google }; }
 
@@ -361,7 +361,7 @@ function productHtml(p){
     PERF_CH.forEach(([k]) => { const c = o._pc[k] = perfOf(a, k); o[`perf_${k}_spend`] = c.spend || null; o[`perf_${k}_conv`] = c.conv || null; o[`perf_${k}_cpa`] = cpaOf(c); o[`perf_${k}_roas`] = roasOf(c); });   // 매체별 성과 (2026-11-16 사장님 요청: 제품 표에서도 매체별로 보이게)
     return o; }), sort, {});
   const pfCols = k => [[`perf_${k}_spend`, '광고비'], [`perf_${k}_conv`, '구매'], [`perf_${k}_cpa`, 'CPA'], [`perf_${k}_roas`, 'ROAS']].filter(([c]) => RES() || c.endsWith('_spend'));   // 매체 묶음 안에 붙는 성과 네 칸
-  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ...pfCols('meta'), ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ...pfCols('tiktok'), ['google_state', '운영여부'], ['google', '구글'], ...pfCols('google'), ['spend_total', '집행금액'],
+  const cols = [['date', '게재일'], ['title', '영상 타이틀'], ['editor', '편집자'], ['meta_account', '페이지명'], ['meta_state', '운영여부'], ...pfCols('meta'), ['tiktok_state', '운영여부'], ['tiktok', '캠페인'], ...pfCols('tiktok'), ['google_state', '운영여부'], ...pfCols('google'), ['spend_total', '집행금액'],
     ['perf_spend', '광고비'], ['perf_conv', '구매'], ['perf_cpa', 'CPA'], ['perf_roas', 'ROAS'], ['note', '콘티']].filter(([k]) => (hasGoogle(p) || !k.includes('google')) && (pf || !k.startsWith('perf_')) && (RES() || !['perf_conv', 'perf_cpa', 'perf_roas'].includes(k)));
   const pfNew = pf ? '<td class="c hint" title="매체에서 광고비·구매를 매시간 자동으로 읽어 옵니다">자동</td>'.repeat(RES() ? 4 : 1) : '';   // 입력 줄의 성과 칸(자동)
   return syncHtml(p) + `<div class="actions"><button class="btn primary" id="addBtn">＋ 영상 추가</button>
@@ -398,7 +398,6 @@ function productHtml(p){
       <td class="c"><input id="nTiktok" placeholder="틱톡" style="width:70px"></td>
       ${pfNew}
       ${hasGoogle(p) ? `<td class="c hint gs" title="구글애즈에서 자동으로 읽어 옵니다">자동</td>
-      <td class="c"><select id="nGoogle" title="구글 광고 여부"><option value="0">X</option><option value="1">O</option></select></td>
       ${pfNew}` : ''}
       <td class="c hint gs" title="메타·구글·틱톡에서 집행 금액을 자동으로 읽어 옵니다">자동</td>
       ${pfNew}
@@ -416,7 +415,6 @@ function productHtml(p){
       <td class="c" data-edit="tiktok" data-id="${a.id}">${esc(a.tiktok || '')}</td>
       ${pf ? pfCells(a._pc.tiktok) : ''}
       ${hasGoogle(p) ? `<td class="c gs" title="구글애즈에서 실제로 켜져 있는지 (매일 오전 10시 자동 반영)">${gstateHtml(a)}</td>
-      <td class="c"><button type="button" class="ox ${a.google ? 'on' : ''}" data-google="${a.id}" title="누르면 O/X 가 바뀝니다">${a.google ? 'O' : 'X'}</button></td>
       ${pf ? pfCells(a._pc.google) : ''}` : ''}
       <td class="spend gs" title="${esc(spendTitle(a))}">${spendOf(a) ? fmtK(spendOf(a)) : '<span style="color:var(--fg3)">–</span>'}${a.meta_campaign_id ? `<span class="lk" title="메타 광고 관리자와 연결됨 · 집행 금액과 상태는 매일 오전 10시에 자동으로 맞춰집니다${a.meta_synced_at ? ' (마지막 반영 ' + fmtDateTime(a.meta_synced_at) + ')' : ''}">🔗</span>` : ''}</td>
       ${pf && !RES() ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td>` : ''}${pf && RES() ? `<td class="perf pf1" title="${esc(perfTitle(a))}">${spendHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${convHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${cpaHtml(a._pf)}</td><td class="perf" title="${esc(perfTitle(a))}">${roasHtml(a._pf)}</td>` : ''}
@@ -454,7 +452,7 @@ function reviewHtml(){
      세 매체가 다 꺼져 있으면 "전체 OFF", 일부만 꺼졌으면 이 기간에 광고비를 썼던 매체 중 지금 꺼진 것만 "메타 OFF" 처럼 이름을 붙임. 삭제·수정필요는 그대로 */
   /* 켜짐/꺼짐 (2026-11-09): 표의 "상태" 칸은 메타 기준이라 쓰지 않고 매체별 운영여부로 봄. 꺼진 매체는 그 매체 칸을 회색 음영으로(offOf), 세 매체 다 꺼졌으면 줄을 흐리게 + "전체 OFF" */
   const ST = { meta: a => mstateOf(a), tiktok: a => tstateOf(a), google: a => gstateOf(a) };
-  const offOf = (a, k) => { const st = ST[k](a); return st !== '운영중' && (st === 'OFF' || st === '거부됨' || perfOf(a, k).spend > 0); };   // 한 번도 안 올린 매체(없음·광고비 0)는 음영 없이 '–'
+  const offOf = (a, k) => { const st = ST[k](a); return st !== '운영중' && (st === 'OFF' || st === '거부됨' || st === '제한됨' || perfOf(a, k).spend > 0); };   // 한 번도 안 올린 매체(없음·광고비 0)는 음영 없이 '–'
   const allOff = a => PERF_CH.every(([k]) => ST[k](a) !== '운영중');
   const badge = a => a.status === '삭제·수정필요' ? ' ' + stHtml(a.status) : allOff(a) ? ' <span class="off" title="메타·틱톡·구글 모두 꺼져 있음 (매일 10시 자동 반영 기준)">전체 OFF</span>' : '';
   return `<div class="actions">${perfSel()}

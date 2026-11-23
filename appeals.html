@@ -80,7 +80,7 @@ function agoText(iso){
   return days <= 0 ? '오늘' : `${days}일 전`;
 }
 /* 구글에서 거부됨인데 아직 이 화면에 안 적은 영상 (광고 영상 리스트 자동 반영 기준) */
-const pending = p => (DATA.ads || []).filter(a => a.product === p && a.google_state === '거부됨' && !A().some(r => r.ad_id === a.id || (r.product === p && r.title === a.title)));
+const pending = p => (DATA.ads || []).filter(a => a.product === p && (a.google_state === '거부됨' || a.google_state === '제한됨') && !A().some(r => r.ad_id === a.id || (r.product === p && r.title === a.title)));
 
 function render(){
   const all = A().filter(r => r.product === tab);
@@ -92,7 +92,7 @@ function render(){
   $('#app').innerHTML = headerHtml({ icon: '🖥️', title: '구글 이의신청내역 관리', tabs, active: tab })
     + `<main class="wrap">
     ${!DATA.google_appeals ? `<div class="empty">이의신청 저장 표가 아직 없습니다.${isAdmin() ? ' sql-google-appeals.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
-    ${pend.length ? `<div class="sug"><div class="hd">⚠ 구글에서 "거부됨"으로 잡힌 ${tab} 영상 중 아직 안 적은 것 ${pend.length}개 <span class="hint">(광고 영상 리스트에 매일 10시 자동 반영되는 상태 기준)</span></div>
+    ${pend.length ? `<div class="sug"><div class="hd">⚠ 구글에서 "거부됨·제한됨"으로 잡힌 ${tab} 영상 중 아직 안 적은 것 ${pend.length}개 <span class="hint">(광고 영상 리스트에 매일 10시 자동 반영되는 상태 기준)</span></div>
       ${pend.map(a => `<span class="it">${esc(a.title)}<button class="btn sm" data-pend="${a.id}">기록</button></span>`).join('')}</div>` : ''}
     <div class="actions"><button class="btn primary" id="newRec">＋ 거절 영상 기록</button>
       <input type="search" id="fq" placeholder="검색 (영상 이름, 광고 그룹, 사유, 메모)" value="${esc(q)}">
