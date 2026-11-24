@@ -40,6 +40,11 @@
   .crit ul{margin:0;padding-left:18px;font-size:13px;line-height:1.7}
   .crit .na{font-size:11px;font-weight:700;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;margin-left:4px;white-space:nowrap}
   .crit .cn{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--fg2);line-height:1.7}
+  .go{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .go-t{font-size:13px;font-weight:600;color:var(--fg3);margin-right:2px}
+  .go-b{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:var(--radius);background:var(--blue);color:#fff;font-size:15px;font-weight:700;text-decoration:none;white-space:nowrap}
+  .go-b:hover{background:#1b6fc4}
+  .go-b span{font-weight:400;opacity:.85}
   .sum{border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;background:var(--bg2)}
   .sum table{border-collapse:collapse;font-size:13px;margin-bottom:6px}
   .sum th,.sum td{padding:4px 14px 4px 0;text-align:left}
@@ -141,6 +146,11 @@ function critHtml(){
 }
 
 /* 맨 위 요약: 직무별로 몇 명이 어느 칸에 있는지, 마지막으로 읽은 때 (2026-11-18) */
+/* 두 사이트로 바로 가는 단추 — 화면 맨 위에 크게 (2026-11-24 대표: 더 잘 보이는 자리에 잘 보이게) */
+const GO_HTML = `<div class="go"><span class="go-t">지원자 원본 보기</span>
+  <a class="go-b" href="https://hiring.saramin.co.kr/applicant-manage" target="_blank" rel="noopener" title="사람인 기업회원 > 후보자 관리 (새 탭)">사람인 후보자 관리 <span>↗</span></a>
+  <a class="go-b" href="https://hiring.jobkorea.co.kr/biz/0S07Q0KF1TSEG/applicant/list" target="_blank" rel="noopener" title="잡코리아 하이어링 센터 > 지원자 목록 (새 탭)">잡코리아 지원자 목록 <span>↗</span></a></div>`;
+
 function sumHtml(){
   if (!ROWS || !ROWS.length) return '<div class="hint" style="margin-bottom:12px">아직 올라온 지원자가 없습니다. 대표 PC 가 매일 09:10 에 사람인의 새 지원자를 읽어 올립니다.</div>';
   const jobs = [...JOBS, ''], last = ROWS.reduce((m, r) => (r.screened_at || '') > m ? r.screened_at : m, '');
@@ -163,14 +173,12 @@ function render(){
     const val = r => sortKey === 'age' ? (r.age == null ? 999 : r.age) : sortKey === 'name' ? (r.name || '') : (r.applied_at || '');
     const list = ROWS.filter(r => base(r) && inTab(r, tab)).sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortDir);
     const th = (k, label) => `<th data-sort="${k}">${label}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-    body = `${sumHtml()}<div class="actions">
+    body = `${GO_HTML}${sumHtml()}<div class="actions">
         <div class="tabs2">${RESULTS.map(t => `<button data-tab="${t}" class="${tab === t ? 'on' : ''}">${TAB_NAME[t] || t} ${cnt(t)}</button>`).join('')}<button data-tab="전체" class="${tab === '전체' ? 'on' : ''}">전체 ${cnt('전체')}</button></div>
         <select id="fjob"><option value="">직무 전체</option>${JOBS.map(j => `<option ${job === j ? 'selected' : ''}>${j}</option>`).join('')}<option value="미정" ${job === '미정' ? 'selected' : ''}>직무 미정</option></select>
         <select id="fdec">${[['대기', '결정 전'], ['결정', '결정한 것'], ['전체', '모두']].map(([v, l]) => `<option value="${v}" ${decided === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <label class="sub">나이 <input id="fage" type="number" min="18" max="70" placeholder="전체" value="${esc(ageMax)}"> 세 이하</label>
         <select id="fdays">${[7, 14, 30, 90, 180].map(d => `<option value="${d}" ${days === d ? 'selected' : ''}>최근 ${d}일 지원</option>`).join('')}</select>
-        <a class="btn" href="https://hiring.saramin.co.kr/applicant-manage" target="_blank" rel="noopener" title="사람인 기업회원 > 후보자 관리 (새 탭)" style="text-decoration:none;color:inherit">사람인 후보자 관리 ↗</a>
-        <a class="btn" href="https://hiring.jobkorea.co.kr/biz/0S07Q0KF1TSEG/applicant/list" target="_blank" rel="noopener" title="잡코리아 하이어링 센터 > 지원자 목록 (새 탭)" style="text-decoration:none;color:inherit">잡코리아 지원자 목록 ↗</a>
         <button class="btn" id="reloadBtn">새로고침</button>
       </div>
       ${loadErr ? `<div class="hint warn">⚠ ${esc(loadErr)}</div>` : ''}
