@@ -41,6 +41,7 @@
   table.jt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6;white-space:pre-wrap;word-break:break-word}
   table.jt td.nm{font-weight:600;min-width:150px}
   table.jt td.c{white-space:nowrap}
+  table.jt tr.gh td{background:var(--bg2);font-weight:700;font-size:13px;padding:7px 10px;border-bottom:1px solid var(--line2)}
   table.jt .sub{display:block;font-weight:400;color:var(--fg2);font-size:12px;margin-top:3px}
   table.jt .sub i{font-style:normal;color:var(--fg3)}
   .cy{font-size:11px;border-radius:4px;padding:1px 7px;background:#e0e7ff;color:#3730a3;white-space:nowrap}
@@ -83,7 +84,7 @@
    업무기술서 — "직무" 하나가 한 장. 사람이 아니라 자리를 적어 둔다.
    누가 그만둬도 그 자리의 일이 무엇이고, 얼마나 걸리고, 누구와 소통하는지 남아 있게 하려는 화면 (2026-11-24)
    한 장 = { id, title(직무명), dept, holder(지금 담당자), backup(대신 할 수 있는 사람), status, summary,
-            duties:[{ name, cycle(주기), hours(주당 시간), level(난이도), how(하는 방법), tools(쓰는 시스템), with(소통 상대), caution(주의) }],
+            duties:[{ group(큰 항목), name, cycle(주기), hours(주당 시간), level(난이도), how(하는 방법), tools(쓰는 시스템), with(소통 상대), caution(주의) }],
             contacts:[{ who, org, about, freq }], requirements(채용 요건), onboarding(인수인계 순서), note,
             verified_by, verified_at(담당자가 내용을 확인한 날), sort_order, created_by, created_at, updated_by, updated_at }
    고치기: 관리자와 그 직무의 지금 담당자. 새로 만들기·삭제: 관리자
@@ -158,7 +159,13 @@ function renderView(){
 }
 
 /* 보기 창 */
+const groupsOf = ds => [...new Set(ds.map(d => d.group || ''))];   // 큰 항목(적힌 순서). 없는 것은 ''
 function dutyRows(ds){
+  const gs = groupsOf(ds);
+  if (gs.some(g => g)) return gs.map(g => `<tr class="gh"><td colspan="6">${esc(g || '큰 항목 없음')}</td></tr>` + dutyRowsOf(ds.filter(d => (d.group || '') === g))).join('');
+  return dutyRowsOf(ds.slice().sort((a, b) => CYCLES.indexOf(a.cycle) - CYCLES.indexOf(b.cycle)));
+}
+function dutyRowsOf(ds){
   return ds.map(d => `<tr><td class="nm">${esc(d.name || '')}${d.how ? `<span class="sub">${esc(d.how)}</span>` : '<span class="sub"><span class="need">하는 방법 미입력</span></span>'}${d.caution ? `<span class="sub"><i>주의</i> ${esc(d.caution)}</span>` : ''}</td>
     <td class="c"><span class="cy">${esc(d.cycle || '수시')}</span></td>
     <td class="c">${Number(d.hours) > 0 ? hr(Number(d.hours)) + '시간' : '<span class="need">미입력</span>'}</td>
@@ -167,7 +174,7 @@ function dutyRows(ds){
 }
 function openRead(id){
   const j = J().find(x => x.id === id); if (!j) return;
-  const ds = duties(j).slice().sort((a, b) => CYCLES.indexOf(a.cycle) - CYCLES.indexOf(b.cycle)), cs = contacts(j), h = hoursOf(j), miss = missing(j);
+  const ds = duties(j), cs = contacts(j), h = hoursOf(j), miss = missing(j);
   const hard = ds.filter(d => d.level === '어려움').length;
   openModal(`${modalHead(esc(j.title), `${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>`)}
     <div class="rd">
@@ -175,7 +182,7 @@ function openRead(id){
         <span>· ${j.verified_at ? `${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}` : '<span class="need">담당자 확인 전</span>'}</span></div>
       ${j.summary ? `<div class="txt">${esc(j.summary)}</div>` : ''}
       <div class="kpi"><div><b>${ds.length}개</b>업무</div><div><b>${h ? hr(h) + '시간' : '-'}</b>주당 합계 (${Math.round(h / FULL_WEEK * 100)}%)</div><div><b>${hard}개</b>어려운 업무</div><div><b>${cs.length}곳</b>소통 상대</div><div><b>${miss}개</b>확인 필요</div></div>
-      <div><h3>하는 일 <span class="n">주기 순 · 시간은 주당 평균</span></h3>${ds.length ? `<div class="tw"><table class="jt"><thead><tr><th>업무 · 하는 방법</th><th>주기</th><th>주당</th><th>난이도</th><th>쓰는 시스템</th><th>소통 상대</th></tr></thead><tbody>${dutyRows(ds)}</tbody></table></div>` : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</div>
+      <div><h3>하는 일 <span class="n">시간은 주당 평균</span></h3>${ds.length ? `<div class="tw"><table class="jt"><thead><tr><th>업무 · 하는 방법</th><th>주기</th><th>주당</th><th>난이도</th><th>쓰는 시스템</th><th>소통 상대</th></tr></thead><tbody>${dutyRows(ds)}</tbody></table></div>` : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</div>
       <div><h3>소통 상대 <span class="n">${cs.length}곳</span></h3>${cs.length ? `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th></tr></thead><tbody>${cs.map(c => `<tr><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">아직 적힌 소통 상대가 없습니다</div>'}</div>
       ${j.requirements ? `<div><h3>이 자리에 필요한 사람 (채용 요건)</h3><div class="txt">${esc(j.requirements)}</div></div>` : ''}
       ${j.onboarding ? `<div><h3>새 사람이 오면 (인수인계 순서)</h3><div class="txt">${esc(j.onboarding)}</div></div>` : ''}
@@ -190,14 +197,16 @@ function openRead(id){
 }
 /* 채용공고에 붙여 넣을 글: 담당자 이름·거래처는 빼고 하는 일과 요건만 */
 function postingText(j){
-  const by = c => duties(j).filter(d => d.cycle === c).map(d => `- ${d.name}`);
-  return [`[${j.title}]`, j.summary || '', '', '■ 담당 업무', ...CYCLES.flatMap(c => by(c).length ? [`(${c})`, ...by(c)] : []), '', '■ 자격 요건·우대 사항', j.requirements || '(작성 필요)'].join('\n');
+  const ds = duties(j), gs = groupsOf(ds), grouped = gs.some(g => g);
+  const by = k => ds.filter(d => grouped ? (d.group || '') === k : d.cycle === k).map(d => `- ${d.name}`);
+  return [`[${j.title}]`, j.summary || '', '', '■ 담당 업무', ...(grouped ? gs : CYCLES).flatMap(c => by(c).length ? [grouped ? (c || '기타') : `(${c})`, ...by(c)] : []), '', '■ 자격 요건·우대 사항', j.requirements || '(작성 필요)'].join('\n');
 }
 
 /* 쓰기·고치기 */
 let W = null;   // 고치는 중인 업무·소통 상대 목록
 const sel = (cls, list, cur) => `<select class="${cls}">${list.map(v => `<option ${v === cur ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
 const dutyBox = (d, i) => `<div class="dbox" data-d="${i}">
+  <div><label>큰 항목 (같은 이름끼리 묶여 보입니다. 예: 1. 제품 발주)</label><input class="dGroup" list="grpList" value="${esc(d.group || '')}"></div>
   <div class="r1"><div><label>업무 이름</label><input class="dName" value="${esc(d.name || '')}" placeholder="예: 로켓그로스 입고 등록"></div>
     <div><label>주기</label>${sel('dCycle', CYCLES, d.cycle || '수시')}</div>
     <div><label>주당 시간</label><input class="dHours" type="number" min="0" step="0.5" value="${d.hours ?? ''}" placeholder="예: 2.5"></div>
@@ -214,11 +223,11 @@ const contactBox = (c, i) => `<div class="cbox" data-c="${i}">
   <div><label>빈도</label><input class="cFreq" value="${esc(c.freq || '')}" placeholder="예: 주 2~3회"></div>
   <button type="button" class="xb" data-cx="${i}" title="지우기">✕</button></div>`;
 function readW(){
-  W.duties = [...document.querySelectorAll('[data-d]')].map(b => { const g = c => b.querySelector(c).value.trim(), h = g('.dHours'); return { name: g('.dName'), cycle: g('.dCycle'), hours: h === '' ? null : Number(h), level: g('.dLevel'), how: g('.dHow'), tools: g('.dTools'), with: g('.dWith'), caution: g('.dCaution') }; });
+  W.duties = [...document.querySelectorAll('[data-d]')].map(b => { const g = c => b.querySelector(c).value.trim(), h = g('.dHours'); return { group: g('.dGroup'), name: g('.dName'), cycle: g('.dCycle'), hours: h === '' ? null : Number(h), level: g('.dLevel'), how: g('.dHow'), tools: g('.dTools'), with: g('.dWith'), caution: g('.dCaution') }; });
   W.contacts = [...document.querySelectorAll('[data-c]')].map(b => { const g = c => b.querySelector(c).value.trim(); return { org: g('.cOrg'), who: g('.cWho'), about: g('.cAbout'), freq: g('.cFreq') }; });
 }
 function drawW(){
-  $('#dList').innerHTML = W.duties.map(dutyBox).join('') || '<div class="hint">아직 없습니다. 아래 단추로 추가하세요.</div>';
+  $('#dList').innerHTML = `<datalist id="grpList">${groupsOf(W.duties).filter(Boolean).map(g => `<option value="${esc(g)}">`).join('')}</datalist>` + W.duties.map(dutyBox).join('') || '<div class="hint">아직 없습니다. 아래 단추로 추가하세요.</div>';
   $('#cList').innerHTML = W.contacts.map(contactBox).join('') || '<div class="hint">아직 없습니다.</div>';
   document.querySelectorAll('[data-dx]').forEach(b => b.onclick = () => { readW(); W.duties.splice(Number(b.dataset.dx), 1); drawW(); });
   document.querySelectorAll('[data-cx]').forEach(b => b.onclick = () => { readW(); W.contacts.splice(Number(b.dataset.cx), 1); drawW(); });
@@ -249,14 +258,14 @@ function openEdit(id){
     </div>
     <div class="mf">${j && adm ? '<button class="btn danger left" id="jDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="jSave">저장</button></div>`, { wide: true, cls: 'xl' });
   drawW();
-  $('#dAdd').onclick = () => { readW(); W.duties.push({ cycle: '매주', level: '보통' }); drawW(); const b = document.querySelectorAll('[data-d]'); b[b.length - 1].querySelector('.dName').focus(); };
+  $('#dAdd').onclick = () => { readW(); W.duties.push({ group: (W.duties[W.duties.length - 1] || {}).group || '', cycle: '매주', level: '보통' }); drawW(); const b = document.querySelectorAll('[data-d]'); b[b.length - 1].querySelector('.dName').focus(); };
   $('#cAdd').onclick = () => { readW(); W.contacts.push({}); drawW(); };
   $('#jSave').onclick = async () => {
     const title = $('#jTitle').value.trim(); if (!title) { $('#jTitle').focus(); toast('직무명을 입력하세요', true); return; }
     readW();
     const v = k => $(k).value.trim() || null;
     const row = { id: j ? j.id : uid(), title, dept: v('#jDept'), holder: v('#jHolder'), backup: v('#jBackup'), status: $('#jStatus').value, summary: v('#jSummary'),
-      duties: W.duties.filter(d => d.name), contacts: W.contacts.filter(c => c.org || c.who), requirements: v('#jReq'), onboarding: v('#jOnb'), note: v('#jNote'),
+      duties: (gs => W.duties.filter(d => d.name).sort((a, b) => gs.indexOf(a.group || '') - gs.indexOf(b.group || '')))(groupsOf(W.duties)), contacts: W.contacts.filter(c => c.org || c.who), requirements: v('#jReq'), onboarding: v('#jOnb'), note: v('#jNote'),
       verified_by: j ? j.verified_by || null : null, verified_at: j ? j.verified_at || null : null,
       sort_order: j ? j.sort_order || 0 : J().length, created_by: j ? j.created_by : me, created_at: j ? j.created_at : nowIso(), updated_by: me };
     closeModal(); await saveRow('job_descs', row); toast('저장했습니다');
