@@ -118,7 +118,7 @@ const missing = j => duties(j).filter(d => !(Number(d.hours) > 0) || !(d.how || 
 const canEdit = j => isAdmin() || (j && j.holder === me);
 const hr = n => (Math.round(n * 10) / 10).toString();
 const stCls = s => 's' + Math.max(0, STATUS.indexOf(s));
-let view = LS.get('jobs_view') || '';   // 'j:<직무 id>' | 'people' | 'contacts'
+let view = LS.get('jobs_view') || '';   // 'j:<직무 id>' | 'contacts'
 const groupsOf = ds => [...new Set(ds.map(d => d.group || ''))];   // 큰 항목(적힌 순서). 없는 것은 ''
 
 function normalize(table, j){ if (table !== 'job_descs') return j; return { ...j, duties: duties(j), contacts: contacts(j) }; }
@@ -126,20 +126,11 @@ function normalize(table, j){ if (table !== 'job_descs') return j; return { ...j
 /* 상단 탭 = 직무 이름. 누르면 그 직무의 하는 일(R&R)과 소통 상대가 바로 아래에 나옴 */
 function render(){
   const js = J();
-  const tabs = [...js.map(j => ({ key: 'j:' + j.id, label: j.title })), ...(js.length ? [null] : []), { key: 'people', label: '사람별' }, { key: 'contacts', label: '소통 상대 전체' }];
-  if (!tabs.some(t => t && t.key === view)) view = js.length ? 'j:' + js[0].id : 'people';
+  const tabs = [...js.map(j => ({ key: 'j:' + j.id, label: j.title })), ...(js.length ? [null] : []), { key: 'contacts', label: '소통 상대 전체' }];
+  if (!tabs.some(t => t && t.key === view)) view = js.length ? 'j:' + js[0].id : 'contacts';
   $('#app').innerHTML = headerHtml({ icon: '🧩', title: '업무기술서', tabs, active: view }) + `<main class="wrap" style="max-width:1180px"><div id="view"></div></main>`;
   bindHeader(k => { view = k; LS.set('jobs_view', k); render(); }, null);
   renderView();
-}
-function peopleHtml(list){
-  const names = [...new Set(list.map(j => j.holder || ''))].sort((a, b) => a.localeCompare(b, 'ko'));
-  return names.map(n => {
-    const js = list.filter(j => (j.holder || '') === n), total = js.reduce((s, j) => s + hoursOf(j), 0);
-    return `<div class="pp"><div class="ph">${n ? who(n) : '<span class="st s3">담당자 없음</span>'}<span class="hint">직무 ${js.length}개</span><span class="sp"></span>
-      <span class="hint">주 ${hr(total)}시간 / ${FULL_WEEK}시간</span><span class="bar ${total > FULL_WEEK ? 'over' : ''}"><i style="width:${Math.min(100, total / FULL_WEEK * 100)}%"></i></span></div>
-      ${js.map(j => `<div class="row" data-open="${j.id}"><span class="t">${esc(j.title)}</span><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="hint">${duties(j).length}개 업무 · ${hr(hoursOf(j))}시간/주</span>${j.backup ? `<span class="hint">대신: ${esc(j.backup)}</span>` : '<span class="need">대신할 사람 없음</span>'}</div>`).join('')}</div>`;
-  }).join('') + `<div class="hint">한 사람이 맡은 직무의 주당 시간을 더한 값입니다. ${FULL_WEEK}시간을 넘거나 "대신할 사람 없음"이 많은 사람이 그만두면 공백이 큽니다.</div>`;
 }
 function contactsHtml(list){
   const rows = list.flatMap(j => contacts(j).map(c => ({ ...c, job: j })));
@@ -181,7 +172,6 @@ function renderView(){
   const addBtn = isAdmin() ? '<div style="margin-top:12px"><button class="btn primary" id="rNew">＋ 직무 추가</button></div>' : '';
   if (!DATA.job_descs) el.innerHTML = `<div class="empty">업무기술서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-jobs.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
   else if (!list.length) el.innerHTML = `<div class="empty">아직 적힌 직무가 없습니다.${addBtn}</div>`;
-  else if (view === 'people') el.innerHTML = peopleHtml(list);
   else if (view === 'contacts') el.innerHTML = contactsHtml(list);
   else {
     const j = list.find(x => 'j:' + x.id === view) || list[0];
