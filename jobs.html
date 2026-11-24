@@ -156,7 +156,7 @@ function dutyHtml(d){
 }
 function detailHtml(j){
   const ds = duties(j), cs = contacts(j), gs = groupsOf(ds), cm = commonRow();
-  const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return `<div class="gb">${g ? `<div class="gt">${esc(g)}<span>${list.length}</span></div>` : ''}${list.map(dutyHtml).join('')}</div>`; }).join('');
+  const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return `<div class="gb">${g ? `<div class="gt">${esc(g)}</div>` : ''}${list.map(dutyHtml).join('')}</div>`; }).join('');
   return `<div class="jd">
     ${cm && cm.summary || isAdmin() ? `<div class="cmn"><div>${cm && cm.summary ? esc(cm.summary) : '<span class="hint">모든 직무에 공통으로 보일 글이 없습니다</span>'}</div>${isAdmin() ? '<button class="btn sm" id="cmEdit">공통 고치기</button>' : ''}</div>` : ''}
     <div class="jh"><h1>${esc(j.title)}</h1><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="sp"></span>
@@ -166,7 +166,7 @@ function detailHtml(j){
     <div class="cols">
       <section><h3>하는 일 (R&amp;R)</h3>${ds.length ? blocks : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</section>
       <aside>
-        <h3>소통 상대 <span class="n">${cs.length}곳</span></h3>
+        <h3>소통 상대</h3>
         ${cs.length ? `<div class="cl">${cs.map(c => `<div class="ci"><b>${esc(c.org || c.who || '')}</b>${c.org && c.who ? `<span class="cw">${esc(c.who)}</span>` : ''}${c.about ? `<p>${esc(c.about)}</p>` : ''}${c.freq ? `<span class="cw">${esc(c.freq)}</span>` : ''}</div>`).join('')}</div>` : '<div class="hint">아직 적힌 소통 상대가 없습니다</div>'}
         ${j.requirements ? `<h3>이 자리에 필요한 사람</h3><div class="txt">${esc(j.requirements)}</div>` : ''}
         ${j.onboarding ? `<h3>새 사람이 오면</h3><div class="txt">${esc(j.onboarding)}</div>` : ''}
