@@ -16,6 +16,8 @@
   .ok{font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;padding:1px 7px;white-space:nowrap}
   /* 직무 본문 */
   .jd{display:grid;gap:14px}
+  .cmn{display:flex;align-items:flex-start;gap:12px;font-size:13px;line-height:1.8;color:var(--fg2);background:var(--bg2);border-radius:10px;padding:10px 14px;white-space:pre-wrap}
+  .cmn > div{flex:1;min-width:0}
   .jh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .jh h1{font-size:24px;margin:0;letter-spacing:-.02em}
   .jh .sp{flex:1}
@@ -84,7 +86,7 @@
   .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:120px}
   .bar i{display:block;height:100%;background:var(--blue)}
   .bar.over i{background:var(--red)}
-  @media print{.top,.jh .btn,.jf,.memo{display:none!important}}
+  @media print{.top,.jh .btn,.cmn .btn,.jf,.memo{display:none!important}}
 </style>
 </head>
 <body>
@@ -106,7 +108,9 @@ const STATUS = ['재직', '인수인계 중', '채용 중', '공석'];
 const CYCLES = ['매일', '매주', '매월', '분기·반기', '수시', '프로젝트'];
 const LEVELS = ['쉬움', '보통', '어려움'];
 const FULL_WEEK = 40;   // 한 사람의 주당 근무 시간(넘으면 빨간 막대)
-const J = () => (DATA.job_descs || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.title).localeCompare(String(b.title), 'ko'));
+const COMMON = '__common__';   // 모든 직무 위에 공통으로 보이는 글(운영 브랜드 등)을 담는 줄. dept 칸이 이 값이고 summary 에 글이 있음
+const commonRow = () => (DATA.job_descs || []).find(x => x.dept === COMMON);
+const J = () => (DATA.job_descs || []).filter(x => x.dept !== COMMON).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.title).localeCompare(String(b.title), 'ko'));
 const duties = j => Array.isArray(j.duties) ? j.duties : [];
 const contacts = j => Array.isArray(j.contacts) ? j.contacts : [];
 const hoursOf = j => duties(j).reduce((s, d) => s + (Number(d.hours) || 0), 0);
@@ -151,14 +155,14 @@ function dutyHtml(d){
   return rows.length ? `<details class="du"><summary>${head}</summary><div class="dm">${rows.map(r => `<div><b>${r[0]}</b>${esc(r[1])}</div>`).join('')}</div></details>` : `<div class="du">${head}</div>`;
 }
 function detailHtml(j){
-  const ds = duties(j), cs = contacts(j), h = hoursOf(j), miss = missing(j), gs = groupsOf(ds);
+  const ds = duties(j), cs = contacts(j), gs = groupsOf(ds), cm = commonRow();
   const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return `<div class="gb">${g ? `<div class="gt">${esc(g)}<span>${list.length}</span></div>` : ''}${list.map(dutyHtml).join('')}</div>`; }).join('');
   return `<div class="jd">
+    ${cm && cm.summary || isAdmin() ? `<div class="cmn"><div>${cm && cm.summary ? esc(cm.summary) : '<span class="hint">모든 직무에 공통으로 보일 글이 없습니다</span>'}</div>${isAdmin() ? '<button class="btn sm" id="cmEdit">공통 고치기</button>' : ''}</div>` : ''}
     <div class="jh"><h1>${esc(j.title)}</h1><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="sp"></span>
       ${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>${isAdmin() ? '<button class="btn sm" id="rNew">＋ 직무 추가</button>' : ''}</div>
     ${j.summary ? `<div class="lead">${esc(j.summary)}</div>` : ''}
-    <div class="meta">${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${j.holder ? who(j.holder) : '<span class="need">없음</span>'}</span><span>대신할 수 있는 사람 ${j.backup ? esc(j.backup) : '<span class="need">없음</span>'}</span>
-      <span>업무 ${ds.length}개${h ? ` · 주 ${hr(h)}시간` : ''}</span>${canEdit(j) && miss ? `<span class="need">시간·방법 미입력 ${miss}개</span>` : ''}${j.verified_at ? `<span class="ok">${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
+    <div class="meta">${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${j.holder ? who(j.holder) : '-'}</span>${j.verified_at ? `<span class="ok">${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
     <div class="cols">
       <section><h3>하는 일 (R&amp;R)</h3>${ds.length ? blocks : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</section>
       <aside>
@@ -183,12 +187,24 @@ function renderView(){
     const j = list.find(x => 'j:' + x.id === view) || list[0];
     el.innerHTML = detailHtml(j);
     const e = $('#rEdit'); if (e) e.onclick = () => openEdit(j.id);
+    const ce = $('#cmEdit'); if (ce) ce.onclick = openCommon;
     $('#rPrint').onclick = () => window.print();
     $('#rCopy').onclick = async () => { try { await navigator.clipboard.writeText(postingText(j)); toast('채용공고에 붙여 넣을 글을 복사했습니다'); } catch { toast('복사하지 못했습니다', true); } };
     const v = $('#rVerify'); if (v) v.onclick = async () => { await saveRow('job_descs', { ...j, verified_by: me, verified_at: nowIso(), updated_by: me }); toast('확인 표시를 남겼습니다'); };
   }
   const nb = $('#rNew'); if (nb) nb.onclick = () => openEdit(null);
   document.querySelectorAll('[data-open]').forEach(x => x.onclick = () => openRead(x.dataset.open));
+}
+/* 공통 글 고치기 (관리자) */
+function openCommon(){
+  const cm = commonRow();
+  openModal(`${modalHead('모든 직무에 공통으로 보이는 글')}
+    <div class="mb"><div class="f"><label>예: 운영 브랜드, 자사 브랜드 목록 (줄을 바꿔 여러 줄로 적을 수 있습니다)</label><textarea id="cmText" style="min-height:120px;line-height:1.6;font-family:inherit">${esc(cm ? cm.summary || '' : '')}</textarea></div></div>
+    <div class="mf"><button class="btn" data-close>취소</button><button class="btn primary" id="cmSave">저장</button></div>`, { wide: true });
+  $('#cmSave').onclick = async () => {
+    const row = { ...(cm || { id: uid(), title: '공통', dept: COMMON, duties: [], contacts: [], sort_order: -1, created_by: me, created_at: nowIso() }), summary: $('#cmText').value.trim() || null, updated_by: me };
+    closeModal(); await saveRow('job_descs', row); toast('저장했습니다');
+  };
 }
 /* 직무 하나 열기 = 그 직무 탭으로 가기 (사람별·소통 상대 전체·홈 검색에서 씀) */
 function openRead(id){ if (!J().some(x => x.id === id)) return; view = 'j:' + id; LS.set('jobs_view', view); render(); window.scrollTo(0, 0); }
