@@ -10,42 +10,57 @@
 <style>
   .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
   .actions .btn.primary{padding:9px 16px;font-size:14px}
-  .intro{font-size:13px;color:var(--fg2);line-height:1.7;background:var(--bg2);border-radius:10px;padding:10px 14px;margin-bottom:14px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
-  @media(max-width:480px){.grid{grid-template-columns:1fr}}
-  .jc{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:14px 16px;display:grid;gap:9px;cursor:pointer;min-width:0}
-  .jc:hover{box-shadow:var(--shadow);border-color:var(--line2)}
-  .jc .hd{display:flex;align-items:center;gap:8px;min-width:0}
-  .jc .ti{font-weight:700;flex:1;min-width:0;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .jc .sum{font-size:13px;color:var(--fg2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  .jc .nums{display:flex;gap:14px;font-size:12px;color:var(--fg2);flex-wrap:wrap}
-  .jc .nums b{font-size:15px;color:var(--fg);margin-right:2px}
-  .jc .ft{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
-  .jc .ft .sp{flex:1}
-  .st{font-size:11px;border-radius:4px;padding:2px 8px;white-space:nowrap;font-weight:600}
+  .st{font-size:12px;border-radius:999px;padding:3px 10px;white-space:nowrap;font-weight:600}
   .st.s0{background:#dcfce7;color:#166534}.st.s1{background:#fef3c7;color:#92400e}.st.s2{background:#dbeafe;color:#1e40af}.st.s3{background:#fee2e2;color:#991b1b}
   .need{font-size:11px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;white-space:nowrap}
   .ok{font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;padding:1px 7px;white-space:nowrap}
-  /* 보기 창 */
-  .rd{padding:14px 18px;display:grid;gap:16px}
-  .rd .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--fg2)}
-  .rd h3{font-size:14px;margin:0 0 6px;display:flex;align-items:center;gap:8px}
-  .rd h3 .n{font-weight:400;color:var(--fg3);font-size:12px}
-  .rd .txt{white-space:pre-wrap;word-break:break-word;line-height:1.75;font-size:14px;padding:10px 14px;background:var(--bg2);border-radius:8px}
-  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
-  .kpi div{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--fg2)}
-  .kpi b{display:block;font-size:18px;color:var(--fg)}
+  /* 직무 본문 */
+  .jd{display:grid;gap:14px}
+  .jh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .jh h1{font-size:24px;margin:0;letter-spacing:-.02em}
+  .jh .sp{flex:1}
+  .lead{font-size:15px;line-height:1.7;color:var(--fg);white-space:pre-wrap;word-break:keep-all}
+  .meta{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:13px;color:var(--fg2);padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start}
+  @media(max-width:900px){.cols{grid-template-columns:1fr}}
+  .cols h3{font-size:13px;color:var(--fg3);font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .cols aside h3:not(:first-child){margin-top:22px}
+  .cols h3 .n{font-weight:400}
+  .gb{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:12px;overflow:hidden}
+  .gt{font-weight:700;font-size:15px;padding:11px 16px;background:var(--bg2);display:flex;align-items:center;gap:8px}
+  .gt span{font-weight:400;font-size:12px;color:var(--fg3)}
+  .du{border-top:1px solid var(--line)}
+  .gb > .du:first-child{border-top:0}
+  .du summary{list-style:none;cursor:pointer}
+  .du summary::-webkit-details-marker{display:none}
+  .du summary .dn::after{content:'자세히';font-size:11px;color:var(--blue);font-weight:400;margin-left:8px}
+  .du[open] summary .dn::after{content:'접기'}
+  .dl{display:flex;align-items:flex-start;gap:12px;padding:10px 16px}
+  .dn{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.5;word-break:keep-all}
+  .ds{display:block;font-weight:400;font-size:12px;color:var(--fg2);margin-top:2px}
+  .ds i{font-style:normal;color:var(--line2)}
+  .dr{display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:12px;padding-top:2px}
+  .cy{font-size:11px;border-radius:4px;padding:1px 7px;background:#eef2ff;color:#3730a3;white-space:nowrap}
+  .hh{color:var(--fg2);white-space:nowrap}
+  .lv3{color:#b91c1c;font-weight:600;white-space:nowrap}
+  .dm{padding:0 16px 12px;display:grid;gap:6px;font-size:13px;line-height:1.7;color:var(--fg2);white-space:pre-wrap;word-break:break-word}
+  .dm b{display:inline-block;min-width:64px;color:var(--fg3);font-weight:600;font-size:12px}
+  .cl{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+  .ci{padding:10px 14px;border-top:1px solid var(--line);font-size:13px;line-height:1.5}
+  .ci:first-child{border-top:0}
+  .ci b{font-size:14px}
+  .ci .cw{color:var(--fg3);font-size:12px;margin-left:6px}
+  .ci p{margin:2px 0 0;color:var(--fg2);font-size:12px}
+  .txt{white-space:pre-wrap;word-break:break-word;line-height:1.7;font-size:13px;padding:10px 14px;background:var(--bg2);border-radius:10px}
+  .memo{font-size:12px;color:var(--fg3);line-height:1.7;white-space:pre-wrap;border-top:1px solid var(--line);padding-top:12px}
+  .memo b{color:var(--fg2);margin-right:6px}
+  .jf{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .tw{overflow-x:auto}
   table.jt{width:100%;border-collapse:collapse;font-size:13px}
   table.jt th{text-align:left;font-size:12px;color:var(--fg3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line2);white-space:nowrap}
-  table.jt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+  table.jt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6;word-break:break-word}
   table.jt td.nm{font-weight:600;min-width:150px}
   table.jt td.c{white-space:nowrap}
-  table.jt tr.gh td{background:var(--bg2);font-weight:700;font-size:13px;padding:7px 10px;border-bottom:1px solid var(--line2)}
-  table.jt .sub{display:block;font-weight:400;color:var(--fg2);font-size:12px;margin-top:3px}
-  table.jt .sub i{font-style:normal;color:var(--fg3)}
-  .cy{font-size:11px;border-radius:4px;padding:1px 7px;background:#e0e7ff;color:#3730a3;white-space:nowrap}
-  .lv2{color:#b45309}.lv3{color:#b91c1c;font-weight:600}
   /* 고치기 창 */
   .dbox{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:grid;gap:8px;background:var(--bg2)}
   .dbox .r1{display:grid;grid-template-columns:1fr 100px 110px 100px 32px;gap:8px;align-items:end}
@@ -71,7 +86,7 @@
   .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:120px}
   .bar i{display:block;height:100%;background:var(--blue)}
   .bar.over i{background:var(--red)}
-  @media print{.top,.actions,.intro,.mf,.x,#rEdit,#rCopy,#rPrint{display:none!important}.modal{position:static!important;box-shadow:none!important;max-height:none!important;width:auto!important}#modal{position:static!important;background:none!important}#app{display:none}}
+  @media print{.top,.jh .btn,.jf,.memo{display:none!important}.du summary .dn::after{content:''}}
 </style>
 </head>
 <body>
@@ -101,37 +116,19 @@ const missing = j => duties(j).filter(d => !(Number(d.hours) > 0) || !(d.how || 
 const canEdit = j => isAdmin() || (j && j.holder === me);
 const hr = n => (Math.round(n * 10) / 10).toString();
 const stCls = s => 's' + Math.max(0, STATUS.indexOf(s));
-let view = LS.get('jobs_view') || 'all';
-let q = '';
+let view = LS.get('jobs_view') || '';   // 'j:<직무 id>' | 'people' | 'contacts'
+const groupsOf = ds => [...new Set(ds.map(d => d.group || ''))];   // 큰 항목(적힌 순서). 없는 것은 ''
 
 function normalize(table, j){ if (table !== 'job_descs') return j; return { ...j, duties: duties(j), contacts: contacts(j) }; }
 
+/* 상단 탭 = 직무 이름. 누르면 그 직무의 하는 일(R&R)과 소통 상대가 바로 아래에 나옴 */
 function render(){
-  const tabs = [{ key: 'all', label: '직무별' }, { key: 'people', label: '사람별' }, { key: 'contacts', label: '소통 상대' }];
-  if (!tabs.some(t => t.key === view)) view = 'all';
-  $('#app').innerHTML = headerHtml({ icon: '🧩', title: '업무기술서', tabs, active: view }) + `<main class="wrap" style="max-width:1100px">
-    <div class="intro">사람이 아니라 <b>자리(직무)</b>를 적어 두는 곳입니다. 그 자리가 하는 일, 주기, 걸리는 시간, 하는 방법, 소통 상대를 적어 두면 담당자가 바뀌어도 그대로 채용하고 인수인계할 수 있습니다. 담당자는 자기 직무를 직접 고칠 수 있습니다.</div>
-    <div class="actions">${isAdmin() ? '<button class="btn primary" id="newBtn2">＋ 직무 추가</button>' : ''}
-      <input type="search" id="fq" placeholder="검색 (직무, 업무, 담당자, 거래처)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
-      <span class="count" id="cnt"></span></div>
-    <div id="view"></div></main>`;
+  const js = J();
+  const tabs = [...js.map(j => ({ key: 'j:' + j.id, label: j.title })), ...(js.length ? [null] : []), { key: 'people', label: '사람별' }, { key: 'contacts', label: '소통 상대 전체' }];
+  if (!tabs.some(t => t && t.key === view)) view = js.length ? 'j:' + js[0].id : 'people';
+  $('#app').innerHTML = headerHtml({ icon: '🧩', title: '업무기술서', tabs, active: view }) + `<main class="wrap" style="max-width:1180px"><div id="view"></div></main>`;
   bindHeader(k => { view = k; LS.set('jobs_view', k); render(); }, null);
-  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
-  const fq = $('#fq'); fq.oninput = () => { q = fq.value; renderView(); };
   renderView();
-}
-function listOf(){
-  const s = q.trim().toLowerCase();
-  return J().filter(j => !s || [j.title, j.dept, j.holder, j.backup, j.summary, j.requirements, ...duties(j).flatMap(d => [d.name, d.how, d.tools, d.with]), ...contacts(j).flatMap(c => [c.who, c.org, c.about])].some(v => (v || '').toLowerCase().includes(s)));
-}
-function cardHtml(j){
-  const h = hoursOf(j), miss = missing(j);
-  return `<div class="jc" data-open="${j.id}">
-    <div class="hd"><span class="ti">${esc(j.title)}</span><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span></div>
-    ${j.summary ? `<div class="sum">${esc(j.summary)}</div>` : ''}
-    <div class="nums"><span><b>${duties(j).length}</b>개 업무</span><span><b>${h ? hr(h) : '-'}</b>시간/주</span><span><b>${contacts(j).length}</b>곳 소통</span></div>
-    <div class="ft">${who(j.holder)}${j.backup ? `<span class="hint">대신: ${esc(j.backup)}</span>` : ''}<span class="sp"></span>${miss ? `<span class="need">확인 필요 ${miss}</span>` : j.verified_at ? `<span class="ok">확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
-  </div>`;
 }
 function peopleHtml(list){
   const names = [...new Set(list.map(j => j.holder || ''))].sort((a, b) => a.localeCompare(b, 'ko'));
@@ -149,52 +146,56 @@ function contactsHtml(list){
   return `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th><th>직무</th><th>우리 쪽 담당</th></tr></thead><tbody>
     ${rows.map(c => `<tr data-open="${c.job.id}" style="cursor:pointer"><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td><td class="c">${esc(c.job.title)}</td><td class="c">${esc(c.job.holder || '-')}</td></tr>`).join('')}</tbody></table></div>`;
 }
+/* 업무 한 줄: 이름 + (쓰는 시스템 · 소통 상대), 오른쪽에 주기·시간·난이도. 방법·주의가 적혀 있으면 눌러서 펼침 */
+function dutyHtml(d){
+  const sub = [d.tools, d.with].filter(Boolean).map(esc).join(' <i>·</i> ');
+  const more = d.how || d.caution;
+  const head = `<div class="dl"><div class="dn">${esc(d.name || '')}${sub ? `<span class="ds">${sub}</span>` : ''}</div>
+    <div class="dr"><span class="cy">${esc(d.cycle || '수시')}</span>${Number(d.hours) > 0 ? `<span class="hh">주 ${hr(Number(d.hours))}시간</span>` : ''}${d.level === '어려움' ? '<span class="lv3">어려움</span>' : ''}</div></div>`;
+  return more ? `<details class="du"><summary>${head}</summary><div class="dm">${d.how ? `<div><b>하는 방법</b>${esc(d.how)}</div>` : ''}${d.caution ? `<div><b>주의</b>${esc(d.caution)}</div>` : ''}</div></details>` : `<div class="du">${head}</div>`;
+}
+function detailHtml(j){
+  const ds = duties(j), cs = contacts(j), h = hoursOf(j), miss = missing(j), gs = groupsOf(ds);
+  const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return `<div class="gb">${g ? `<div class="gt">${esc(g)}<span>${list.length}</span></div>` : ''}${list.map(dutyHtml).join('')}</div>`; }).join('');
+  return `<div class="jd">
+    <div class="jh"><h1>${esc(j.title)}</h1><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="sp"></span>
+      ${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>${isAdmin() ? '<button class="btn sm" id="rNew">＋ 직무 추가</button>' : ''}</div>
+    ${j.summary ? `<div class="lead">${esc(j.summary)}</div>` : ''}
+    <div class="meta">${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${j.holder ? who(j.holder) : '<span class="need">없음</span>'}</span><span>대신할 수 있는 사람 ${j.backup ? esc(j.backup) : '<span class="need">없음</span>'}</span>
+      <span>업무 ${ds.length}개${h ? ` · 주 ${hr(h)}시간` : ''}</span>${canEdit(j) && miss ? `<span class="need">시간·방법 미입력 ${miss}개</span>` : ''}${j.verified_at ? `<span class="ok">${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
+    <div class="cols">
+      <section><h3>하는 일 (R&amp;R)</h3>${ds.length ? blocks : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</section>
+      <aside>
+        <h3>소통 상대 <span class="n">${cs.length}곳</span></h3>
+        ${cs.length ? `<div class="cl">${cs.map(c => `<div class="ci"><b>${esc(c.org || c.who || '')}</b>${c.org && c.who ? `<span class="cw">${esc(c.who)}</span>` : ''}${c.about ? `<p>${esc(c.about)}</p>` : ''}${c.freq ? `<span class="cw">${esc(c.freq)}</span>` : ''}</div>`).join('')}</div>` : '<div class="hint">아직 적힌 소통 상대가 없습니다</div>'}
+        ${j.requirements ? `<h3>이 자리에 필요한 사람</h3><div class="txt">${esc(j.requirements)}</div>` : ''}
+        ${j.onboarding ? `<h3>새 사람이 오면</h3><div class="txt">${esc(j.onboarding)}</div>` : ''}
+      </aside>
+    </div>
+    ${canEdit(j) && j.note ? `<div class="memo"><b>메모</b> ${esc(j.note)}</div>` : ''}
+    <div class="jf">${j.holder === me ? '<button class="btn sm" id="rVerify">내용이 맞습니다 (확인 표시)</button>' : ''}<span class="hint">마지막 수정: ${esc(j.updated_by || j.created_by || '')} · ${fmtDateTime(j.updated_at || j.created_at)}</span></div>
+  </div>`;
+}
 function renderView(){
-  const el = $('#view'), list = listOf();
+  const el = $('#view'), list = J();
+  const addBtn = isAdmin() ? '<div style="margin-top:12px"><button class="btn primary" id="rNew">＋ 직무 추가</button></div>' : '';
   if (!DATA.job_descs) el.innerHTML = `<div class="empty">업무기술서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-jobs.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
-  else if (!list.length) el.innerHTML = `<div class="empty">${q ? '검색 결과가 없습니다.' : '아직 적힌 직무가 없습니다.'}</div>`;
-  else el.innerHTML = view === 'people' ? peopleHtml(list) : view === 'contacts' ? contactsHtml(list) : `<div class="grid">${list.map(cardHtml).join('')}</div>`;
-  const c = $('#cnt'); if (c) c.textContent = `직무 ${list.length}개 · 업무 ${list.reduce((s, j) => s + duties(j).length, 0)}개`;
+  else if (!list.length) el.innerHTML = `<div class="empty">아직 적힌 직무가 없습니다.${addBtn}</div>`;
+  else if (view === 'people') el.innerHTML = peopleHtml(list);
+  else if (view === 'contacts') el.innerHTML = contactsHtml(list);
+  else {
+    const j = list.find(x => 'j:' + x.id === view) || list[0];
+    el.innerHTML = detailHtml(j);
+    const e = $('#rEdit'); if (e) e.onclick = () => openEdit(j.id);
+    $('#rPrint').onclick = () => window.print();
+    $('#rCopy').onclick = async () => { try { await navigator.clipboard.writeText(postingText(j)); toast('채용공고에 붙여 넣을 글을 복사했습니다'); } catch { toast('복사하지 못했습니다', true); } };
+    const v = $('#rVerify'); if (v) v.onclick = async () => { await saveRow('job_descs', { ...j, verified_by: me, verified_at: nowIso(), updated_by: me }); toast('확인 표시를 남겼습니다'); };
+  }
+  const nb = $('#rNew'); if (nb) nb.onclick = () => openEdit(null);
   document.querySelectorAll('[data-open]').forEach(x => x.onclick = () => openRead(x.dataset.open));
 }
-
-/* 보기 창 */
-const groupsOf = ds => [...new Set(ds.map(d => d.group || ''))];   // 큰 항목(적힌 순서). 없는 것은 ''
-function dutyRows(ds){
-  const gs = groupsOf(ds);
-  if (gs.some(g => g)) return gs.map(g => `<tr class="gh"><td colspan="6">${esc(g || '큰 항목 없음')}</td></tr>` + dutyRowsOf(ds.filter(d => (d.group || '') === g))).join('');
-  return dutyRowsOf(ds.slice().sort((a, b) => CYCLES.indexOf(a.cycle) - CYCLES.indexOf(b.cycle)));
-}
-function dutyRowsOf(ds){
-  return ds.map(d => `<tr><td class="nm">${esc(d.name || '')}${d.how ? `<span class="sub">${esc(d.how)}</span>` : '<span class="sub"><span class="need">하는 방법 미입력</span></span>'}${d.caution ? `<span class="sub"><i>주의</i> ${esc(d.caution)}</span>` : ''}</td>
-    <td class="c"><span class="cy">${esc(d.cycle || '수시')}</span></td>
-    <td class="c">${Number(d.hours) > 0 ? hr(Number(d.hours)) + '시간' : '<span class="need">미입력</span>'}</td>
-    <td class="c lv${LEVELS.indexOf(d.level) + 1}">${esc(d.level || '-')}</td>
-    <td>${esc(d.tools || '')}</td><td>${esc(d.with || '')}</td></tr>`).join('');
-}
-function openRead(id){
-  const j = J().find(x => x.id === id); if (!j) return;
-  const ds = duties(j), cs = contacts(j), h = hoursOf(j), miss = missing(j);
-  const hard = ds.filter(d => d.level === '어려움').length;
-  openModal(`${modalHead(esc(j.title), `${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>`)}
-    <div class="rd">
-      <div class="meta"><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span>${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${who(j.holder)}</span><span>대신할 수 있는 사람: ${j.backup ? esc(j.backup) : '<span class="need">없음</span>'}</span>
-        <span>· ${j.verified_at ? `${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}` : '<span class="need">담당자 확인 전</span>'}</span></div>
-      ${j.summary ? `<div class="txt">${esc(j.summary)}</div>` : ''}
-      <div class="kpi"><div><b>${ds.length}개</b>업무</div><div><b>${h ? hr(h) + '시간' : '-'}</b>주당 합계 (${Math.round(h / FULL_WEEK * 100)}%)</div><div><b>${hard}개</b>어려운 업무</div><div><b>${cs.length}곳</b>소통 상대</div><div><b>${miss}개</b>확인 필요</div></div>
-      <div><h3>하는 일 <span class="n">시간은 주당 평균</span></h3>${ds.length ? `<div class="tw"><table class="jt"><thead><tr><th>업무 · 하는 방법</th><th>주기</th><th>주당</th><th>난이도</th><th>쓰는 시스템</th><th>소통 상대</th></tr></thead><tbody>${dutyRows(ds)}</tbody></table></div>` : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</div>
-      <div><h3>소통 상대 <span class="n">${cs.length}곳</span></h3>${cs.length ? `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th></tr></thead><tbody>${cs.map(c => `<tr><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">아직 적힌 소통 상대가 없습니다</div>'}</div>
-      ${j.requirements ? `<div><h3>이 자리에 필요한 사람 (채용 요건)</h3><div class="txt">${esc(j.requirements)}</div></div>` : ''}
-      ${j.onboarding ? `<div><h3>새 사람이 오면 (인수인계 순서)</h3><div class="txt">${esc(j.onboarding)}</div></div>` : ''}
-      ${j.note ? `<div><h3>메모</h3><div class="txt">${esc(j.note)}</div></div>` : ''}
-      <div class="hint">마지막 수정: ${esc(j.updated_by || j.created_by || '')} · ${fmtDateTime(j.updated_at || j.created_at)}</div>
-    </div>
-    <div class="mf">${canEdit(j) && j.holder === me ? '<button class="btn left" id="rVerify">내용이 맞습니다 (확인 표시)</button>' : ''}<button class="btn" data-close>닫기</button></div>`, { wide: true, cls: 'xl' });
-  const e = $('#rEdit'); if (e) e.onclick = () => { closeModal(); openEdit(id); };
-  $('#rPrint').onclick = () => window.print();
-  $('#rCopy').onclick = async () => { try { await navigator.clipboard.writeText(postingText(j)); toast('채용공고에 붙여 넣을 글을 복사했습니다'); } catch { toast('복사하지 못했습니다', true); } };
-  const v = $('#rVerify'); if (v) v.onclick = async () => { closeModal(); await saveRow('job_descs', { ...j, verified_by: me, verified_at: nowIso(), updated_by: me }); toast('확인 표시를 남겼습니다'); };
-}
+/* 직무 하나 열기 = 그 직무 탭으로 가기 (사람별·소통 상대 전체·홈 검색에서 씀) */
+function openRead(id){ if (!J().some(x => x.id === id)) return; view = 'j:' + id; LS.set('jobs_view', view); render(); window.scrollTo(0, 0); }
 /* 채용공고에 붙여 넣을 글: 담당자 이름·거래처는 빼고 하는 일과 요건만 */
 function postingText(j){
   const ds = duties(j), gs = groupsOf(ds), grouped = gs.some(g => g);
