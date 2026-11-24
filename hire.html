@@ -168,6 +168,8 @@ function render(){
         <select id="fdec">${[['대기', '결정 전'], ['결정', '결정한 것'], ['전체', '모두']].map(([v, l]) => `<option value="${v}" ${decided === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <label class="sub">나이 <input id="fage" type="number" min="18" max="70" placeholder="전체" value="${esc(ageMax)}"> 세 이하</label>
         <select id="fdays">${[7, 14, 30, 90, 180].map(d => `<option value="${d}" ${days === d ? 'selected' : ''}>최근 ${d}일 지원</option>`).join('')}</select>
+        <a class="btn" href="https://hiring.saramin.co.kr/applicant-manage" target="_blank" rel="noopener" title="사람인 기업회원 > 후보자 관리 (새 탭)" style="text-decoration:none;color:inherit">사람인 후보자 관리 ↗</a>
+        <a class="btn" href="https://hiring.jobkorea.co.kr/biz/0S07Q0KF1TSEG/applicant/list" target="_blank" rel="noopener" title="잡코리아 하이어링 센터 > 지원자 목록 (새 탭)" style="text-decoration:none;color:inherit">잡코리아 지원자 목록 ↗</a>
         <button class="btn" id="reloadBtn">새로고침</button>
       </div>
       ${loadErr ? `<div class="hint warn">⚠ ${esc(loadErr)}</div>` : ''}
