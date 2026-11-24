@@ -8,7 +8,7 @@
 --
 --  사람 이름·급여·평가가 들어가므로 채용공고(sql-applicants.sql)처럼 잠가 둡니다:
 --    · 규칙(policy)을 하나도 만들지 않음 = 공개키로는 읽기·쓰기 모두 막힘
---    · 로그인할 때 받은 출입증(think_login → think_who)으로 아래 함수만 부름. 관리자와 운영진만(rc_can)
+--    · 로그인할 때 받은 출입증(think_login → think_who)으로 아래 함수만 부름. 관리자만(rc_can, 2026-11-24 사장님 지시로 운영진 제외)
 --  계약서 같은 파일은 넣지 않습니다(파일 보관함은 주소를 알면 열리는 공개 보관함이라서). 작성했는지 체크만 합니다.
 --
 --  여러 번 실행해도 됩니다. (sql-think-pin.sql · sql-login-1.sql · sql-applicants.sql 이 먼저 실행돼 있어야 함)
@@ -69,10 +69,10 @@ alter table recruit_posts  enable row level security;
 alter table recruit_people enable row level security;
 revoke all on recruit_posts, recruit_people from anon, authenticated;
 
--- 볼 수 있는 사람: 관리자 + 운영진
+-- 볼 수 있는 사람: 관리자만 (2026-11-24 사장님 지시. 그 전에는 운영진도 봤음)
 create or replace function rc_can(m uuid) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from members where id::text = m::text and (role = 'admin' or ops is true))
+  select exists (select 1 from members where id::text = m::text and role = 'admin')
 $$;
 
 -- 한 줄 저장(안에서만 씀): 보낸 칸 중 허락된 칸만 고침. id 가 없거나 처음 보는 id 면 새 줄

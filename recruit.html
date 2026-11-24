@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>채용 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611231116">
-<script src="common.js?v=202611231116"></script>
+<link rel="stylesheet" href="common.css?v=202611241108">
+<script src="common.js?v=202611241108"></script>
 <style>
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
   .tabs2 button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--fg2)}
@@ -70,7 +70,7 @@
 /* ================================================================
    채용 관리 — 채용 프로세스 6단계를 한눈에 보고, 채용 뒤(수습 3개월 평가 → 정규직 전환)까지 관리 (2026-11-19)
    ①② 는 공고(recruit_posts) 카드, ③~⑥ 은 사람(recruit_people) 카드가 단계를 옮겨 다님.
-   이름·급여·평가가 들어가므로 잠긴 표(sql-recruit.sql)에 있고, 로그인할 때 받은 출입증으로 서버 함수(rc_*)만 부름. 관리자와 운영진만 봄.
+   이름·급여·평가가 들어가므로 잠긴 표(sql-recruit.sql)에 있고, 로그인할 때 받은 출입증으로 서버 함수(rc_*)만 부름. 관리자만 봄(2026-11-24, 그 전에는 운영진도).
    '채용공고'(hire.html)에서 면접 대상으로 표시된 사람은 [면접 대상 가져오기]로 ③ 서류 심사 칸에 들어옴.
    계약서 파일은 여기에 올리지 않음(파일 보관함은 주소를 알면 열리는 공개 보관함). 작성했는지 체크만.
 ================================================================ */
@@ -87,7 +87,7 @@ const STAGE_NAME = { 서류: '서류 심사', 면접: '면접', 출근: '출근(
 const ONBOARD = ['근로계약서 작성', '인트라넷 계정 만들기', '입사일 등록(연차 계산)', '하루 루틴 · 업무 안내', '자리 · 장비 준비'];
 const SOURCES = ['사람인', '잡코리아', '지인 추천', '기타'];
 const JOBS = ['마케팅', '경영지원', '고객지원'];
-const ERR = { denied: '관리자와 운영진만 볼 수 있는 화면입니다', title: '공고 이름을 넣어 주세요', name: '이름을 넣어 주세요', haspeople: '이 공고에 딸린 사람이 있어 지울 수 없습니다. 상태를 "마감"으로 바꿔 주세요' };
+const ERR = { denied: '관리자만 볼 수 있는 화면입니다', title: '공고 이름을 넣어 주세요', name: '이름을 넣어 주세요', haspeople: '이 공고에 딸린 사람이 있어 지울 수 없습니다. 상태를 "마감"으로 바꿔 주세요' };
 let POSTS = null, PEOPLE = null, WAITING = 0, loadErr = '', loading = false, tab = 'board';
 
 async function call(name, args = {}){
