@@ -61,7 +61,7 @@
 ================================================================ */
 const RESULTS = ['볼사람', '통과', '애매', '탈락예정'];   // 탭. '볼사람' = 통과+애매(불합격 분류를 뺀 것, 기본 화면 — 2026-11-18 대표: 너무 많다)
 const TAB_NAME = { 볼사람: '볼 사람', 탈락예정: '불합격' };   // 저장 값 '탈락예정' 은 화면에 '불합격'으로 보임. 인트라넷 분류일 뿐 사이트에서 불합격 처리한 것이 아님
-const JOBS = ['마케팅', '경영지원', '고객지원'];
+const JOBS = ['마케팅', '경영지원', '고객지원', '물류지원'];
 const TOKEN_KEY = 'think_token';
 let ROWS = null, loadErr = '', tab = '볼사람', job = '', decided = '전체', ageMax = '', days = 30, sortKey = 'applied_at', sortDir = -1, loading = false;
 
@@ -130,6 +130,7 @@ function critHtml(){
         <li><b>마케팅(컨텐츠 제작)</b> — 희망연봉 3,500만원 이하 · 영상 편집 또는 영상 관련 자격증·경험</li>
         <li><b>경영지원</b> — 희망연봉 5,000만원 이하 · 35세 이하 <span class="na">나이는 자동 판정 안 함</span></li>
         <li><b>고객지원</b> — 30세 이하 <span class="na">나이는 자동 판정 안 함</span></li>
+        <li><b>물류지원</b> — 희망연봉 4,500만원 이하 · 35세 이하 <span class="na">나이는 자동 판정 안 함</span> <span class="sub">— 2026-11-24 추가</span></li>
       </ul>
       <div class="sub" style="margin-top:6px">희망연봉은 금액을 적은 경우만 봅니다("회사내규에 따름"·"면접 후 결정"은 통과).</div></div>
     </div>
