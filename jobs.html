@@ -131,18 +131,11 @@ function normalize(table, j){ if (table !== 'job_descs') return j; return { ...j
 /* 상단 탭 = 직무 이름. 누르면 그 직무의 하는 일(R&R)과 소통 상대가 바로 아래에 나옴 */
 function render(){
   const js = J();
-  const tabs = [...js.map(j => ({ key: 'j:' + j.id, label: j.title })), ...(js.length ? [null] : []), { key: 'contacts', label: '소통 상대 전체' }];
-  if (!tabs.some(t => t && t.key === view)) view = js.length ? 'j:' + js[0].id : 'contacts';
+  const tabs = js.map(j => ({ key: 'j:' + j.id, label: j.title }));
+  if (!tabs.some(t => t.key === view)) view = js.length ? 'j:' + js[0].id : '';
   $('#app').innerHTML = headerHtml({ icon: '🧩', title: '업무기술서', tabs, active: view }) + `<main class="wrap" style="max-width:1180px"><div id="view"></div></main>`;
   bindHeader(k => { view = k; LS.set('jobs_view', k); render(); }, null);
   renderView();
-}
-function contactsHtml(list){
-  const rows = list.flatMap(j => contacts(j).map(c => ({ ...c, job: j })));
-  if (!rows.length) return '<div class="empty">아직 적힌 소통 상대가 없습니다.</div>';
-  rows.sort((a, b) => String(a.org || a.who).localeCompare(String(b.org || b.who), 'ko'));
-  return `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th><th>직무</th><th>우리 쪽 담당</th></tr></thead><tbody>
-    ${rows.map(c => `<tr data-open="${c.job.id}" style="cursor:pointer"><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td><td class="c">${esc(c.job.title)}</td><td class="c">${esc(c.job.holder || '-')}</td></tr>`).join('')}</tbody></table></div>`;
 }
 /* 업무 한 줄: 이름만 담백하게(2026-11-24 대표: 글이 많으면 일이 많아 보임). 줄을 누르면 시스템·소통 상대·방법·주의가 펼쳐짐 */
 function dutyHtml(d, g){   // g 가 있으면 '큰 항목 : 업무' 한 줄로 (큰 항목에 업무가 하나뿐일 때)
@@ -177,7 +170,6 @@ function renderView(){
   const addBtn = isAdmin() ? '<div style="margin-top:12px"><button class="btn primary" id="rNew">＋ 직무 추가</button></div>' : '';
   if (!DATA.job_descs) el.innerHTML = `<div class="empty">업무기술서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-jobs.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
   else if (!list.length) el.innerHTML = `<div class="empty">아직 적힌 직무가 없습니다.${addBtn}</div>`;
-  else if (view === 'contacts') el.innerHTML = contactsHtml(list);
   else {
     const j = list.find(x => 'j:' + x.id === view) || list[0];
     el.innerHTML = detailHtml(j);
