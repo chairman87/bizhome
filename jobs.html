@@ -33,10 +33,8 @@
   .gb > .du:first-child{border-top:0}
   .du summary{list-style:none;cursor:pointer}
   .du summary::-webkit-details-marker{display:none}
-  .du summary .dn::after{content:'자세히';font-size:11px;color:var(--blue);font-weight:400;margin-left:8px}
-  .du[open] summary .dn::after{content:'접기'}
   .dl{display:flex;align-items:flex-start;gap:12px;padding:10px 16px}
-  .dn{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.5;word-break:keep-all}
+  .dn{flex:1;min-width:0;font-size:14px;font-weight:500;line-height:1.5;word-break:keep-all}
   .ds{display:block;font-weight:400;font-size:12px;color:var(--fg2);margin-top:2px}
   .ds i{font-style:normal;color:var(--line2)}
   .dr{display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:12px;padding-top:2px}
@@ -86,7 +84,7 @@
   .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:120px}
   .bar i{display:block;height:100%;background:var(--blue)}
   .bar.over i{background:var(--red)}
-  @media print{.top,.jh .btn,.jf,.memo{display:none!important}.du summary .dn::after{content:''}}
+  @media print{.top,.jh .btn,.jf,.memo{display:none!important}}
 </style>
 </head>
 <body>
@@ -146,13 +144,11 @@ function contactsHtml(list){
   return `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th><th>직무</th><th>우리 쪽 담당</th></tr></thead><tbody>
     ${rows.map(c => `<tr data-open="${c.job.id}" style="cursor:pointer"><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td><td class="c">${esc(c.job.title)}</td><td class="c">${esc(c.job.holder || '-')}</td></tr>`).join('')}</tbody></table></div>`;
 }
-/* 업무 한 줄: 이름 + (쓰는 시스템 · 소통 상대), 오른쪽에 주기·시간·난이도. 방법·주의가 적혀 있으면 눌러서 펼침 */
+/* 업무 한 줄: 이름만 담백하게(2026-11-24 대표: 글이 많으면 일이 많아 보임). 줄을 누르면 시스템·소통 상대·방법·주의가 펼쳐짐 */
 function dutyHtml(d){
-  const sub = [d.tools, d.with].filter(Boolean).map(esc).join(' <i>·</i> ');
-  const more = d.how || d.caution;
-  const head = `<div class="dl"><div class="dn">${esc(d.name || '')}${sub ? `<span class="ds">${sub}</span>` : ''}</div>
-    <div class="dr"><span class="cy">${esc(d.cycle || '수시')}</span>${Number(d.hours) > 0 ? `<span class="hh">주 ${hr(Number(d.hours))}시간</span>` : ''}${d.level === '어려움' ? '<span class="lv3">어려움</span>' : ''}</div></div>`;
-  return more ? `<details class="du"><summary>${head}</summary><div class="dm">${d.how ? `<div><b>하는 방법</b>${esc(d.how)}</div>` : ''}${d.caution ? `<div><b>주의</b>${esc(d.caution)}</div>` : ''}</div></details>` : `<div class="du">${head}</div>`;
+  const rows = [['쓰는 시스템', d.tools], ['소통 상대', d.with], ['하는 방법', d.how], ['주의', d.caution]].filter(r => r[1]);
+  const head = `<div class="dl"><div class="dn">${esc(d.name || '')}</div></div>`;
+  return rows.length ? `<details class="du"><summary>${head}</summary><div class="dm">${rows.map(r => `<div><b>${r[0]}</b>${esc(r[1])}</div>`).join('')}</div></details>` : `<div class="du">${head}</div>`;
 }
 function detailHtml(j){
   const ds = duties(j), cs = contacts(j), h = hoursOf(j), miss = missing(j), gs = groupsOf(ds);
