@@ -32,6 +32,11 @@
   .gt{font-weight:700;font-size:15px;padding:11px 16px;background:var(--bg2);display:flex;align-items:center;gap:8px}
   .gt span{font-weight:400;font-size:12px;color:var(--fg3)}
   .du{border-top:1px solid var(--line)}
+  .gb.one{background:var(--bg2)}
+  .gb.one .dl{padding:11px 16px}
+  .gb.one .dn{font-size:15px;font-weight:400}
+  .gb.one .dn b{font-weight:700}
+  .gb.one .dm{background:var(--bg);padding-top:10px}
   .gb > .du:first-child{border-top:0}
   .du summary{list-style:none;cursor:pointer}
   .du summary::-webkit-details-marker{display:none}
@@ -140,14 +145,14 @@ function contactsHtml(list){
     ${rows.map(c => `<tr data-open="${c.job.id}" style="cursor:pointer"><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td><td class="c">${esc(c.job.title)}</td><td class="c">${esc(c.job.holder || '-')}</td></tr>`).join('')}</tbody></table></div>`;
 }
 /* 업무 한 줄: 이름만 담백하게(2026-11-24 대표: 글이 많으면 일이 많아 보임). 줄을 누르면 시스템·소통 상대·방법·주의가 펼쳐짐 */
-function dutyHtml(d){
+function dutyHtml(d, g){   // g 가 있으면 '큰 항목 : 업무' 한 줄로 (큰 항목에 업무가 하나뿐일 때)
   const rows = [['쓰는 시스템', d.tools], ['소통 상대', d.with], ['하는 방법', d.how], ['주의', d.caution]].filter(r => r[1]);
-  const head = `<div class="dl"><div class="dn">${esc(d.name || '')}</div></div>`;
+  const head = `<div class="dl"><div class="dn">${g ? `<b>${esc(g)}</b> : ` : ''}${esc(d.name || '')}</div></div>`;
   return rows.length ? `<details class="du"><summary>${head}</summary><div class="dm">${rows.map(r => `<div><b>${r[0]}</b>${esc(r[1])}</div>`).join('')}</div></details>` : `<div class="du">${head}</div>`;
 }
 function detailHtml(j){
   const ds = duties(j), cs = contacts(j), gs = groupsOf(ds), cm = commonRow();
-  const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return `<div class="gb">${g ? `<div class="gt">${esc(g)}</div>` : ''}${list.map(dutyHtml).join('')}</div>`; }).join('');
+  const blocks = gs.map(g => { const list = ds.filter(d => (d.group || '') === g); return g && list.length === 1 ? `<div class="gb one">${dutyHtml(list[0], g)}</div>` : `<div class="gb">${g ? `<div class="gt">${esc(g)}</div>` : ''}${list.map(d => dutyHtml(d)).join('')}</div>`; }).join('');
   return `<div class="jd">
     ${cm && cm.summary || isAdmin() ? `<div class="cmn"><div>${cm && cm.summary ? esc(cm.summary) : '<span class="hint">모든 직무에 공통으로 보일 글이 없습니다</span>'}</div>${isAdmin() ? '<button class="btn sm" id="cmEdit">공통 고치기</button>' : ''}</div>` : ''}
     <div class="jh"><h1>${esc(j.title)}</h1><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="sp"></span>
