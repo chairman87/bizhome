@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무기술서</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202611241843">
+<script src="common.js?v=202611241843"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .actions .btn.primary{padding:9px 16px;font-size:14px}
+  .intro{font-size:13px;color:var(--fg2);line-height:1.7;background:var(--bg2);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+  @media(max-width:480px){.grid{grid-template-columns:1fr}}
+  .jc{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:14px 16px;display:grid;gap:9px;cursor:pointer;min-width:0}
+  .jc:hover{box-shadow:var(--shadow);border-color:var(--line2)}
+  .jc .hd{display:flex;align-items:center;gap:8px;min-width:0}
+  .jc .ti{font-weight:700;flex:1;min-width:0;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .jc .sum{font-size:13px;color:var(--fg2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .jc .nums{display:flex;gap:14px;font-size:12px;color:var(--fg2);flex-wrap:wrap}
+  .jc .nums b{font-size:15px;color:var(--fg);margin-right:2px}
+  .jc .ft{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
+  .jc .ft .sp{flex:1}
+  .st{font-size:11px;border-radius:4px;padding:2px 8px;white-space:nowrap;font-weight:600}
+  .st.s0{background:#dcfce7;color:#166534}.st.s1{background:#fef3c7;color:#92400e}.st.s2{background:#dbeafe;color:#1e40af}.st.s3{background:#fee2e2;color:#991b1b}
+  .need{font-size:11px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .ok{font-size:11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  /* 보기 창 */
+  .rd{padding:14px 18px;display:grid;gap:16px}
+  .rd .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--fg2)}
+  .rd h3{font-size:14px;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+  .rd h3 .n{font-weight:400;color:var(--fg3);font-size:12px}
+  .rd .txt{white-space:pre-wrap;word-break:break-word;line-height:1.75;font-size:14px;padding:10px 14px;background:var(--bg2);border-radius:8px}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+  .kpi div{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--fg2)}
+  .kpi b{display:block;font-size:18px;color:var(--fg)}
+  .tw{overflow-x:auto}
+  table.jt{width:100%;border-collapse:collapse;font-size:13px}
+  table.jt th{text-align:left;font-size:12px;color:var(--fg3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line2);white-space:nowrap}
+  table.jt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+  table.jt td.nm{font-weight:600;min-width:150px}
+  table.jt td.c{white-space:nowrap}
+  table.jt .sub{display:block;font-weight:400;color:var(--fg2);font-size:12px;margin-top:3px}
+  table.jt .sub i{font-style:normal;color:var(--fg3)}
+  .cy{font-size:11px;border-radius:4px;padding:1px 7px;background:#e0e7ff;color:#3730a3;white-space:nowrap}
+  .lv2{color:#b45309}.lv3{color:#b91c1c;font-weight:600}
+  /* 고치기 창 */
+  .dbox{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:grid;gap:8px;background:var(--bg2)}
+  .dbox .r1{display:grid;grid-template-columns:1fr 100px 110px 100px 32px;gap:8px;align-items:end}
+  .dbox .r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media(max-width:640px){.dbox .r1{grid-template-columns:1fr 1fr}.dbox .r2{grid-template-columns:1fr}}
+  .dbox label,.cbox label{font-size:11px;color:var(--fg3);display:block;margin-bottom:2px}
+  .dbox input,.dbox select,.dbox textarea,.cbox input{width:100%;border:1px solid var(--line2);border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;background:var(--bg)}
+  .dbox textarea{min-height:58px;line-height:1.5;resize:vertical}
+  .cbox{display:grid;grid-template-columns:1fr 1fr 2fr 110px 32px;gap:8px;align-items:end}
+  @media(max-width:640px){.cbox{grid-template-columns:1fr 1fr}}
+  .xb{border:0;background:none;cursor:pointer;color:var(--fg3);font-size:16px;padding:6px}
+  .xb:hover{color:var(--red)}
+  .sec{font-size:13px;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:8px}
+  .sec .sp{flex:1}
+  #jSummary,#jReq,#jOnb,#jNote{min-height:70px;line-height:1.6;font-family:inherit}
+  /* 사람별 */
+  .pp{border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:10px;background:var(--bg)}
+  .pp .ph{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .pp .ph .sp{flex:1}
+  .pp .row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13px;cursor:pointer}
+  .pp .row:hover{background:var(--bg2)}
+  .pp .row .t{flex:1;font-weight:600}
+  .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:120px}
+  .bar i{display:block;height:100%;background:var(--blue)}
+  .bar.over i{background:var(--red)}
+  @media print{.top,.actions,.intro,.mf,.x,#rEdit,#rCopy,#rPrint{display:none!important}.modal{position:static!important;box-shadow:none!important;max-height:none!important;width:auto!important}#modal{position:static!important;background:none!important}#app{display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   업무기술서 — "직무" 하나가 한 장. 사람이 아니라 자리를 적어 둔다.
+   누가 그만둬도 그 자리의 일이 무엇이고, 얼마나 걸리고, 누구와 소통하는지 남아 있게 하려는 화면 (2026-11-24)
+   한 장 = { id, title(직무명), dept, holder(지금 담당자), backup(대신 할 수 있는 사람), status, summary,
+            duties:[{ name, cycle(주기), hours(주당 시간), level(난이도), how(하는 방법), tools(쓰는 시스템), with(소통 상대), caution(주의) }],
+            contacts:[{ who, org, about, freq }], requirements(채용 요건), onboarding(인수인계 순서), note,
+            verified_by, verified_at(담당자가 내용을 확인한 날), sort_order, created_by, created_at, updated_by, updated_at }
+   고치기: 관리자와 그 직무의 지금 담당자. 새로 만들기·삭제: 관리자
+================================================================ */
+const STATUS = ['재직', '인수인계 중', '채용 중', '공석'];
+const CYCLES = ['매일', '매주', '매월', '분기·반기', '수시', '프로젝트'];
+const LEVELS = ['쉬움', '보통', '어려움'];
+const FULL_WEEK = 40;   // 한 사람의 주당 근무 시간(넘으면 빨간 막대)
+const J = () => (DATA.job_descs || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.title).localeCompare(String(b.title), 'ko'));
+const duties = j => Array.isArray(j.duties) ? j.duties : [];
+const contacts = j => Array.isArray(j.contacts) ? j.contacts : [];
+const hoursOf = j => duties(j).reduce((s, d) => s + (Number(d.hours) || 0), 0);
+const missing = j => duties(j).filter(d => !(Number(d.hours) > 0) || !(d.how || '').trim()).length;   // 시간이나 방법이 비어 있는 업무 수
+const canEdit = j => isAdmin() || (j && j.holder === me);
+const hr = n => (Math.round(n * 10) / 10).toString();
+const stCls = s => 's' + Math.max(0, STATUS.indexOf(s));
+let view = LS.get('jobs_view') || 'all';
+let q = '';
+
+function normalize(table, j){ if (table !== 'job_descs') return j; return { ...j, duties: duties(j), contacts: contacts(j) }; }
+
+function render(){
+  const tabs = [{ key: 'all', label: '직무별' }, { key: 'people', label: '사람별' }, { key: 'contacts', label: '소통 상대' }];
+  if (!tabs.some(t => t.key === view)) view = 'all';
+  $('#app').innerHTML = headerHtml({ icon: '🧩', title: '업무기술서', tabs, active: view }) + `<main class="wrap" style="max-width:1100px">
+    <div class="intro">사람이 아니라 <b>자리(직무)</b>를 적어 두는 곳입니다. 그 자리가 하는 일, 주기, 걸리는 시간, 하는 방법, 소통 상대를 적어 두면 담당자가 바뀌어도 그대로 채용하고 인수인계할 수 있습니다. 담당자는 자기 직무를 직접 고칠 수 있습니다.</div>
+    <div class="actions">${isAdmin() ? '<button class="btn primary" id="newBtn2">＋ 직무 추가</button>' : ''}
+      <input type="search" id="fq" placeholder="검색 (직무, 업무, 담당자, 거래처)" value="${esc(q)}" style="border:1px solid var(--line2);border-radius:var(--radius);padding:6px 8px;min-width:240px">
+      <span class="count" id="cnt"></span></div>
+    <div id="view"></div></main>`;
+  bindHeader(k => { view = k; LS.set('jobs_view', k); render(); }, null);
+  const nb = $('#newBtn2'); if (nb) nb.onclick = () => openEdit(null);
+  const fq = $('#fq'); fq.oninput = () => { q = fq.value; renderView(); };
+  renderView();
+}
+function listOf(){
+  const s = q.trim().toLowerCase();
+  return J().filter(j => !s || [j.title, j.dept, j.holder, j.backup, j.summary, j.requirements, ...duties(j).flatMap(d => [d.name, d.how, d.tools, d.with]), ...contacts(j).flatMap(c => [c.who, c.org, c.about])].some(v => (v || '').toLowerCase().includes(s)));
+}
+function cardHtml(j){
+  const h = hoursOf(j), miss = missing(j);
+  return `<div class="jc" data-open="${j.id}">
+    <div class="hd"><span class="ti">${esc(j.title)}</span><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span></div>
+    ${j.summary ? `<div class="sum">${esc(j.summary)}</div>` : ''}
+    <div class="nums"><span><b>${duties(j).length}</b>개 업무</span><span><b>${h ? hr(h) : '-'}</b>시간/주</span><span><b>${contacts(j).length}</b>곳 소통</span></div>
+    <div class="ft">${who(j.holder)}${j.backup ? `<span class="hint">대신: ${esc(j.backup)}</span>` : ''}<span class="sp"></span>${miss ? `<span class="need">확인 필요 ${miss}</span>` : j.verified_at ? `<span class="ok">확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
+  </div>`;
+}
+function peopleHtml(list){
+  const names = [...new Set(list.map(j => j.holder || ''))].sort((a, b) => a.localeCompare(b, 'ko'));
+  return names.map(n => {
+    const js = list.filter(j => (j.holder || '') === n), total = js.reduce((s, j) => s + hoursOf(j), 0);
+    return `<div class="pp"><div class="ph">${n ? who(n) : '<span class="st s3">담당자 없음</span>'}<span class="hint">직무 ${js.length}개</span><span class="sp"></span>
+      <span class="hint">주 ${hr(total)}시간 / ${FULL_WEEK}시간</span><span class="bar ${total > FULL_WEEK ? 'over' : ''}"><i style="width:${Math.min(100, total / FULL_WEEK * 100)}%"></i></span></div>
+      ${js.map(j => `<div class="row" data-open="${j.id}"><span class="t">${esc(j.title)}</span><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span><span class="hint">${duties(j).length}개 업무 · ${hr(hoursOf(j))}시간/주</span>${j.backup ? `<span class="hint">대신: ${esc(j.backup)}</span>` : '<span class="need">대신할 사람 없음</span>'}</div>`).join('')}</div>`;
+  }).join('') + `<div class="hint">한 사람이 맡은 직무의 주당 시간을 더한 값입니다. ${FULL_WEEK}시간을 넘거나 "대신할 사람 없음"이 많은 사람이 그만두면 공백이 큽니다.</div>`;
+}
+function contactsHtml(list){
+  const rows = list.flatMap(j => contacts(j).map(c => ({ ...c, job: j })));
+  if (!rows.length) return '<div class="empty">아직 적힌 소통 상대가 없습니다.</div>';
+  rows.sort((a, b) => String(a.org || a.who).localeCompare(String(b.org || b.who), 'ko'));
+  return `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th><th>직무</th><th>우리 쪽 담당</th></tr></thead><tbody>
+    ${rows.map(c => `<tr data-open="${c.job.id}" style="cursor:pointer"><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td><td class="c">${esc(c.job.title)}</td><td class="c">${esc(c.job.holder || '-')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function renderView(){
+  const el = $('#view'), list = listOf();
+  if (!DATA.job_descs) el.innerHTML = `<div class="empty">업무기술서 저장 표가 아직 없습니다.${isAdmin() ? ' sql-jobs.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>`;
+  else if (!list.length) el.innerHTML = `<div class="empty">${q ? '검색 결과가 없습니다.' : '아직 적힌 직무가 없습니다.'}</div>`;
+  else el.innerHTML = view === 'people' ? peopleHtml(list) : view === 'contacts' ? contactsHtml(list) : `<div class="grid">${list.map(cardHtml).join('')}</div>`;
+  const c = $('#cnt'); if (c) c.textContent = `직무 ${list.length}개 · 업무 ${list.reduce((s, j) => s + duties(j).length, 0)}개`;
+  document.querySelectorAll('[data-open]').forEach(x => x.onclick = () => openRead(x.dataset.open));
+}
+
+/* 보기 창 */
+function dutyRows(ds){
+  return ds.map(d => `<tr><td class="nm">${esc(d.name || '')}${d.how ? `<span class="sub">${esc(d.how)}</span>` : '<span class="sub"><span class="need">하는 방법 미입력</span></span>'}${d.caution ? `<span class="sub"><i>주의</i> ${esc(d.caution)}</span>` : ''}</td>
+    <td class="c"><span class="cy">${esc(d.cycle || '수시')}</span></td>
+    <td class="c">${Number(d.hours) > 0 ? hr(Number(d.hours)) + '시간' : '<span class="need">미입력</span>'}</td>
+    <td class="c lv${LEVELS.indexOf(d.level) + 1}">${esc(d.level || '-')}</td>
+    <td>${esc(d.tools || '')}</td><td>${esc(d.with || '')}</td></tr>`).join('');
+}
+function openRead(id){
+  const j = J().find(x => x.id === id); if (!j) return;
+  const ds = duties(j).slice().sort((a, b) => CYCLES.indexOf(a.cycle) - CYCLES.indexOf(b.cycle)), cs = contacts(j), h = hoursOf(j), miss = missing(j);
+  const hard = ds.filter(d => d.level === '어려움').length;
+  openModal(`${modalHead(esc(j.title), `${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>`)}
+    <div class="rd">
+      <div class="meta"><span class="st ${stCls(j.status)}">${esc(j.status || '재직')}</span>${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${who(j.holder)}</span><span>대신할 수 있는 사람: ${j.backup ? esc(j.backup) : '<span class="need">없음</span>'}</span>
+        <span>· ${j.verified_at ? `${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}` : '<span class="need">담당자 확인 전</span>'}</span></div>
+      ${j.summary ? `<div class="txt">${esc(j.summary)}</div>` : ''}
+      <div class="kpi"><div><b>${ds.length}개</b>업무</div><div><b>${h ? hr(h) + '시간' : '-'}</b>주당 합계 (${Math.round(h / FULL_WEEK * 100)}%)</div><div><b>${hard}개</b>어려운 업무</div><div><b>${cs.length}곳</b>소통 상대</div><div><b>${miss}개</b>확인 필요</div></div>
+      <div><h3>하는 일 <span class="n">주기 순 · 시간은 주당 평균</span></h3>${ds.length ? `<div class="tw"><table class="jt"><thead><tr><th>업무 · 하는 방법</th><th>주기</th><th>주당</th><th>난이도</th><th>쓰는 시스템</th><th>소통 상대</th></tr></thead><tbody>${dutyRows(ds)}</tbody></table></div>` : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</div>
+      <div><h3>소통 상대 <span class="n">${cs.length}곳</span></h3>${cs.length ? `<div class="tw"><table class="jt"><thead><tr><th>소속·거래처</th><th>상대</th><th>무슨 일로</th><th>빈도</th></tr></thead><tbody>${cs.map(c => `<tr><td class="nm">${esc(c.org || '')}</td><td>${esc(c.who || '')}</td><td>${esc(c.about || '')}</td><td class="c">${esc(c.freq || '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="hint">아직 적힌 소통 상대가 없습니다</div>'}</div>
+      ${j.requirements ? `<div><h3>이 자리에 필요한 사람 (채용 요건)</h3><div class="txt">${esc(j.requirements)}</div></div>` : ''}
+      ${j.onboarding ? `<div><h3>새 사람이 오면 (인수인계 순서)</h3><div class="txt">${esc(j.onboarding)}</div></div>` : ''}
+      ${j.note ? `<div><h3>메모</h3><div class="txt">${esc(j.note)}</div></div>` : ''}
+      <div class="hint">마지막 수정: ${esc(j.updated_by || j.created_by || '')} · ${fmtDateTime(j.updated_at || j.created_at)}</div>
+    </div>
+    <div class="mf">${canEdit(j) && j.holder === me ? '<button class="btn left" id="rVerify">내용이 맞습니다 (확인 표시)</button>' : ''}<button class="btn" data-close>닫기</button></div>`, { wide: true, cls: 'xl' });
+  const e = $('#rEdit'); if (e) e.onclick = () => { closeModal(); openEdit(id); };
+  $('#rPrint').onclick = () => window.print();
+  $('#rCopy').onclick = async () => { try { await navigator.clipboard.writeText(postingText(j)); toast('채용공고에 붙여 넣을 글을 복사했습니다'); } catch { toast('복사하지 못했습니다', true); } };
+  const v = $('#rVerify'); if (v) v.onclick = async () => { closeModal(); await saveRow('job_descs', { ...j, verified_by: me, verified_at: nowIso(), updated_by: me }); toast('확인 표시를 남겼습니다'); };
+}
+/* 채용공고에 붙여 넣을 글: 담당자 이름·거래처는 빼고 하는 일과 요건만 */
+function postingText(j){
+  const by = c => duties(j).filter(d => d.cycle === c).map(d => `- ${d.name}`);
+  return [`[${j.title}]`, j.summary || '', '', '■ 담당 업무', ...CYCLES.flatMap(c => by(c).length ? [`(${c})`, ...by(c)] : []), '', '■ 자격 요건·우대 사항', j.requirements || '(작성 필요)'].join('\n');
+}
+
+/* 쓰기·고치기 */
+let W = null;   // 고치는 중인 업무·소통 상대 목록
+const sel = (cls, list, cur) => `<select class="${cls}">${list.map(v => `<option ${v === cur ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+const dutyBox = (d, i) => `<div class="dbox" data-d="${i}">
+  <div class="r1"><div><label>업무 이름</label><input class="dName" value="${esc(d.name || '')}" placeholder="예: 로켓그로스 입고 등록"></div>
+    <div><label>주기</label>${sel('dCycle', CYCLES, d.cycle || '수시')}</div>
+    <div><label>주당 시간</label><input class="dHours" type="number" min="0" step="0.5" value="${d.hours ?? ''}" placeholder="예: 2.5"></div>
+    <div><label>난이도</label>${sel('dLevel', LEVELS, d.level || '보통')}</div>
+    <button type="button" class="xb" data-dx="${i}" title="이 업무 지우기">✕</button></div>
+  <div><label>하는 방법 (처음 보는 사람이 따라 할 수 있게 순서대로)</label><textarea class="dHow" placeholder="1. … 2. … 3. …">${esc(d.how || '')}</textarea></div>
+  <div class="r2"><div><label>쓰는 시스템·계정</label><input class="dTools" value="${esc(d.tools || '')}" placeholder="예: 쿠팡 윙, 이벗, 카페24"></div>
+    <div><label>소통 상대</label><input class="dWith" value="${esc(d.with || '')}" placeholder="예: 물류창고 담당자, 팀장"></div></div>
+  <div><label>주의할 점·자주 나는 실수</label><input class="dCaution" value="${esc(d.caution || '')}" placeholder="예: 수량을 빼먹으면 미매칭으로 출고가 멈춤"></div></div>`;
+const contactBox = (c, i) => `<div class="cbox" data-c="${i}">
+  <div><label>소속·거래처</label><input class="cOrg" value="${esc(c.org || '')}" placeholder="예: 물류창고"></div>
+  <div><label>상대 (이름·직함)</label><input class="cWho" value="${esc(c.who || '')}" placeholder="예: 출고 담당"></div>
+  <div><label>무슨 일로</label><input class="cAbout" value="${esc(c.about || '')}" placeholder="예: 입고 예약, 재고 확인"></div>
+  <div><label>빈도</label><input class="cFreq" value="${esc(c.freq || '')}" placeholder="예: 주 2~3회"></div>
+  <button type="button" class="xb" data-cx="${i}" title="지우기">✕</button></div>`;
+function readW(){
+  W.duties = [...document.querySelectorAll('[data-d]')].map(b => { const g = c => b.querySelector(c).value.trim(), h = g('.dHours'); return { name: g('.dName'), cycle: g('.dCycle'), hours: h === '' ? null : Number(h), level: g('.dLevel'), how: g('.dHow'), tools: g('.dTools'), with: g('.dWith'), caution: g('.dCaution') }; });
+  W.contacts = [...document.querySelectorAll('[data-c]')].map(b => { const g = c => b.querySelector(c).value.trim(); return { org: g('.cOrg'), who: g('.cWho'), about: g('.cAbout'), freq: g('.cFreq') }; });
+}
+function drawW(){
+  $('#dList').innerHTML = W.duties.map(dutyBox).join('') || '<div class="hint">아직 없습니다. 아래 단추로 추가하세요.</div>';
+  $('#cList').innerHTML = W.contacts.map(contactBox).join('') || '<div class="hint">아직 없습니다.</div>';
+  document.querySelectorAll('[data-dx]').forEach(b => b.onclick = () => { readW(); W.duties.splice(Number(b.dataset.dx), 1); drawW(); });
+  document.querySelectorAll('[data-cx]').forEach(b => b.onclick = () => { readW(); W.contacts.splice(Number(b.dataset.cx), 1); drawW(); });
+}
+function openEdit(id){
+  const j = id ? J().find(x => x.id === id) : null;
+  if (!(j ? canEdit(j) : isAdmin())) { toast('관리자와 그 직무의 담당자만 고칠 수 있습니다', true); return; }
+  W = { duties: j ? duties(j).map(d => ({ ...d })) : [], contacts: j ? contacts(j).map(c => ({ ...c })) : [] };
+  const names = members.map(m => m.name), adm = isAdmin();
+  openModal(`${modalHead(j ? '업무기술서 고치기' : '직무 추가')}
+    <div class="mb">
+      <div class="f2"><div class="f"><label>직무명 *</label><input id="jTitle" value="${esc(j ? j.title : '')}" maxlength="60" placeholder="예: 물류지원" ${adm ? '' : 'disabled'}></div>
+        <div class="f"><label>부서</label><input id="jDept" value="${esc(j ? j.dept || '' : '')}" placeholder="예: 운영기획팀" ${adm ? '' : 'disabled'}></div></div>
+      <div class="f2"><div class="f"><label>지금 담당자</label><input id="jHolder" list="nmList" value="${esc(j ? j.holder || '' : '')}" placeholder="비워 두면 담당자 없음" ${adm ? '' : 'disabled'}></div>
+        <div class="f"><label>대신 할 수 있는 사람</label><input id="jBackup" list="nmList" value="${esc(j ? j.backup || '' : '')}" placeholder="휴가·퇴사 때 이어받을 사람"></div></div>
+      <datalist id="nmList">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+      <div class="f"><label>상태</label><select id="jStatus" ${adm ? '' : 'disabled'}>${STATUS.map(s => `<option ${s === (j ? j.status || '재직' : '재직') ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="f"><label>한 줄 설명 (이 자리가 회사에서 맡은 역할)</label><textarea id="jSummary" placeholder="예: 제품이 공장에서 나와 고객에게 도착할 때까지의 발주·입출고·재고를 책임지는 자리">${esc(j ? j.summary || '' : '')}</textarea></div>
+      <div class="sec">하는 일 <span class="hint">주당 시간은 평균으로. 월 1회 4시간이면 1시간</span><span class="sp"></span></div>
+      <div id="dList" style="display:grid;gap:8px"></div>
+      <div><button type="button" class="btn sm" id="dAdd">＋ 업무 추가</button></div>
+      <div class="sec">소통 상대 <span class="hint">전화번호·비밀번호는 여기 적지 않습니다 (운영계정·파트너스에)</span></div>
+      <div id="cList" style="display:grid;gap:8px"></div>
+      <div><button type="button" class="btn sm" id="cAdd">＋ 소통 상대 추가</button></div>
+      <div class="f"><label>이 자리에 필요한 사람 (채용 요건·우대)</label><textarea id="jReq" placeholder="예: 엑셀 수식 가능, 3PL·쿠팡 입고 경험 우대, 꼼꼼함">${esc(j ? j.requirements || '' : '')}</textarea></div>
+      <div class="f"><label>새 사람이 오면 (인수인계 순서)</label><textarea id="jOnb" placeholder="1주차: … / 2주차: … / 한 달 뒤 혼자 할 수 있어야 하는 것: …">${esc(j ? j.onboarding || '' : '')}</textarea></div>
+      <div class="f"><label>메모</label><textarea id="jNote">${esc(j ? j.note || '' : '')}</textarea></div>
+    </div>
+    <div class="mf">${j && adm ? '<button class="btn danger left" id="jDel">삭제</button>' : ''}<button class="btn" data-close>취소</button><button class="btn primary" id="jSave">저장</button></div>`, { wide: true, cls: 'xl' });
+  drawW();
+  $('#dAdd').onclick = () => { readW(); W.duties.push({ cycle: '매주', level: '보통' }); drawW(); const b = document.querySelectorAll('[data-d]'); b[b.length - 1].querySelector('.dName').focus(); };
+  $('#cAdd').onclick = () => { readW(); W.contacts.push({}); drawW(); };
+  $('#jSave').onclick = async () => {
+    const title = $('#jTitle').value.trim(); if (!title) { $('#jTitle').focus(); toast('직무명을 입력하세요', true); return; }
+    readW();
+    const v = k => $(k).value.trim() || null;
+    const row = { id: j ? j.id : uid(), title, dept: v('#jDept'), holder: v('#jHolder'), backup: v('#jBackup'), status: $('#jStatus').value, summary: v('#jSummary'),
+      duties: W.duties.filter(d => d.name), contacts: W.contacts.filter(c => c.org || c.who), requirements: v('#jReq'), onboarding: v('#jOnb'), note: v('#jNote'),
+      verified_by: j ? j.verified_by || null : null, verified_at: j ? j.verified_at || null : null,
+      sort_order: j ? j.sort_order || 0 : J().length, created_by: j ? j.created_by : me, created_at: j ? j.created_at : nowIso(), updated_by: me };
+    closeModal(); await saveRow('job_descs', row); toast('저장했습니다');
+  };
+  const del = $('#jDel'); if (del) del.onclick = async () => { if (confirm(`"${j.title}" 업무기술서를 삭제할까요?`)) { closeModal(); await removeRow('job_descs', j.id); toast('삭제했습니다'); } };
+}
+
+boot({ icon: '🧩', title: '업무기술서', tables: ['job_descs'], render, normalize, open: id => openRead(id) });
+</script>
+</body>
+</html>

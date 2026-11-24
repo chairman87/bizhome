@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>인트라넷</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611241108">
-<script src="common.js?v=202611241108"></script>
+<link rel="stylesheet" href="common.css?v=202611241843">
+<script src="common.js?v=202611241843"></script>
 <style>
   /* 폴더들은 가운데로 모음 (폴더 수가 적어도 왼쪽에 쏠리지 않게) */
   .depts{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;align-items:flex-start}
@@ -207,6 +207,7 @@ const SCREENS = [
   ['worklog.html', '업무일지 (퇴근 전 하루 보고)'],
   ['weekly.html', '주간 업무 리스트 (운영진이 주마다 할 업무를 한 줄씩)'],
   ['manuals.html', '업무 매뉴얼 (담당자별 절차)'],
+  ['jobs.html', '업무기술서 (직무별 하는 일·걸리는 시간·소통 상대 — 채용·인수인계용)'],
   ['accounts.html', '운영계정 (자료실)'],
   ['accounts.html?dept=마케팅', '마케팅계정 (마케팅)'],
   ['accounts.html?tab=addr', '사업자주소지 관리 (운영계정 안의 탭)'],
@@ -975,7 +976,7 @@ setTimeout(loadMtNews, 1500); setInterval(loadMtNews, 60000);
 ================================================================ */
 let SQ = '';                       // 지금 검색어
 const SOPEN = new Set();           // '더 보기'를 눌러 전부 펼친 묶음
-const SEARCH_EXTRA = ['meetings', 'manuals', 'trademarks', 'project_items', 'ads', 'videos', 'quotes', 'partners', 'partner_leads', 'samples', 'google_appeals', 'contractors'];
+const SEARCH_EXTRA = ['meetings', 'manuals', 'job_descs', 'trademarks', 'project_items', 'ads', 'videos', 'quotes', 'partners', 'partner_leads', 'samples', 'google_appeals', 'contractors'];
 let extraLoadedAt = 0, extraLoading = null;
 const MARKETING_GROUPS = ['인스타그램 계정', '기타 마케팅', '레모너리', '서리맥스', '흑생마', '광고 계정'];   // accounts.html 과 같은 목록 (마케팅계정 화면으로 보낼 묶음)
 const txt = (...xs) => xs.flat(Infinity).filter(x => x != null && typeof x !== 'object').map(x => String(x).replace(/<[^>]+>/g, ' ')).join(' ').replace(/\s+/g, ' ').trim();
@@ -994,6 +995,7 @@ const SEARCH_DEFS = [
   { table: 'notices',           page: '공지사항',          icon: '📢', menu: ['notices.html'],  href: r => `notices.html?open=${r.id}`,                       title: r => r.title,                                   text: r => [r.content] },
   { table: 'meetings',          page: '회의록',            icon: '📝', menu: ['meetings.html'], href: r => `meetings.html?open=${r.id}`,                      title: r => dash(r.meeting_date, r.title),             text: r => [r.summary, r.decisions, r.details, r.actions, r.memo, r.attendees, r.category], at: r => r.meeting_date || r.created_at },
   { table: 'manuals',           page: '업무 매뉴얼',        icon: '📘', menu: ['manuals.html'],  href: r => `manuals.html?open=${r.id}`,                       title: r => r.title,                                   text: r => [r.content, r.category, r.targets] },
+  { table: 'job_descs',         page: '업무기술서',        icon: '🧩', menu: ['jobs.html'],     href: r => `jobs.html?open=${r.id}`,                          title: r => r.title,                                   text: r => [r.summary, r.holder, r.requirements, (r.duties || []).map(d => [d.name, d.how, d.tools, d.with]), (r.contacts || []).map(c => [c.org, c.who, c.about])] },
   { table: 'docs',              page: '회사 서류함',        icon: '📁', menu: ['docs.html'],     href: r => `docs.html?open=${r.id}`,                          title: r => dash(r.company, r.title),                  text: r => [r.doc_type, r.memo] },
   { table: 'accounts',          page: '운영계정·마케팅계정',  icon: '🔐', menu: ['accounts.html', 'accounts.html?dept=마케팅'], href: r => `accounts.html?${MARKETING_GROUPS.includes(r.group_name) ? 'dept=마케팅&' : ''}open=${r.id}`, title: r => r.service, text: r => [r.purpose, r.memo, r.group_name, r.owner, r.company] },
   { table: 'payments',          page: '결재',              icon: '💳', menu: ['payments.html'], href: r => `payments.html?open=${r.id}`,                         title: r => (r.kind === '기안' ? '[기안] ' : '') + r.title,          text: r => [r.memo, r.payee, r.category, r.status, r.account, cmts(r.comments)], by: r => r.created_by, at: r => r.date || r.created_at },

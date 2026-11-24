@@ -15,7 +15,7 @@
 
 -- 이 함수들로 다룰 수 있는 표(여기 없는 이름은 전부 거절)
 create or replace function lk_ok(p_table text) returns boolean language sql immutable as $$
-  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners')
+  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs')
 $$;
 
 create or replace function lk_list(p_token text, p_table text) returns jsonb
