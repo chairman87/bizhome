@@ -151,7 +151,6 @@ function detailHtml(j){
         ${j.onboarding ? `<h3>새 사람이 오면</h3><div class="txt">${esc(j.onboarding)}</div>` : ''}
       </aside>
     </div>
-    ${canEdit(j) && j.note ? `<div class="memo"><b>메모</b> ${esc(j.note)}</div>` : ''}
     <div class="jf">${j.holder === me ? '<button class="btn sm" id="rVerify">내용이 맞습니다 (확인 표시)</button>' : ''}<span class="hint">마지막 수정: ${esc(j.updated_by || j.created_by || '')} · ${fmtDateTime(j.updated_at || j.created_at)}</span></div>
   </div>`;
 }
