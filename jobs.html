@@ -141,7 +141,7 @@ function detailHtml(j){
     <div class="jh"><h1>${esc(j.title)}</h1><span class="sp"></span>
       ${canEdit(j) ? '<button class="btn sm" id="rEdit">고치기</button>' : ''}<button class="btn sm" id="rCopy">채용공고용 복사</button><button class="btn sm" id="rPrint">인쇄</button>${isAdmin() ? '<button class="btn sm" id="rNew">＋ 직무 추가</button>' : ''}</div>
     ${j.summary ? `<div class="lead">${esc(j.summary)}</div>` : ''}
-    <div class="meta">${j.dept ? `<span>${esc(j.dept)}</span>` : ''}<span>담당 ${j.holder ? who(j.holder) : '-'}</span>${j.verified_at ? `<span class="ok">${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}</span>` : ''}</div>
+    ${j.verified_at ? `<div class="meta"><span class="ok">${esc(j.verified_by || '')} 확인 ${fmtDate(j.verified_at.slice(0, 10))}</span></div>` : ''}
     <div class="cols">
       <section><h3>하는 일 (R&amp;R)</h3>${ds.length ? blocks : '<div class="hint">아직 적힌 업무가 없습니다</div>'}</section>
       <aside>
