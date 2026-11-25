@@ -23,7 +23,7 @@
   .jh .sp{flex:1}
   .lead{font-size:14px;line-height:1.6;color:var(--fg);white-space:pre-wrap;word-break:keep-all}
   .meta{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:12.5px;color:var(--fg2);padding-bottom:10px;border-bottom:1px solid var(--line)}
-  .cols{display:grid;grid-template-columns:minmax(300px,max-content) minmax(0,1fr);gap:48px;align-items:start}   /* 왼쪽 칸은 글 길이만큼만: 소통 상대가 바로 옆에 붙음 */
+  .cols{display:grid;grid-template-columns:490px minmax(0,1fr);gap:40px;align-items:start}   /* 왼쪽 칸 폭 고정(2026-11-25): 탭을 바꿔도 소통 상대 위치가 같음 */
   @media(max-width:900px){.cols{grid-template-columns:1fr}}
   .cols h3{font-size:12px;color:var(--fg3);font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:8px}
   .cols aside h3:not(:first-child){margin-top:14px}
