@@ -11,7 +11,7 @@
 
 do $$ declare t text; p record;
 begin
-  foreach t in array array['payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs'] loop
+  foreach t in array array['payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads'] loop
     execute format('alter table %I enable row level security', t);
     for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
       execute format('drop policy %I on %I', p.policyname, t);
@@ -22,4 +22,4 @@ end $$;
 
 -- 확인용: 규칙이 하나도 안 남아야 함(0)
 select count(*) as policies_left from pg_policies where schemaname = 'public'
-  and tablename in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs');
+  and tablename in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads');
