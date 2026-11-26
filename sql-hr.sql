@@ -58,6 +58,10 @@ create table if not exists hr_people (
   updated_at  timestamptz default now()
 );
 
+-- 고정 연장 · 휴일 시간(2026-11-26): 비어 있으면 최저임금에 맞춰 자동으로 잡고, 직접 넣으면 그 시간으로 계산
+alter table hr_people add column if not exists ot_hours int;
+alter table hr_people add column if not exists hol_hours int;
+
 create table if not exists hr_docs (
   id         uuid primary key default gen_random_uuid(),
   person_id  uuid not null references hr_people(id) on delete cascade,
@@ -111,7 +115,7 @@ begin
   if m is null then return jsonb_build_object('ok', false, 'err', 'session'); end if;
   if not hr_can(m) then return jsonb_build_object('ok', false, 'err', 'denied'); end if;
   if p_table = 'hr_people' then
-    cols := array['company_id', 'name', 'address', 'phone', 'job_desc', 'start_date', 'end_date', 'salary_year', 'meal', 'status', 'memo'];
+    cols := array['company_id', 'name', 'address', 'phone', 'job_desc', 'start_date', 'end_date', 'salary_year', 'meal', 'ot_hours', 'hol_hours', 'status', 'memo'];
     if r ? 'status' and not (r->>'status' in ('수습', '정규', '퇴사')) then return jsonb_build_object('ok', false, 'err', 'status'); end if;
   elsif p_table = 'hr_docs' then
     cols := array['person_id', 'kind', 'title', 'file_name', 'body', 'doc_date', 'signed', 'signed_at', 'memo'];

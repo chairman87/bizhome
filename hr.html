@@ -276,14 +276,28 @@ function openPerson(id){
           <input id="xJob" value="${esc(d.job_desc || '')}" placeholder="직군을 고르거나 직접 적으세요. 예: ○○ 업무, ${JOB_TAIL}"></div></div>
       <div class="f2"><div class="f"><label>연 급여(원)</label><input id="xSal" value="${d.salary_year ? HRDOC.won(d.salary_year) : ''}" placeholder="예: 28,000,000" inputmode="numeric"></div>
         <div class="f"><label>식대(원)</label><input id="xMeal" value="${HRDOC.won(d.meal == null ? 200000 : d.meal)}" inputmode="numeric"></div></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div class="f"><label>고정연장 시간 <span class="hint">(월 · 비우면 자동)</span></label><input id="xOt" inputmode="numeric" placeholder="자동"></div>
+        <div class="f"><label>고정연장근로수당(원)</label><input id="xOtPay" readonly tabindex="-1" style="background:var(--bg)"></div>
+        <div class="f"><label>고정휴일 시간 <span class="hint">(월 · 비우면 자동)</span></label><input id="xHol" inputmode="numeric" placeholder="자동"></div>
+        <div class="f"><label>고정휴일근로수당(원)</label><input id="xHolPay" readonly tabindex="-1" style="background:var(--bg)"></div></div>
       <div class="wage" id="xWage"></div>
       <div class="f"><label>메모</label><textarea id="xMemo">${esc(d.memo || '')}</textarea></div>
       <div class="sec">서류 <span class="sub">— [만들기]를 누르면 위 내용을 저장하고, 채워진 글을 확인한 뒤 워드로 받습니다</span></div>
       ${KINDS.map(docBox).join('')}
     </div>
     <div class="mf">${p ? '<button class="btn danger left" id="xDel">삭제</button>' : ''}<button class="btn" data-close>닫기</button><button class="btn primary" id="xSave">저장</button></div>`, { wide: true });
-  const wage = () => { $('#xWage').innerHTML = wageLine(num(val('#xSal')), num(val('#xMeal')), { start: val('#xStart') || todayStr(), end: val('#xStatus') === '수습' ? (val('#xEnd') || probEnd(val('#xStart') || todayStr())) : '' }); };
+  /* 연 급여를 넣으면 고정연장 · 고정휴일 시간과 수당을 바로 채움. 시간을 직접 고치면 그 값으로 계산하고(직원 정보에 저장), 칸을 비우면 다시 자동 */
+  let autoH = d.ot_hours == null && d.hol_hours == null;
+  if (!autoH) { $('#xOt').value = d.ot_hours || 0; $('#xHol').value = d.hol_hours || 0; }
+  const wage = () => { const sal = num(val('#xSal')), meal = num(val('#xMeal')), o = { start: val('#xStart') || todayStr(), end: val('#xStatus') === '수습' ? (val('#xEnd') || probEnd(val('#xStart') || todayStr())) : '' };
+    if (!autoH) { o.otH = num(val('#xOt')) || 0; o.holH = num(val('#xHol')) || 0; }
+    if (sal) { const w = HRDOC.wageOf(sal, meal, { minWage: HRDOC.minWageFor(o.start, o.end).wage, otH: o.otH, holH: o.holH });
+      if (autoH) { $('#xOt').value = w.otH; $('#xHol').value = w.holH; } $('#xOtPay').value = HRDOC.won(w.ot); $('#xHolPay').value = HRDOC.won(w.hol); }
+    else { if (autoH) $('#xOt').value = $('#xHol').value = ''; $('#xOtPay').value = $('#xHolPay').value = ''; }
+    $('#xWage').innerHTML = wageLine(sal, meal, o); };
   $('#xSal').oninput = $('#xMeal').oninput = $('#xEnd').onchange = wage;
+  ['#xOt', '#xHol'].forEach(k => { $(k).oninput = () => { if (val(k) !== '') { autoH = false; wage(); } }; $(k).onchange = () => { if (val(k) === '') { autoH = true; wage(); } }; });
   /* 수습: 종료일 = 입사일 + 3개월 − 1일을 자동으로 넣음(직접 고친 날짜는 그대로 둠) · 정규: 수습 종료일 없음 */
   let autoEnd = !d.end_date || d.end_date === probEnd(d.start_date);
   const term = changed => { const st = val('#xStatus'), e = $('#xEnd');
@@ -301,7 +315,7 @@ function openPerson(id){
     if (needAll) { for (const [sel, label] of [['#xCo', '회사를 골라'], ['#xAddr', '주소를 넣어'], ['#xPhone', '연락처를 넣어']]) if (!val(sel)) { toast(label + ' 주세요', true); $(sel).focus(); return null; } }
     const meal = num(val('#xMeal'));
     return save('hr_people', { ...(p ? { id: p.id } : {}), name, phone: orNull(phoneFmt(val('#xPhone'))), company_id: orNull(val('#xCo')), address: orNull(val('#xAddr')), start_date: orNull(val('#xStart')), end_date: orNull(val('#xEnd')),
-      status: val('#xStatus'), job_desc: orNull(val('#xJob')), salary_year: num(val('#xSal')), meal: meal == null ? 200000 : meal, memo: orNull(val('#xMemo')) }, msg);
+      status: val('#xStatus'), job_desc: orNull(val('#xJob')), salary_year: num(val('#xSal')), meal: meal == null ? 200000 : meal, ot_hours: autoH ? null : num(val('#xOt')) || 0, hol_hours: autoH ? null : num(val('#xHol')) || 0, memo: orNull(val('#xMemo')) }, msg);
   };
   $('#xSave').onclick = async () => { const r = await saveForm(false, '저장했습니다'); if (r) { render(); openPerson(r.id); } };
   document.querySelectorAll('[data-make]').forEach(b => b.onclick = async () => { const r = await saveForm(true); if (r) { render(); openDoc(r, b.dataset.make); } });
@@ -329,8 +343,8 @@ function openDoc(p, kind){
         ${k.end ? `<div class="f"><label>계약 종료일</label><input type="date" id="dEnd" value="${endOf(p)}"></div>` : '<input type="hidden" id="dEnd" value="">'}
         <div class="f"><label for="dDate">작성일</label><input type="date" id="dDate" value="${todayStr()}"></div></div>
       <label class="hint" style="display:flex;gap:5px;align-items:center;cursor:pointer;margin-top:-6px"><input type="checkbox" id="dBlank" style="width:auto"> 작성일을 빈칸으로 두기(서명할 때 손으로 적음)</label>
-      ${k.dates ? `<div class="f3"><div class="f"><label>고정 연장근로 <span class="hint">(월 시간 · 비우면 자동)</span></label><input id="dOt" inputmode="numeric" placeholder="자동"></div>
-        <div class="f"><label>고정 휴일근로 <span class="hint">(월 시간 · 비우면 자동)</span></label><input id="dHol" inputmode="numeric" placeholder="자동"></div><div class="f"></div></div><div class="wage" id="dWage"></div>` : ''}
+      ${k.dates ? `<div class="f3"><div class="f"><label>고정 연장근로 <span class="hint">(월 시간 · 비우면 자동)</span></label><input id="dOt" inputmode="numeric" placeholder="자동" value="${p.ot_hours == null && p.hol_hours == null ? '' : p.ot_hours || 0}"></div>
+        <div class="f"><label>고정 휴일근로 <span class="hint">(월 시간 · 비우면 자동)</span></label><input id="dHol" inputmode="numeric" placeholder="자동" value="${p.ot_hours == null && p.hol_hours == null ? '' : p.hol_hours || 0}"></div><div class="f"></div></div><div class="wage" id="dWage"></div>` : ''}
       <div class="f"><label>내용 <span class="hint">— 이대로 워드 파일이 됩니다. 이 사람만 다른 조건이 있으면 여기서 바로 고치세요</span></label><textarea class="doc" id="dBody"></textarea></div>
     </div>
     <div class="mf"><button class="btn left" id="dBack">← ${esc(p.name)} 정보로</button><button class="btn" data-close>닫기</button><button class="btn primary" id="dSave">저장하고 워드로 받기</button></div>`, { wide: true });
