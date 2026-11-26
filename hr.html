@@ -80,6 +80,7 @@ const STATUS = ['수습', '정규', '퇴사'];
 /* 직군을 고르면 업무내용(제5조)에 들어가는 글. 고른 뒤 글을 직접 고쳐도 됨 */
 const JOB_TAIL = '기타 회사 운영에 필요하다고 인정되는 업무';
 const JOBS = [
+  ['전략',     '사업 전략 수립 및 실행, 신사업 기획, 마케팅·영업·상품·재무·인사 등 경영 전반의 기획·조정 및 관리'],
   ['마케팅',   '온·오프라인 마케팅 기획 및 실행, 광고 운영, 콘텐츠 제작 및 판매 채널 관리'],
   ['재무',     '회계·세무 처리, 자금 관리, 결산 및 재무 보고'],
   ['인사총무', '채용·근태·급여 등 인사 관리, 총무 및 사내 행정 지원'],
@@ -272,7 +273,7 @@ function openPerson(id){
         <div class="f"><label>입사일</label><input type="date" id="xStart" value="${d.start_date || ''}"></div>
         <div class="f"><label>수습 종료일 <span class="hint" id="xEndHint"></span></label><input type="date" id="xEnd" value="${d.end_date || ''}"></div></div>
       <div class="f"><label>직군 · 업무내용 <span class="hint">(제5조. 직군을 고르면 글이 들어가고, 글은 직접 고쳐도 됩니다)</span></label>
-        <div style="display:grid;grid-template-columns:130px 1fr;gap:8px"><select id="xJobKind"><option value="">직군 고르기</option>${JOBS.map(j => `<option ${d.job_desc === j.text ? 'selected' : ''}>${j.name}</option>`).join('')}${d.job_desc && !JOBS.some(j => j.text === d.job_desc) ? '<option selected value="">직접 입력</option>' : ''}</select>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:8px"><select id="xJobKind"><option value="">직군 고르기</option>${JOBS.map(j => `<option ${d.job_desc === j.text ? 'selected' : ''}>${j.name}</option>`).join('')}<option value="직접" ${d.job_desc && !JOBS.some(j => j.text === d.job_desc) ? 'selected' : ''}>직접 입력</option></select>
           <input id="xJob" value="${esc(d.job_desc || '')}" placeholder="직군을 고르거나 직접 적으세요. 예: ○○ 업무, ${JOB_TAIL}"></div></div>
       <div class="f2"><div class="f"><label>연 급여(원)</label><input id="xSal" value="${d.salary_year ? HRDOC.won(d.salary_year) : ''}" placeholder="예: 28,000,000" inputmode="numeric"></div>
         <div class="f"><label>식대(원)</label><input id="xMeal" value="${HRDOC.won(d.meal == null ? 200000 : d.meal)}" inputmode="numeric"></div></div>
@@ -305,7 +306,9 @@ function openPerson(id){
     else { if (changed) e.value = ''; e.disabled = true; $('#xEndHint').textContent = st === '정규' ? '(정규는 없음)' : ''; }
     wage(); };
   $('#xStatus').onchange = () => term(true); $('#xEnd').oninput = () => { autoEnd = false; };
-  $('#xJobKind').onchange = () => { const j = JOBS.find(v => v.name === val('#xJobKind')); if (j) $('#xJob').value = j.text; };
+  $('#xJobKind').onchange = () => { const j = JOBS.find(v => v.name === val('#xJobKind')), i = $('#xJob'); if (j) { i.value = j.text; return; }
+    if (val('#xJobKind') === '직접') { if (JOBS.some(v => v.text === i.value)) i.value = ''; i.placeholder = `업무내용을 직접 적으세요. 예: ○○ 업무, ${JOB_TAIL}`; i.focus(); } };
+  $('#xJob').oninput = () => { if (!JOBS.some(v => v.text === val('#xJob'))) $('#xJobKind').value = '직접'; };   // 글을 직접 고치면 '직접 입력'으로 표시
   term(false);
   $('#xSal').onblur = () => { const n = num(val('#xSal')); $('#xSal').value = n ? HRDOC.won(n) : ''; };
   $('#xPhone').onblur = () => { $('#xPhone').value = phoneFmt(val('#xPhone')); };
