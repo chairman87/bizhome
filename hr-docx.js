@@ -14,14 +14,34 @@
 (function (root) {
   const won = n => Math.round(Number(n) || 0).toLocaleString('en-US');
 
-  /* 포괄임금 계산 (기존 계약서와 같은 식):
-     월 임금 총액 = 연 급여 ÷ 12 · 시간급 = 월 임금 총액 ÷ 272시간(기본 209 + 연장 30×1.5 + 휴일 12×1.5)
-     고정연장 = 시간급 × 45 · 고정휴일 = 시간급 × 18 · 기본급 = 월 임금 총액 − 식대 − 고정연장 − 고정휴일 */
-  function wageOf(annual, meal) {
+  /* 최저임금(시간급). 해마다 8월쯤 다음 해 금액이 고시되면 여기에 한 줄 추가합니다 */
+  const MINWAGE = { 2025: 10030, 2026: 10320, 2027: 10700 };
+  const MAX_OT = 40, MAX_HOL = 12;   // 고정 연장 · 휴일 시간의 위쪽 끝(합쳐 월 52시간 이하 — 연봉계산서 예시와 같음)
+  /* 계약 기간에 걸리는 해 가운데 가장 높은 최저임금. 끝나는 날이 없으면(정규직) 시작한 해와 그 다음 해를 봄.
+     아직 고시되지 않은 해는 알고 있는 마지막 해 금액으로 봄(guess = true) */
+  function minWageFor(start, end) {
+    const known = Object.keys(MINWAGE).map(Number).sort((x, y) => x - y), last = known[known.length - 1];
+    const y1 = Number(String(start || '').slice(0, 4)) || new Date().getFullYear(), y2 = Number(String(end || '').slice(0, 4)) || y1 + 1;
+    let wage = 0, year = y1, guess = false;
+    for (let y = y1; y <= Math.max(y1, y2); y++) { const v = MINWAGE[y] || MINWAGE[last]; if (!MINWAGE[y] && (end || y === y1)) guess = true; if (v > wage) { wage = v; year = MINWAGE[y] ? y : last; } }
+    return { wage, year, guess };
+  }
+
+  /* 포괄임금 계산 (연봉계산서 예시와 같은 식):
+     월 임금 총액 = 연 급여 ÷ 12 · 시간급 = 월 임금 총액 ÷ (209 + 연장시간×1.5 + 휴일시간×1.5)
+     고정연장 = 시간급 × 연장시간 × 1.5 · 고정휴일 = 시간급 × 휴일시간 × 1.5 · 기본급 = 월 임금 총액 − 식대 − 고정연장 − 고정휴일
+     고정 시간을 많이 잡을수록 시간급이 내려가므로, (기본급 + 식대) ÷ 209 가 최저임금 밑으로 내려가지 않는 선까지만 잡습니다.
+     o.otH · o.holH 를 주면 그 시간으로, 안 주면 최저임금(o.minWage)에 맞춰 잡을 수 있는 가장 많은 시간(연장 먼저 40까지, 남으면 휴일 12까지)으로 계산 */
+  function wageOf(annual, meal, o = {}) {
     annual = Number(annual) || 0; meal = meal == null || meal === '' ? 200000 : Number(meal) || 0;
-    const monthly = Math.round(annual / 12), hour = monthly / 272;
-    const ot = Math.round(hour * 45), hol = Math.round(hour * 18);
-    return { annual, monthly, meal, ot, hol, fixed: ot + hol, base: monthly - meal - ot - hol };
+    const minWage = Number(o.minWage) || minWageFor().wage, monthly = Math.round(annual / 12);
+    const calc = (otH, holH) => { const hour = monthly / (209 + otH * 1.5 + holH * 1.5), ot = Math.round(hour * otH * 1.5), hol = Math.round(hour * holH * 1.5), base = monthly - meal - ot - hol;
+      return { annual, monthly, meal, ot, hol, fixed: ot + hol, base, otH, holH, hour: (base + meal) / 209, minWage, low: base + meal < minWage * 209 }; };
+    const given = v => v != null && v !== '' && !isNaN(Number(v));
+    if (given(o.otH) || given(o.holH)) return { ...calc(Math.max(0, Number(o.otH) || 0), Math.max(0, Number(o.holH) || 0)), auto: false };
+    let t = Math.max(0, Math.min(MAX_OT + MAX_HOL, Math.floor((monthly / minWage - 209) / 1.5))), w;
+    for (;;) { w = calc(Math.min(MAX_OT, t), Math.max(0, t - MAX_OT)); if (!w.low || t === 0) break; t--; }   // 원 단위 반올림 때문에 1원 모자라면 한 시간 줄임
+    return { ...w, auto: true };
   }
 
   /* '2026-05-04' → '2026년  5월  4일'. 비어 있으면 손으로 적을 빈칸 */
@@ -88,6 +108,6 @@
   /* 글 → 워드 파일(Uint8Array) */
   const buildDocx = text => zip([['[Content_Types].xml', TYPES], ['_rels/.rels', RELS], ['word/document.xml', documentXml(text)], ['word/styles.xml', STYLES], ['word/_rels/document.xml.rels', DOC_RELS]]);
 
-  const api = { won, wageOf, kDate, spaced, fill, buildDocx };
+  const api = { MINWAGE, minWageFor, won, wageOf, kDate, spaced, fill, buildDocx };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.HRDOC = api;
 })(typeof window !== 'undefined' ? window : globalThis);
