@@ -33,7 +33,7 @@ create table if not exists hr_companies (
 alter table hr_companies add column if not exists seal text;
 
 create table if not exists hr_templates (
-  kind       text primary key,              -- 수습 / 정규 / 비밀유지
+  kind       text primary key,              -- 수습 / 정규 / 비밀유지 / 사직
   title      text not null,                 -- 화면에 보이는 이름 (예: 채용계약서(수습))
   body       text not null,                 -- 양식 글. {이름} {주소} {연락처} … 가 채워짐
   updated_by text,
@@ -119,7 +119,7 @@ begin
     if r ? 'status' and not (r->>'status' in ('수습', '정규', '퇴사')) then return jsonb_build_object('ok', false, 'err', 'status'); end if;
   elsif p_table = 'hr_docs' then
     cols := array['person_id', 'kind', 'title', 'file_name', 'body', 'doc_date', 'signed', 'signed_at', 'memo'];
-    if r ? 'kind' and not (r->>'kind' in ('수습', '정규', '비밀유지')) then return jsonb_build_object('ok', false, 'err', 'kind'); end if;
+    if r ? 'kind' and not (r->>'kind' in ('수습', '정규', '비밀유지', '사직')) then return jsonb_build_object('ok', false, 'err', 'kind'); end if;
   elsif p_table = 'hr_companies' then
     cols := array['name', 'addr', 'work_addr', 'ceo', 'sort', 'seal'];
     if r ? 'seal' and r->>'seal' is not null and (r->>'seal' not like 'data:image/png;base64,%' or length(r->>'seal') > 700000) then return jsonb_build_object('ok', false, 'err', 'seal'); end if;
@@ -163,7 +163,7 @@ declare m uuid := think_who(p_token); nm text;
 begin
   if m is null then return jsonb_build_object('ok', false, 'err', 'session'); end if;
   if not hr_can(m) then return jsonb_build_object('ok', false, 'err', 'denied'); end if;
-  if not (p_kind in ('수습', '정규', '비밀유지')) then return jsonb_build_object('ok', false, 'err', 'kind'); end if;
+  if not (p_kind in ('수습', '정규', '비밀유지', '사직')) then return jsonb_build_object('ok', false, 'err', 'kind'); end if;
   if coalesce(trim(p_body), '') = '' then return jsonb_build_object('ok', false, 'err', 'body'); end if;
   select name into nm from members where id::text = m::text;
   insert into hr_templates (kind, title, body, updated_by, updated_at) values (p_kind, coalesce(nullif(trim(p_title), ''), p_kind), p_body, nm, now())
