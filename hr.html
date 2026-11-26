@@ -77,6 +77,17 @@ const KINDS = [
 ];
 const kindOf = k => KINDS.find(x => x.key === k) || { key: k, name: k, file: k };
 const STATUS = ['수습', '정규', '퇴사'];
+/* 직군을 고르면 업무내용(제5조)에 들어가는 글. 고른 뒤 글을 직접 고쳐도 됨 */
+const JOB_TAIL = '기타 회사 운영에 필요하다고 인정되는 업무';
+const JOBS = [
+  ['마케팅',   '온·오프라인 마케팅 기획 및 실행, 광고 운영, 콘텐츠 제작 및 판매 채널 관리'],
+  ['재무',     '회계·세무 처리, 자금 관리, 결산 및 재무 보고'],
+  ['인사총무', '채용·근태·급여 등 인사 관리, 총무 및 사내 행정 지원'],
+  ['경영지원', '경영 관리 및 사업 운영 지원, 각종 행정·계약·문서 관리'],
+  ['CS',       '고객 문의 응대 및 상담, 교환·반품·클레임 처리, 고객 응대 품질 관리'],
+  ['물류지원', '상품 입출고 및 재고 관리, 포장·배송 지원, 물류 협력업체 관리'],
+  ['상품기획', '신제품 기획 및 개발, 시장·경쟁사 조사, 상품 운영 및 개선'],
+].map(([name, text]) => ({ name, text: `${text}, ${JOB_TAIL}` }));
 const KEYS = ['이름', '이름띄움', '주소', '연락처', '회사', '회사주소', '근무장소', '대표자', '시작일', '종료일', '업무내용', '연봉', '기본급', '고정수당', '연장수당', '휴일수당', '연장시간', '휴일시간', '식대', '월급', '작성일', '도장'];
 const ERR = { seal: '도장 그림을 저장할 수 없습니다(PNG 그림만, 너무 크면 안 됨)', denied: '관리자만 볼 수 있는 화면입니다', name: '이름을 넣어 주세요', doc: '서류 내용이 비어 있습니다', haspeople: '이 회사에 딸린 직원이 있어 지울 수 없습니다', body: '양식 내용이 비어 있습니다', table: '저장할 수 없는 자료입니다' };
 let CO = null, TPL = [], PEOPLE = [], DOCS = [], loadErr = '', loading = false, tab = 'people', q = '', onlyUnsigned = false;
@@ -257,10 +268,12 @@ function openPerson(id){
         <div class="f"><label>회사 *</label><select id="xCo"><option value="">고르세요</option>${CO.map(c => `<option value="${c.id}" ${d.company_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div></div>
       <div class="f"><label>주소 *</label><input id="xAddr" value="${esc(d.address || '')}" placeholder="주민등록상 주소"></div>
       <div class="sec">계약 조건 <span class="sub">— 계약서에만 쓰입니다. 비밀유지서약서만 받을 거면 비워도 됩니다</span></div>
-      <div class="f3"><div class="f"><label>입사일(수습 시작)</label><input type="date" id="xStart" value="${d.start_date || ''}"></div>
-        <div class="f"><label>수습 종료일 <span class="hint">(비우면 3개월)</span></label><input type="date" id="xEnd" value="${d.end_date || ''}"></div>
-        <div class="f"><label>상태</label><select id="xStatus">${STATUS.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div></div>
-      <div class="f"><label>업무내용 <span class="hint">(제5조)</span></label><input id="xJob" value="${esc(d.job_desc || '')}" placeholder="예: SNS 영상 컨텐츠 편집 및 제작업무, 기타 회사 운영에 필요하다고 인정되는 업무"></div>
+      <div class="f3"><div class="f"><label>수습 / 정규 <span class="hint">(수습을 고르면 3개월이 자동으로 들어감)</span></label><select id="xStatus">${STATUS.map(s => `<option ${d.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="f"><label>입사일</label><input type="date" id="xStart" value="${d.start_date || ''}"></div>
+        <div class="f"><label>수습 종료일 <span class="hint" id="xEndHint"></span></label><input type="date" id="xEnd" value="${d.end_date || ''}"></div></div>
+      <div class="f"><label>직군 · 업무내용 <span class="hint">(제5조. 직군을 고르면 글이 들어가고, 글은 직접 고쳐도 됩니다)</span></label>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:8px"><select id="xJobKind"><option value="">직군 고르기</option>${JOBS.map(j => `<option ${d.job_desc === j.text ? 'selected' : ''}>${j.name}</option>`).join('')}${d.job_desc && !JOBS.some(j => j.text === d.job_desc) ? '<option selected value="">직접 입력</option>' : ''}</select>
+          <input id="xJob" value="${esc(d.job_desc || '')}" placeholder="직군을 고르거나 직접 적으세요. 예: ○○ 업무, ${JOB_TAIL}"></div></div>
       <div class="f2"><div class="f"><label>연 급여(원)</label><input id="xSal" value="${d.salary_year ? HRDOC.won(d.salary_year) : ''}" placeholder="예: 28,000,000" inputmode="numeric"></div>
         <div class="f"><label>식대(원)</label><input id="xMeal" value="${HRDOC.won(d.meal == null ? 200000 : d.meal)}" inputmode="numeric"></div></div>
       <div class="wage" id="xWage"></div>
@@ -269,11 +282,20 @@ function openPerson(id){
       ${KINDS.map(docBox).join('')}
     </div>
     <div class="mf">${p ? '<button class="btn danger left" id="xDel">삭제</button>' : ''}<button class="btn" data-close>닫기</button><button class="btn primary" id="xSave">저장</button></div>`, { wide: true });
-  const wage = () => { $('#xWage').innerHTML = wageLine(num(val('#xSal')), num(val('#xMeal')), { start: val('#xStart') || todayStr(), end: val('#xEnd') || probEnd(val('#xStart') || todayStr()) }); };
-  $('#xSal').oninput = $('#xMeal').oninput = $('#xEnd').onchange = wage; wage();
+  const wage = () => { $('#xWage').innerHTML = wageLine(num(val('#xSal')), num(val('#xMeal')), { start: val('#xStart') || todayStr(), end: val('#xStatus') === '수습' ? (val('#xEnd') || probEnd(val('#xStart') || todayStr())) : '' }); };
+  $('#xSal').oninput = $('#xMeal').oninput = $('#xEnd').onchange = wage;
+  /* 수습: 종료일 = 입사일 + 3개월 − 1일을 자동으로 넣음(직접 고친 날짜는 그대로 둠) · 정규: 수습 종료일 없음 */
+  let autoEnd = !d.end_date || d.end_date === probEnd(d.start_date);
+  const term = changed => { const st = val('#xStatus'), e = $('#xEnd');
+    if (st === '수습') { e.disabled = false; if ((changed || autoEnd) && val('#xStart')) { e.value = probEnd(val('#xStart')); autoEnd = true; } $('#xEndHint').textContent = '(입사일 + 3개월, 고칠 수 있음)'; }
+    else { if (changed) e.value = ''; e.disabled = true; $('#xEndHint').textContent = st === '정규' ? '(정규는 없음)' : ''; }
+    wage(); };
+  $('#xStatus').onchange = () => term(true); $('#xEnd').oninput = () => { autoEnd = false; };
+  $('#xJobKind').onchange = () => { const j = JOBS.find(v => v.name === val('#xJobKind')); if (j) $('#xJob').value = j.text; };
+  term(false);
   $('#xSal').onblur = () => { const n = num(val('#xSal')); $('#xSal').value = n ? HRDOC.won(n) : ''; };
   $('#xPhone').onblur = () => { $('#xPhone').value = phoneFmt(val('#xPhone')); };
-  $('#xStart').onchange = () => { wage(); if (!val('#xEnd')) $('#xEnd').title = '비우면 ' + fmtDate(probEnd(val('#xStart'))); };
+  $('#xStart').onchange = () => term(false);
   const saveForm = async (needAll, msg) => {
     const name = val('#xName'); if (!name) { toast('이름을 넣어 주세요', true); $('#xName').focus(); return null; }
     if (needAll) { for (const [sel, label] of [['#xCo', '회사를 골라'], ['#xAddr', '주소를 넣어'], ['#xPhone', '연락처를 넣어']]) if (!val(sel)) { toast(label + ' 주세요', true); $(sel).focus(); return null; } }
@@ -297,7 +319,7 @@ function openPerson(id){
 function openDoc(p, kind){
   const k = kindOf(kind), tpl = TPL.find(t => t.kind === kind);
   if (!tpl) { toast(`${k.name} 양식이 없습니다. '양식 · 회사' 탭에서 먼저 넣어 주세요`, true); return; }
-  const start0 = kind === '정규' && endOf(p) ? addDays(endOf(p), 1) : (p.start_date || '');   // 정규는 수습이 끝난 다음 날부터
+  const start0 = kind === '정규' && (p.status === '수습' || p.end_date) && endOf(p) ? addDays(endOf(p), 1) : (p.start_date || '');   // 수습을 거친 사람의 정규 계약은 수습이 끝난 다음 날부터, 처음부터 정규면 입사일부터
   const hrs = () => k.dates ? { otH: val('#dOt'), holH: val('#dHol') } : {};
   const filled = () => HRDOC.fill(tpl.body, varsOf(p, { start: val('#dStart'), end: val('#dEnd'), date: $('#dBlank').checked ? '' : val('#dDate'), ...hrs() }));
   const miss = [k.dates && !p.start_date ? '입사일' : '', k.dates && !p.salary_year ? '연 급여' : '', k.dates && !p.job_desc ? '업무내용' : ''].filter(Boolean);
