@@ -181,7 +181,7 @@ let schemaWarn = '';
 const warnHtml = () => schemaWarn ? `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;font-size:13px;text-align:center">⚠ ${esc(schemaWarn)}</div>` : '';
 /* 메뉴 접근 권한: 홈의 메뉴 편집에서 "볼 수 있는 사람"이 정해진 화면은 그 사람과 관리자만 (주소를 직접 쳐도 막힘) */
 /* 관리자 전용 화면: '볼 수 있는 사람'이 비어 있어도 관리자만. 체크한 담당자는 추가로 볼 수 있음 (index.html 메뉴 표시도 같은 목록을 씀) */
-const ADMIN_ONLY_PAGES = ['campaigns.html', 'hire.html', 'perf.html', 'recruit.html'];   // hire.html = 채용(지원자 정보, 2026-11-18) · perf.html = 퍼포먼스 데이터(매출, 2026-11-20 사장님: 관리자만) · recruit.html = 채용 관리(급여·평가, 2026-11-24 사장님: 관리자만)
+const ADMIN_ONLY_PAGES = ['campaigns.html', 'hire.html', 'perf.html', 'recruit.html', 'hr.html'];   // hire.html = 채용(지원자 정보, 2026-11-18) · perf.html = 퍼포먼스 데이터(매출, 2026-11-20 사장님: 관리자만) · recruit.html = 채용 관리(급여·평가, 2026-11-24 사장님: 관리자만) · hr.html = 인사 서류(주소·연락처·연봉, 2026-11-26)
 let accessState = null;   // null=아직 확인 안 함, 'checking', 'ok', 'denied'
 async function checkAccess(){
   accessState = 'checking';
