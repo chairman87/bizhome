@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="common.css?v=202611261659">
 <script src="common.js?v=202611261659"></script>
-<script src="hr-docx.js?v=202611262100"></script>
+<script src="hr-docx.js?v=202611262200"></script>
 <style>
   .tabs2{display:flex;gap:4px;flex-wrap:wrap}
   .tabs2 button{border:1px solid var(--line2);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--fg2)}
@@ -77,8 +77,8 @@ const KINDS = [
 ];
 const kindOf = k => KINDS.find(x => x.key === k) || { key: k, name: k, file: k };
 const STATUS = ['수습', '정규', '퇴사'];
-const KEYS = ['이름', '이름띄움', '주소', '연락처', '회사', '회사주소', '근무장소', '대표자', '시작일', '종료일', '업무내용', '연봉', '기본급', '고정수당', '연장수당', '휴일수당', '연장시간', '휴일시간', '식대', '월급', '작성일'];
-const ERR = { denied: '관리자만 볼 수 있는 화면입니다', name: '이름을 넣어 주세요', doc: '서류 내용이 비어 있습니다', haspeople: '이 회사에 딸린 직원이 있어 지울 수 없습니다', body: '양식 내용이 비어 있습니다', table: '저장할 수 없는 자료입니다' };
+const KEYS = ['이름', '이름띄움', '주소', '연락처', '회사', '회사주소', '근무장소', '대표자', '시작일', '종료일', '업무내용', '연봉', '기본급', '고정수당', '연장수당', '휴일수당', '연장시간', '휴일시간', '식대', '월급', '작성일', '도장'];
+const ERR = { seal: '도장 그림을 저장할 수 없습니다(PNG 그림만, 너무 크면 안 됨)', denied: '관리자만 볼 수 있는 화면입니다', name: '이름을 넣어 주세요', doc: '서류 내용이 비어 있습니다', haspeople: '이 회사에 딸린 직원이 있어 지울 수 없습니다', body: '양식 내용이 비어 있습니다', table: '저장할 수 없는 자료입니다' };
 let CO = null, TPL = [], PEOPLE = [], DOCS = [], loadErr = '', loading = false, tab = 'people', q = '', onlyUnsigned = false;
 
 async function call(name, args = {}){
@@ -131,12 +131,28 @@ function wageLine(annual, meal, o = {}){
 function varsOf(p, o = {}){
   const co = coOf(p), w = HRDOC.wageOf(p.salary_year, p.meal, { minWage: HRDOC.minWageFor(o.start, o.end).wage, otH: o.otH, holH: o.holH }), f = HRDOC.won, blank = '____________', money = v => p.salary_year ? f(v) : '          ';
   return { 이름: p.name || blank, 이름띄움: HRDOC.spaced(p.name) || blank, 주소: p.address || '', 연락처: p.phone || '',
-    회사: co.name || blank, 회사주소: co.addr || '', 근무장소: co.work_addr || co.addr || '', 대표자: co.ceo || '',
+    회사: co.name || blank, 회사주소: co.addr || '', 근무장소: co.work_addr || co.addr || '', 대표자: co.ceo || '', 도장: co.seal ? HRDOC.SEAL : '',
     시작일: HRDOC.kDate(o.start), 종료일: HRDOC.kDate(o.end), 업무내용: p.job_desc || blank, 작성일: HRDOC.kDate(o.date),
     연봉: money(w.annual), 기본급: money(w.base), 고정수당: money(w.fixed), 연장수당: money(w.ot), 휴일수당: money(w.hol), 연장시간: p.salary_year ? w.otH : '    ', 휴일시간: p.salary_year ? w.holH : '    ', 식대: f(w.meal), 월급: money(w.monthly) };
 }
-function download(text, fileName){
-  const blob = new Blob([HRDOC.buildDocx(text)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+/* 도장: 회사 정보에 'data:image/png;base64,…' 글로 보관. 워드에 담을 때는 바이트로 바꿈 */
+const sealBytes = url => { if (!url) return null; const bin = atob(String(url).split(',')[1] || ''), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+const sealOfPerson = id => { const p = PEOPLE.find(v => v.id === id); return p ? coOf(p).seal : null; };
+/* 올린 그림 → 가로세로 360 안쪽의 PNG. 배경이 흰 그림이면 흰 부분을 투명하게 바꿔 글자 위에 찍혀도 글자가 보이게 함 */
+function sealFromBlob(blob){
+  return new Promise((ok, no) => { const img = new Image(), u = URL.createObjectURL(blob);
+    img.onerror = () => { URL.revokeObjectURL(u); no(new Error('그림을 읽지 못했습니다')); };
+    img.onload = () => { URL.revokeObjectURL(u);
+      const side = Math.max(img.width, img.height), k = Math.min(1, 360 / side), S = Math.round(side * k), c = document.createElement('canvas'); c.width = c.height = S;
+      const g = c.getContext('2d'); g.drawImage(img, (S - img.width * k) / 2, (S - img.height * k) / 2, img.width * k, img.height * k);
+      const d = g.getImageData(0, 0, S, S), a = d.data; let clear = 0;
+      for (let i = 3; i < a.length; i += 4) if (a[i] < 16) clear++;
+      if (clear < S * S * 0.05) { for (let i = 0; i < a.length; i += 4) { const light = Math.min(a[i + 1], a[i + 2]); a[i + 3] = light > 235 ? 0 : light > 150 ? Math.round(a[i + 3] * (235 - light) / 85) : a[i + 3]; } g.putImageData(d, 0, 0); }
+      ok(c.toDataURL('image/png')); };
+    img.src = u; });
+}
+function download(text, fileName, seal){
+  const blob = new Blob([HRDOC.buildDocx(text, { seal: sealBytes(seal) })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 const fileNameOf = (p, kind, date) => `${(date || todayStr()).slice(2).replace(/-/g, '')}_${kind}_${(p.name || '').replace(/[\\/:*?"<>|\s]/g, '')}_${kindOf(kind).file}.docx`;
@@ -174,6 +190,9 @@ function setupHtml(){
         <div class="f"><label>주소 <span class="hint">(서명 칸)</span></label><input data-k="addr" value="${esc(c.addr || '')}"></div>
         <div class="f"><label>근무장소 <span class="hint">(제3조. 비우면 주소와 같음)</span></label><input data-k="work_addr" value="${esc(c.work_addr || '')}"></div>
         <div class="f"><label>대표자 <span class="hint">(찍히는 그대로. 예: 홍 길 동)</span></label><input data-k="ceo" value="${esc(c.ceo || '')}"></div>
+        <div class="f"><label>도장 <span class="hint">(계약서의 사업주 "(서명 또는 날인)" 자리에 찍힘. 올리면 바로 저장)</span></label>
+          <div style="display:flex;gap:8px;align-items:center">${c.seal ? `<img src="${esc(c.seal)}" alt="도장" style="width:56px;height:56px;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff">` : '<span class="sub">없음</span>'}
+            <label class="btn sm" style="cursor:pointer">${c.seal ? '바꾸기' : '도장 올리기'}<input type="file" accept="image/*" data-seal="${c.id}" hidden></label>${c.seal ? `<button class="btn sm" data-sealdel="${c.id}">빼기</button>` : ''}</div></div>
         <div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm danger" data-codel="${c.id}">삭제</button><button class="btn sm primary" data-cosave="${c.id}">저장</button></div>
       </div>`).join('')}
       <div class="co" style="place-content:center;border-style:dashed"><button class="btn" id="addCo">+ 회사 추가</button></div></div>
@@ -205,13 +224,17 @@ function render(){
   on('#reloadBtn', load); on('#addPerson', () => openPerson());
   const qi = $('#q'); if (qi) qi.oninput = () => { q = qi.value; const pos = qi.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
   const us = $('#unsigned'); if (us) us.onchange = () => { onlyUnsigned = us.checked; render(); };
-  document.querySelectorAll('[data-dl]').forEach(b => b.onclick = e => { e.stopPropagation(); const d = DOCS.find(x => x.id === b.dataset.dl); download(d.body, d.file_name || 'doc.docx'); });
+  document.querySelectorAll('[data-dl]').forEach(b => b.onclick = e => { e.stopPropagation(); const d = DOCS.find(x => x.id === b.dataset.dl); download(d.body, d.file_name || 'doc.docx', sealOfPerson(d.person_id)); });
   document.querySelectorAll('[data-person]').forEach(el => el.onclick = () => { if (el.dataset.person) openPerson(el.dataset.person); });
   document.querySelectorAll('[data-tpl]').forEach(el => el.onclick = () => openTemplate(el.dataset.tpl));
   document.querySelectorAll('[data-cosave]').forEach(b => b.onclick = async () => { const box = b.closest('.co'), row = { id: b.dataset.cosave };
     box.querySelectorAll('[data-k]').forEach(i => row[i.dataset.k] = orNull(i.value.trim()));
     if (!row.name) { toast('사업체명을 넣어 주세요', true); return; }
     if (await save('hr_companies', row, '저장했습니다')) render(); });
+  document.querySelectorAll('[data-seal]').forEach(i => i.onchange = async () => { const f = i.files[0]; if (!f) return;
+    try { const seal = await sealFromBlob(f); if (await save('hr_companies', { id: i.dataset.seal, seal }, '도장을 저장했습니다')) render(); } catch (e) { toast(e.message, true); } });
+  document.querySelectorAll('[data-sealdel]').forEach(b => b.onclick = async () => { if (!confirm('이 회사의 도장을 뺄까요? 이미 만든 서류도 다시 받으면 도장 없이 나옵니다.')) return;
+    if (await save('hr_companies', { id: b.dataset.sealdel, seal: null }, '도장을 뺐습니다')) render(); });
   document.querySelectorAll('[data-codel]').forEach(b => b.onclick = async () => { const c = CO.find(x => x.id === b.dataset.codel);
     if (!confirm(`"${c.name}" 회사 정보를 지울까요?`)) return; if (await remove('hr_companies', c.id)) { render(); toast('지웠습니다'); } });
   on('#addCo', async () => { const name = (prompt('사업체명') || '').trim(); if (!name) return; if (await save('hr_companies', { name, sort: CO.length }, '추가했습니다. 주소 · 대표자를 넣고 저장해 주세요')) render(); });
@@ -260,7 +283,7 @@ function openPerson(id){
   };
   $('#xSave').onclick = async () => { const r = await saveForm(false, '저장했습니다'); if (r) { render(); openPerson(r.id); } };
   document.querySelectorAll('[data-make]').forEach(b => b.onclick = async () => { const r = await saveForm(true); if (r) { render(); openDoc(r, b.dataset.make); } });
-  document.querySelectorAll('[data-dl2]').forEach(b => b.onclick = () => { const x = DOCS.find(v => v.id === b.dataset.dl2); download(x.body, x.file_name || 'doc.docx'); });
+  document.querySelectorAll('[data-dl2]').forEach(b => b.onclick = () => { const x = DOCS.find(v => v.id === b.dataset.dl2); download(x.body, x.file_name || 'doc.docx', coOf(p).seal); });
   document.querySelectorAll('[data-sign]').forEach(c => c.onchange = async () => { await save('hr_docs', { id: c.dataset.sign, signed: c.checked, signed_at: c.checked ? todayStr() : null }, c.checked ? '서명 받음으로 표시했습니다' : '서명 표시를 풀었습니다'); render(); openPerson(p.id); });
   document.querySelectorAll('[data-ddel]').forEach(b => b.onclick = async () => { const x = DOCS.find(v => v.id === b.dataset.ddel);
     if (!confirm(`${x.title || kindOf(x.kind).name} (${fmtDate(String(x.created_at).slice(0, 10))} 만듦) 기록을 지울까요? 되돌릴 수 없습니다.`)) return;
@@ -302,7 +325,7 @@ function openDoc(p, kind){
     const date = $('#dBlank').checked ? null : orNull(val('#dDate')), fileName = fileNameOf(p, kind, val('#dStart') || date);
     const row = await save('hr_docs', { person_id: p.id, kind, title: tpl.title || k.name, file_name: fileName, body, doc_date: date });
     if (!row) return;
-    download(body, fileName); toast(`${fileName} 을(를) 받았습니다`);
+    download(body, fileName, coOf(p).seal); toast(`${fileName} 을(를) 받았습니다`);
     if (kind === '정규' && p.status === '수습' && confirm(`${p.name} 님의 상태를 '정규'로 바꿀까요?`)) await save('hr_people', { id: p.id, status: '정규' });
     render(); openPerson(p.id);
   };
@@ -320,7 +343,7 @@ function openTemplate(kind){
   const ta = $('#tBody');
   document.querySelectorAll('[data-key]').forEach(c => c.onclick = () => { const s = ta.selectionStart, e = ta.selectionEnd, ins = `{${c.dataset.key}}`; ta.setRangeText(ins, s, e, 'end'); ta.focus(); });
   $('#tTry').onclick = () => { const co = CO[0] || {}, sample = { name: '홍길동', address: '서울특별시 ○○구 ○○로 123, 101동 1001호', phone: '010-0000-0000', company_id: co.id, job_desc: '○○ 업무, 기타 회사 운영에 필요하다고 인정되는 업무', salary_year: 30000000, meal: 200000 };
-    download(HRDOC.fill(ta.value, varsOf(sample, { start: todayStr(), end: probEnd(todayStr()), date: todayStr() })), `예시_${kind}.docx`); };
+    download(HRDOC.fill(ta.value, varsOf(sample, { start: todayStr(), end: probEnd(todayStr()), date: todayStr() })), `예시_${kind}.docx`, co.seal); };
   $('#tSave').onclick = async () => {
     if (!ta.value.trim()) { toast('내용이 비어 있습니다', true); return; }
     try { const d = await call('hr_template_save', { p_kind: kind, p_title: k.name, p_body: ta.value }); const i = TPL.findIndex(x => x.kind === kind); if (i >= 0) TPL[i] = d.row; else TPL.push(d.row);

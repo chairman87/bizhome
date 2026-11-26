@@ -29,6 +29,9 @@ create table if not exists hr_companies (
   updated_at timestamptz default now()
 );
 
+-- 도장(2026-11-26): 'data:image/png;base64,…' 글로 보관. 파일 보관함은 공개라 쓰지 않음
+alter table hr_companies add column if not exists seal text;
+
 create table if not exists hr_templates (
   kind       text primary key,              -- 수습 / 정규 / 비밀유지
   title      text not null,                 -- 화면에 보이는 이름 (예: 채용계약서(수습))
@@ -114,7 +117,8 @@ begin
     cols := array['person_id', 'kind', 'title', 'file_name', 'body', 'doc_date', 'signed', 'signed_at', 'memo'];
     if r ? 'kind' and not (r->>'kind' in ('수습', '정규', '비밀유지')) then return jsonb_build_object('ok', false, 'err', 'kind'); end if;
   elsif p_table = 'hr_companies' then
-    cols := array['name', 'addr', 'work_addr', 'ceo', 'sort'];
+    cols := array['name', 'addr', 'work_addr', 'ceo', 'sort', 'seal'];
+    if r ? 'seal' and r->>'seal' is not null and (r->>'seal' not like 'data:image/png;base64,%' or length(r->>'seal') > 700000) then return jsonb_build_object('ok', false, 'err', 'seal'); end if;
   else
     return jsonb_build_object('ok', false, 'err', 'table');
   end if;
