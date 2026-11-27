@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모바일 명함</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css">
+<link rel="stylesheet" href="common.css?v=202611262144">
+<script src="common.js?v=202611262144"></script>
+<style>
+  .nc{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:28px;align-items:start}
+  .nc .form{display:grid;gap:12px}
+  .nc .prev{position:sticky;top:68px}
+  .nc canvas{display:block;width:100%;max-width:720px;height:auto;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);background:#fff}
+  .nc .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  .nc .acts .btn{padding:9px 16px;font-size:14px}
+  @media(max-width:760px){.nc{grid-template-columns:1fr;gap:18px}.nc .prev{position:static;order:-1}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   모바일 명함 — 이름·직급·연락처를 적으면 명함 그림(PNG)을 만들어 내려받음
+   - 표(저장소)를 쓰지 않습니다. 적은 내용은 이 브라우저에만 기억합니다 (LS 'namecard_<이름>')
+     → 전화번호·메일이 공개 저장소에 올라가지 않음
+   - 그림은 화면의 canvas 에 직접 그립니다 (가로 1080 × 세로 608 의 2배 크기로 저장)
+   - 회사 표기(로고 글자·상호·주소)는 아래 COS 에서, 누가 어느 회사인지는 PH_PEOPLE 에서 고칩니다
+================================================================ */
+const COS = {
+  '피에이치뷰티': { brand: 'PH BEAUTY', color: '#0e7c86', name: '주식회사 피에이치뷰티', addr: '서울시 서초구 강남대로 507, 8층 KDIETCODE', mail: '@phbeauty.co.kr' },
+  '식이해법연구소': { brand: '식이해법연구소', color: '#0e7c86', name: '식이해법연구소', addr: '서울시 서초구 강남대로 507, 8층 KDIETCODE', mail: '' },   // 로고 글자·주소·메일은 아직 임시(2026-11-27, 사장님 확인 전)
+};
+const PH_PEOPLE = ['김상우', '박준성', '이유나'];   // 피에이치뷰티 소속(2026-11-27 사장님). 나머지는 식이해법연구소
+const coOf = n => PH_PEOPLE.includes(n) ? '피에이치뷰티' : '식이해법연구소';
+let CO = COS['피에이치뷰티'];   // 지금 그리는 명함의 회사
+const TITLE_EN = { '회장': 'Chairman', '대표': 'CEO', '부대표': 'Vice President', '사장': 'President', '전무': 'Senior Managing Director', '상무': 'Managing Director', '이사': 'Director',
+  '본부장': 'Division Head', '실장': 'General Manager', '팀장': 'Team Leader', '부장': 'General Manager', '차장': 'Deputy General Manager', '과장': 'Manager', '대리': 'Assistant Manager',
+  '주임': 'Senior Associate', '사원': 'Associate', '인턴': 'Intern' };
+const W = 1080, H = 608, SCALE = 2;
+const FONT = "Pretendard,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif";
+const INK = '#222222';
+let target = '';      // 누구 명함인지 (관리자는 다른 팀원 것도 만들 수 있음)
+let built = '';       // 지금 화면에 그려 둔 대상 — 팀원 표가 다시 읽혀도 적던 칸이 지워지지 않게
+
+const lsKey = n => 'namecard_' + n;
+function defaults(n){
+  const t = titleOf(n);
+  return { co: coOf(n), ko: n, en: '', title: t, titleEn: TITLE_EN[t] || '', phone: '', email: '' };
+}
+function loadVals(n){
+  let saved = {}; try { saved = JSON.parse(LS.get(lsKey(n)) || '{}') || {}; } catch {}
+  const v = { ...defaults(n), ...saved };
+  if (!isAdmin() || !COS[v.co]) v.co = coOf(n);   // 회사는 관리자만 바꿀 수 있음
+  return v;
+}
+const read = () => ({ co: $('#nCo') ? $('#nCo').value : coOf(target), ko: $('#nKo').value.trim(), en: $('#nEn').value.trim().toUpperCase(), title: $('#nTitle').value.trim(), titleEn: $('#nTitleEn').value.trim(),
+  phone: $('#nPhone').value.trim(), email: $('#nEmail').value.trim() });
+
+/* 한글 이름 2~4자는 "이 유 나" 처럼 한 칸씩 띄움 (직접 띄어 쓴 이름·영문 이름은 그대로) */
+const spaced = s => /^[가-힣]{2,4}$/.test(s) ? [...s].join(' ') : s;
+/* 전화번호: 숫자만 뽑아 "010 3700 2296" 꼴로 */
+function fmtPhone(s){
+  const d = String(s).replace(/\D/g, '');
+  if (/^01\d{8,9}$/.test(d)) return `${d.slice(0, 3)} ${d.slice(3, d.length - 4)} ${d.slice(-4)}`;
+  if (/^02\d{7,8}$/.test(d)) return `02 ${d.slice(2, d.length - 4)} ${d.slice(-4)}`;
+  if (/^0\d{9,10}$/.test(d)) return `${d.slice(0, 3)} ${d.slice(3, d.length - 4)} ${d.slice(-4)}`;
+  return String(s).trim();
+}
+
+function draw(v){
+  const cv = $('#ncCanvas'); if (!cv) return;
+  CO = COS[v.co] || COS[coOf(target)];
+  const x = cv.getContext('2d');
+  x.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+  x.textBaseline = 'alphabetic';
+  const L = 80, R = 985;
+  const font = (w, s) => { x.font = `${w} ${s}px ${FONT}`; };
+  /* 칸을 넘치면 글자를 줄여서 맞춤 */
+  const fit = (t, w, s, maxW) => { let k = s; do { font(w, k); } while (x.measureText(t).width > maxW && --k > 12); return x.measureText(t).width; };
+
+  // 회사 로고 글자 (오른쪽 위)
+  x.fillStyle = CO.color; x.textAlign = 'right'; font(700, 29); x.fillText(CO.brand, R, 108);
+
+  // 이름 (한글 크게 + 영문)
+  x.fillStyle = INK; x.textAlign = 'left';
+  const ko = spaced(v.ko), en = v.en;
+  let enW = 0; if (en) { font(600, 30); enW = Math.min(x.measureText(en).width, 420) + 34; }
+  const koW = fit(ko, 600, 47, R - L - enW); x.fillText(ko, L, 226);
+  if (en) { fit(en, 600, 30, 420); x.fillText(en, L + koW + 34, 226); }
+
+  // 직급
+  const title = [v.title, v.titleEn].filter(Boolean).join(' / ');
+  if (title) { fit(title, 400, 31, R - L); x.fillText(title, L, 284); }
+
+  // 연락처 (값이 있는 줄만, 위에서부터)
+  const rows = [['M', fmtPhone(v.phone)], ['E', v.email]].filter(r => r[1]);
+  rows.forEach(([k, val], i) => {
+    const y = 415 + i * 51;
+    font(600, 31); x.fillText(k, L, y);
+    fit(val, 400, 31, R - 134); x.fillText(val, 134, y);
+  });
+
+  // 회사 이름 · 주소
+  font(700, 25); x.fillText(CO.name, L, 523);
+  const nw = x.measureText(CO.name).width;
+  fit(CO.addr, 400, 25, R - L - nw - 18); x.fillText(CO.addr, L + nw + 18, 523);
+}
+/* 명함 글꼴(Pretendard)이 받아진 뒤 다시 그려야 글자 모양이 맞음. 받기 전에는 기기 기본 글꼴로 먼저 보여 줌 */
+let drawSeq = 0;
+async function redraw(){
+  const v = read(), seq = ++drawSeq;
+  draw(v);
+  const em = $('#nEmail'); if (em) em.placeholder = CO.mail ? `예: yuna${CO.mail}` : '예: yuna@회사메일';
+  const text = [CO.brand, CO.name, CO.addr, spaced(v.ko), v.en, v.title, v.titleEn, fmtPhone(v.phone), v.email, 'ME /'].join('');
+  try { await Promise.all([400, 600, 700].map(w => document.fonts.load(`${w} 30px Pretendard`, text))); } catch {}
+  if (seq === drawSeq) draw(read());
+}
+const fileName = () => `모바일명함_${(read().ko || target).replace(/\s+/g, '')}.png`;
+async function toBlob(){ await redraw(); return new Promise(ok => $('#ncCanvas').toBlob(ok, 'image/png')); }
+function check(){
+  const v = read();
+  if (!v.ko) { $('#nKo').focus(); toast('이름을 적어 주세요', true); return false; }
+  if (!v.phone && !v.email) { $('#nPhone').focus(); toast('휴대폰 번호나 이메일을 적어 주세요', true); return false; }
+  return true;
+}
+async function download(){
+  if (!check()) return;
+  const blob = await toBlob(), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = fileName(); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('명함 이미지를 내려받았습니다');
+}
+async function share(){
+  if (!check()) return;
+  const file = new File([await toBlob()], fileName(), { type: 'image/png' });
+  try { await navigator.share({ files: [file] }); } catch (e) { if (e && e.name !== 'AbortError') toast('공유하지 못했습니다. 이미지 내려받기를 써 주세요', true); }
+}
+const canShare = () => { try { return !!(navigator.canShare && navigator.canShare({ files: [new File([''], 'a.png', { type: 'image/png' })] })); } catch { return false; } };
+
+function render(){
+  if (!target || !members.some(m => m.name === target) || (!isAdmin() && target !== me)) target = me;
+  const key = me + '|' + target + '|' + isAdmin();
+  if (built === key && $('#ncCanvas')) return;   // 이미 그려 둔 화면 — 적던 내용을 건드리지 않음
+  built = key;
+  const v = loadVals(target);
+  $('#app').innerHTML = headerHtml({ icon: '📇', title: '모바일 명함' }) + `<main class="wrap" style="max-width:1180px">
+    <div class="nc">
+      <div class="form">
+        ${isAdmin() ? `<div class="f"><label>누구 명함 <span class="hint">(관리자만 다른 팀원 것을 만들 수 있음)</span></label><select id="nWho">${byRank(members).map(m => `<option value="${esc(m.name)}" ${m.name === target ? 'selected' : ''}>${esc(fullName(m.name))}</option>`).join('')}</select></div>
+        <div class="f"><label>회사</label><select id="nCo">${Object.keys(COS).map(c => `<option ${v.co === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` : ''}
+        <div class="f2">
+          <div class="f"><label>이름 (한글)</label><input id="nKo" value="${esc(v.ko)}" maxlength="20" placeholder="예: 이유나"></div>
+          <div class="f"><label>이름 (영문)</label><input id="nEn" value="${esc(v.en)}" maxlength="30" placeholder="예: LEE YU NA" style="text-transform:uppercase"></div>
+        </div>
+        <div class="f2">
+          <div class="f"><label>직급</label><input id="nTitle" value="${esc(v.title)}" maxlength="20" placeholder="예: 주임"></div>
+          <div class="f"><label>직급 (영문)</label><input id="nTitleEn" value="${esc(v.titleEn)}" maxlength="40" placeholder="예: Senior Associate"></div>
+        </div>
+        <div class="f"><label>휴대폰</label><input id="nPhone" value="${esc(v.phone)}" maxlength="20" inputmode="tel" placeholder="예: 010 1234 5678"></div>
+        <div class="f"><label>이메일</label><input id="nEmail" value="${esc(v.email)}" maxlength="60" inputmode="email" autocapitalize="off" placeholder=""></div>
+        <div class="hint">적은 내용은 이 기기에만 기억됩니다. 직급을 바꾸면 영문 직급도 따라 바뀌며, 영문 직급은 직접 고쳐도 됩니다.<br>회사 이름·주소는 소속 회사에 맞춰 자동으로 들어갑니다.</div>
+      </div>
+      <div class="prev">
+        <canvas id="ncCanvas" width="${W * SCALE}" height="${H * SCALE}"></canvas>
+        <div class="acts">
+          <button class="btn primary" id="nDown">⬇ 이미지 내려받기</button>
+          ${canShare() ? '<button class="btn" id="nShare">📤 공유 · 사진에 저장</button>' : ''}
+          <span class="hint">PNG · ${W * SCALE}×${H * SCALE}</span>
+        </div>
+      </div>
+    </div></main>`;
+  bindHeader(() => {}, null, () => '');
+  const save = () => LS.set(lsKey(target), JSON.stringify(read()));
+  ['nKo', 'nEn', 'nTitle', 'nTitleEn', 'nPhone', 'nEmail'].forEach(id => $('#' + id).addEventListener('input', () => {
+    if (id === 'nTitle') { const t = $('#nTitle').value.trim(), en = $('#nTitleEn'); if (TITLE_EN[t] && (!en.value.trim() || Object.values(TITLE_EN).includes(en.value.trim()))) en.value = TITLE_EN[t]; }
+    save(); redraw();
+  }));
+  $('#nPhone').addEventListener('blur', () => { const p = $('#nPhone'), f = fmtPhone(p.value); if (f !== p.value) { p.value = f; save(); } });
+  const co = $('#nCo'); if (co) co.onchange = () => { save(); redraw(); };
+  const who = $('#nWho'); if (who) who.onchange = () => { target = who.value; built = ''; render(); };
+  $('#nDown').onclick = download;
+  const sh = $('#nShare'); if (sh) sh.onclick = share;
+  redraw();
+}
+
+boot({ icon: '📇', title: '모바일 명함', tables: [], render });
+</script>
+</body>
+</html>
