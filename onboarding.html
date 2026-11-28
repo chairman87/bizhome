@@ -9,21 +9,24 @@
 <script src="common.js?v=202611282330"></script>
 <style>
   .sub{font-size:12px;color:var(--fg3)}
-  .sec{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:14px;overflow:hidden}
+  .sec{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:14px;overflow:hidden;display:grid;grid-template-columns:max-content minmax(0,1fr) auto}   /* 항목 칸은 가장 긴 이름에 맞춰 넓어짐(이름이 두 줄로 꺾이지 않게) */
+  .sec > h3,.sec > .none{grid-column:1 / -1}
   .sec > h3{margin:0;padding:11px 14px;font-size:15px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
   .sec > h3 .sp{flex:1}
   .sec.s-new > h3{background:#eff6ff;color:#1d4ed8}
   .sec.s-co > h3{background:#f0fdf4;color:#15803d}
-  .it{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
+  .it{display:grid;grid-column:1 / -1;grid-template-columns:subgrid;gap:12px 20px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
   .it:last-child{border-bottom:0}
-  .it .t{font-weight:700}
+  .it .t{font-weight:700;white-space:nowrap}
   .it .v{white-space:pre-wrap;word-break:break-word}
   .it .v a{color:var(--blue);word-break:break-all}
   .it .ed{display:flex;gap:3px;white-space:nowrap}
   .it .ed button{padding:2px 6px}
   .none{padding:16px 14px;color:var(--fg3);font-size:13px}
   @media (max-width:760px){
+    .sec{display:block}
     .it{grid-template-columns:1fr auto}
+    .it .t{white-space:normal}
     .it .t{grid-column:1} .it .ed{grid-column:2;grid-row:1} .it .v{grid-column:1 / -1}
   }
 </style>
