@@ -670,7 +670,7 @@ function openPage(id, deptId){
       <div class="f" id="pUrlBox" ${screenVal === 'url' ? '' : 'hidden'}><label>인터넷 주소</label><input id="pUrl" value="${esc(isUrl ? d.href : '')}" placeholder="https://..."></div>
       <div class="hint">화면이 아직 없는 메뉴는 "아직 없음"으로 두면 "준비 중"으로 표시됩니다. 새 화면을 만들면 여기서 연결합니다.</div>
       <div class="f"><label>볼 수 있는 사람 <span class="hint">(아무도 체크하지 않으면 전체 공개 · 관리자는 항상 볼 수 있음 · '운영진 전체'를 체크하면 운영진이 바뀌어도 따로 고칠 필요 없음)</span></label>
-        <div class="allow"><label style="font-weight:700"><input type="checkbox" data-allow="${OPS}" ${(d.allowed || []).includes(OPS) ? 'checked' : ''}> 운영진 전체 <span class="hint">(${esc(members.filter(m => m.ops === true).map(m => m.name).join(', ') || '아직 없음 — 팀원 관리에서 지정')})</span></label></div>
+        <div class="allow">${ADMIN_ONLY_PAGES.includes(d.href) ? '' : `<label style="font-weight:700" title="누르면 아래 체크가 모두 풀리고 전 직원에게 보입니다"><input type="checkbox" id="pAll" ${(d.allowed || []).length ? '' : 'checked'}> 전체 인원</label>`}<label style="font-weight:700"><input type="checkbox" data-allow="${OPS}" ${(d.allowed || []).includes(OPS) ? 'checked' : ''}> 운영진 전체 <span class="hint">(${esc(members.filter(m => m.ops === true).map(m => m.name).join(', ') || '아직 없음 — 팀원 관리에서 지정')})</span></label></div>
         <div class="allow">${members.map(m => `<label class="${m.role === 'admin' ? 'adm' : ''}"><input type="checkbox" data-allow="${esc(m.name)}" ${(d.allowed || []).includes(m.name) ? 'checked' : ''} ${m.role === 'admin' ? 'checked disabled' : ''}> ${esc(fullName(m.name))}</label>`).join('')}</div></div>
     </div>
     <div class="mf">
@@ -680,6 +680,10 @@ function openPage(id, deptId){
     </div>`);
   $('#pName').focus();
   document.querySelectorAll('[data-e]').forEach(b => b.onclick = () => { $('#pIcon').value = b.dataset.e; });
+  /* '전체 인원' 한 번으로 전 직원 공개(2026-11-28): 체크하면 사람·운영진 체크를 모두 풀고, 누군가를 체크하면 '전체 인원'이 풀림. 아무도 체크하지 않은 상태가 곧 전체 공개 */
+  const pAll = $('#pAll'), picks = () => [...document.querySelectorAll('[data-allow]:not(:disabled)')];
+  if (pAll) { pAll.onchange = () => { if (pAll.checked) picks().forEach(c => c.checked = false); else pAll.checked = !picks().some(c => c.checked); };
+    picks().forEach(c => c.onchange = () => { pAll.checked = !picks().some(x => x.checked); }); }
   $('#pScreen').onchange = () => { $('#pUrlBox').hidden = $('#pScreen').value !== 'url'; if ($('#pScreen').value === 'url') $('#pUrl').focus(); };
   const save = async () => {
     const name = $('#pName').value.trim(); if (!name) { $('#pName').focus(); toast('이름을 입력하세요', true); return; }
@@ -709,7 +713,7 @@ function openDept(id){
       <div class="f"><label>색</label><div class="emojis" id="dColors">${Object.entries(DEPT_COLORS).map(([k, c]) => `<button type="button" data-c="${k}" style="background:${c.tagBg};color:${c.tagFg};padding:4px 10px;font-size:13px;border-color:${k === cur ? c.tagFg : 'transparent'}">${c.n}</button>`).join('')}</div></div>
     </div>
     <div class="mf">
-      ${d ? `<button class="btn danger left" id="dDel">삭제</button>` : ''}
+      ${d ? `<button class="btn danger" id="dDel">삭제</button><button class="btn left" id="dOpenAll" title="이 부서 안의 메뉴를 모두 전 직원에게 보이게 합니다(관리자 전용 화면은 그대로)">안의 메뉴 전체 공개</button>` : ''}
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="dSave">${d ? '저장' : '추가'}</button>
     </div>`);
@@ -726,6 +730,15 @@ function openDept(id){
   $('#dSave').onclick = save;
   $('#dName').onkeydown = e => { if (e.key === 'Enter') save(); };
   if (d) $('#dDel').onclick = () => { closeModal(); delDept(d.id); };
+  /* 부서 안의 메뉴를 한 번에 전체 공개(2026-11-28). 볼 수 있는 사람이 정해져 있던 메뉴만 바꾸고, 관리자 전용 화면은 건드리지 않음 */
+  if (d) $('#dOpenAll').onclick = async () => {
+    const lim = pagesOf(d.id).filter(p => (p.allowed || []).length && !ADMIN_ONLY_PAGES.includes(p.href));
+    if (!lim.length) { toast('이미 모두 전체 공개입니다'); return; }
+    if (!confirm(`"${d.name}" 안의 메뉴 ${lim.length}개(${lim.map(p => p.name).join(', ')})를 전 직원에게 보이게 할까요?`)) return;
+    closeModal();
+    for (const p of lim) await saveRow('menu', { ...p, allowed: [] });
+    toast(`${lim.length}개 메뉴를 전체 공개로 바꿨습니다`);
+  };
 }
 /* ---------- 홈 맨 위 공지사항 판 ----------
    홈에는 '지금 볼 것'만: 아직 확인 안 한 글은 전부 + 📌 고정 글 + 확인한 글은 최근 7일 것 최대 3개.
