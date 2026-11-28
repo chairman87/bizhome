@@ -17,16 +17,35 @@ alter table onboarding enable row level security;
 drop policy if exists "team_all" on onboarding;
 revoke all on onboarding from anon, authenticated;
 
--- 공용 함수가 이 표를 받게 함 (sql-lock-tables-1.sql 과 같은 내용)
+-- 안내 항목 표 (2026-11-28): 입사자가 준비할 것 / 회사가 준비할 것. 한 줄 = 항목 하나(항목 · 내용 · 설명)
+-- 출입 · 와이파이 비밀번호 같은 내용이 들어가므로 내용은 이 파일(공개 저장소)에 적지 않고 화면에서 넣음
+create table if not exists onboarding_items (
+  id          uuid primary key,
+  side        text not null default '입사자',   -- 입사자 / 회사
+  title       text not null,                  -- 항목
+  value       text,                           -- 내용
+  note        text,                           -- 설명(하는 방법)
+  sort_order  int default 0,
+  created_by  text,
+  created_at  timestamptz default now(),
+  updated_by  text,
+  updated_at  timestamptz default now()
+);
+alter table onboarding_items enable row level security;
+drop policy if exists "team_all" on onboarding_items;
+revoke all on onboarding_items from anon, authenticated;
+-- onboarding.checks 는 이제 {항목 id: true} 꼴(처음에는 a1 … b7 고정 키였음)
+
+-- 공용 함수가 이 표들을 받게 함 (sql-lock-tables-1.sql 과 같은 내용)
 create or replace function lk_ok(p_table text) returns boolean language sql immutable as $$
-  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads', 'onboarding')
+  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads', 'onboarding', 'onboarding_items')
 $$;
 
--- 메뉴: 인사/재무 > 온보딩 (운영진과 관리자에게 보임. 메뉴 편집에서 바꿀 수 있음). 이미 있으면 넣지 않음
+-- 메뉴: 인사/재무 > 온보딩. 새로 온 사람도 봐야 하므로 전체 공개(사람별 체크는 화면이 운영진 · 관리자에게만 보여 줌). 이미 있으면 넣지 않음
 insert into menu (id, type, parent, name, icon, href, allowed, sort_order, created_at)
-select gen_random_uuid(), 'page', d.id, '온보딩', '🧭', 'onboarding.html', '["@운영진"]'::jsonb,
+select gen_random_uuid(), 'page', d.id, '온보딩', '🧭', 'onboarding.html', '[]'::jsonb,
        (select coalesce(max(sort_order), -1) + 1 from menu where parent = d.id), now()
   from menu d where d.type <> 'page' and d.name = '인사/재무'
    and not exists (select 1 from menu where href = 'onboarding.html');
 
-select (select count(*) from onboarding) as people, lk_ok('onboarding') as locked_ok, (select count(*) from menu where href = 'onboarding.html') as menu_rows;
+select (select count(*) from onboarding) as people, (select count(*) from onboarding_items) as items, lk_ok('onboarding_items') as locked_ok;

@@ -5,12 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>온보딩</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="common.css?v=202611282200">
-<script src="common.js?v=202611282200"></script>
+<link rel="stylesheet" href="common.css?v=202611282330">
+<script src="common.js?v=202611282330"></script>
 <style>
-  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
-  .actions .sp{flex:1}
   .sub{font-size:12px;color:var(--fg3)}
+  .sec{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:14px;overflow:hidden}
+  .sec > h3{margin:0;padding:11px 14px;font-size:15px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+  .sec > h3 .sp{flex:1}
+  .sec.s-new > h3{background:#eff6ff;color:#1d4ed8}
+  .sec.s-co > h3{background:#f0fdf4;color:#15803d}
+  .it{display:grid;grid-template-columns:190px 1fr 1.3fr auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
+  .it:last-child{border-bottom:0}
+  .it .t{font-weight:700}
+  .it .v{white-space:pre-wrap;word-break:break-word}
+  .it .n{white-space:pre-wrap;word-break:break-word;color:var(--fg2);font-size:13px;border-left:3px solid var(--line);padding-left:10px;min-height:1.55em}
+  .it .n:empty{border-left-color:transparent}
+  .it .ed{display:flex;gap:3px;white-space:nowrap}
+  .it .ed button{padding:2px 6px}
+  .none{padding:16px 14px;color:var(--fg3);font-size:13px}
+  .ph{display:flex;gap:8px;align-items:center;margin:22px 0 10px}
+  .ph .sp{flex:1}
   .chip2{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px;background:#f1f5f9;color:#64748b;white-space:nowrap}
   .chip2.ok{background:#dcfce7;color:#15803d}
   .pc{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:12px}
@@ -18,13 +32,17 @@
   .pc > summary::-webkit-details-marker{display:none}
   .pc > summary b{font-size:15px}
   .pc > summary .sp{flex:1}
-  .pc .ckl{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;align-items:start;padding:0 14px 14px}
+  .pc .ckl{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;padding:0 14px 14px}
   .dk{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:7px}
   .dk > b{font-size:13px}
   .ck{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer;line-height:1.45}
   .ck input{width:auto;margin:3px 0 0;flex:none}
   .ck input:checked + span{color:var(--fg3);text-decoration:line-through}
-  @media (max-width:640px){.pc .ckl{grid-template-columns:1fr}}
+  @media (max-width:760px){
+    .it{grid-template-columns:1fr auto}
+    .it .t{grid-column:1} .it .ed{grid-column:2;grid-row:1} .it .v,.it .n{grid-column:1 / -1}
+    .pc .ckl{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -34,28 +52,27 @@
 
 <script>
 /* ================================================================
-   온보딩 — 신규 입사자가 오면 챙길 것을 사람마다 체크 (2026-11-28, 인사 전용 화면의 "신규 체크리스트"를 옮겨 옴)
-   한 줄 = 사람 하나 { name, company, start_date, checks: {키: true} }. 체크는 누르는 즉시 저장.
-   표: onboarding (sql-onboarding.sql) — 잠긴 표(공용 함수 lk_*, common.js 의 LK_TABLES).
-   인사 전용 화면(연봉이 든 창고)과는 연결하지 않음. 여기에는 이름 · 회사 · 입사일 · 체크만 둠
-   항목 글은 고쳐도 되지만 키(a1 …)는 바꾸지 않음 — 바꾸면 이미 체크한 것이 풀림
+   온보딩 — 신규 입사자가 왔을 때 "입사자가 준비할 것"과 "회사가 준비할 것"을 한 화면에 (2026-11-28)
+   · 안내 항목(onboarding_items): 한 줄 = { side(입사자/회사), title 항목, value 내용, note 설명, sort_order }
+     출입 · 와이파이 비밀번호 같은 내용이 들어가므로 코드(공개 저장소)에 적지 않고 잠긴 표에 둠. 운영진 · 관리자가 화면에서 고침
+   · 사람별 체크(onboarding): 한 줄 = 사람 하나 { name, company, start_date, checks: {항목 id: true} }. 체크는 누르는 즉시 저장.
+     운영진 · 관리자에게만 보임
+   두 표 모두 잠긴 표(공용 함수 lk_*, common.js 의 LK_TABLES). 표 만들기: sql-onboarding.sql
+   인사 전용 화면(연봉이 든 창고)과는 연결하지 않음
 ================================================================ */
-const CHECKS = [
-  ['채용 전 서류', [['a1', '전 직장 원천징수영수증'], ['a2', '주민등록등본'], ['a3', '졸업증명서']]],
-  ['채용 확정 후', [['b1', '신분증 · 통장사본 · 거주지 주소 받기'], ['b2', '근로계약서 · 비밀유지서약서 체결 및 교부'], ['b3', '인트라넷 아이디 · 이메일 주소 세팅'],
-    ['b4', '컴퓨터 지급 · 나스 세팅 · 기본 프로그램 설치'], ['b5', '4대보험 취득 신고 — 세무사 사무실에 근로계약서 · 신분증 전달'], ['b6', '출입카드 · 비밀번호'],
-    ['b7', '근무조건 안내 — 점심 식사 · 야근 · 연차 쓰는 법 · 급여일 등']]],
-];
-const CHECK_KEYS = CHECKS.flatMap(g => g[1].map(i => i[0]));
+const SIDES = [['입사자', '입사자 준비', 's-new', '🙋'], ['회사', '회사 준비', 's-co', '🏢']];
 const COMPANIES = ['식이해법연구소', '피에이치뷰티'];
-const checkDone = p => CHECK_KEYS.filter(k => p && p.checks && p.checks[k]).length;
-const isDone = p => checkDone(p) === CHECK_KEYS.length;
+const I = () => (DATA.onboarding_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+const itemsOf = side => I().filter(i => i.side === side);
 const P = () => DATA.onboarding || [];
-const chip = n => `<span class="chip2 ${n === CHECK_KEYS.length ? 'ok' : ''}">${n === CHECK_KEYS.length ? '완료' : `${n}/${CHECK_KEYS.length}`}</span>`;
+const canEdit = () => isAdmin() || isOps();
+const checkDone = p => I().filter(i => p && p.checks && p.checks[i.id]).length;
+const isDone = p => I().length > 0 && checkDone(p) === I().length;
+const chip = p => { const n = checkDone(p), all = I().length; return `<span class="chip2 ${all && n === all ? 'ok' : ''}">${all && n === all ? '완료' : `${n}/${all}`}</span>`; };
 const openState = {};   // 사람이 직접 펴거나 접은 카드(id → true/false). 없으면 다 챙긴 사람만 접음
-let order = null;       // 화면에 그린 순서(id 목록). 체크하는 도중에 카드가 자리를 옮기지 않게, 새로 들어오거나 사람이 바뀔 때만 다시 정렬
+let order = null;       // 화면에 그린 사람 순서(id 목록). 체크하는 도중에 카드가 자리를 옮기지 않게, 사람이 늘거나 줄 때만 다시 정렬
 
-function normalize(table, p){ return { ...p, checks: p.checks && typeof p.checks === 'object' ? p.checks : {} }; }
+function normalize(table, r){ return table === 'onboarding' ? { ...r, checks: r.checks && typeof r.checks === 'object' ? r.checks : {} } : r; }
 
 function sorted(){
   const ids = P().map(p => p.id);
@@ -63,31 +80,46 @@ function sorted(){
     order = P().slice().sort((x, y) => isDone(x) - isDone(y) || String(y.created_at || '').localeCompare(String(x.created_at || ''))).map(p => p.id);
   return order.map(id => P().find(p => p.id === id)).filter(Boolean);
 }
+function section([side, label, cls, icon]){
+  const list = itemsOf(side), ed = canEdit();
+  return `<section class="sec ${cls}"><h3>${icon} ${label}<span class="sub" style="font-weight:400">${list.length}가지</span><span class="sp"></span>${ed ? `<button class="btn sm" data-add="${side}">+ 항목 추가</button>` : ''}</h3>
+    ${list.length ? list.map((i, k) => `<div class="it" data-id="${i.id}"><div class="t">${esc(i.title)}</div><div class="v">${esc(i.value || '')}</div><div class="n">${esc(i.note || '')}</div>
+      ${ed ? `<div class="ed"><button class="btn sm" data-mv="${i.id}" data-d="-1" title="위로" ${k === 0 ? 'disabled' : ''}>↑</button><button class="btn sm" data-mv="${i.id}" data-d="1" title="아래로" ${k === list.length - 1 ? 'disabled' : ''}>↓</button><button class="btn sm" data-item="${i.id}">수정</button></div>` : '<div></div>'}</div>`).join('')
+      : `<div class="none">아직 항목이 없습니다.${ed ? ' <b>+ 항목 추가</b>를 눌러 적어 주세요.' : ''}</div>`}
+  </section>`;
+}
 function card(p){
-  const n = checkDone(p), open = p.id in openState ? openState[p.id] : !isDone(p);
+  const open = p.id in openState ? openState[p.id] : !isDone(p);
   return `<details class="pc" data-pid="${p.id}" ${open ? 'open' : ''}>
       <summary><b>${esc(p.name)}</b><span class="sub">${esc([p.company, p.start_date ? '입사 ' + fmtDate(p.start_date) : ''].filter(Boolean).join(' · '))}</span><span class="sp"></span>
-        <button class="btn sm" data-edit="${p.id}">수정</button><span data-n>${chip(n)}</span></summary>
-      <div class="ckl">${CHECKS.map(([g, items]) => `<div class="dk"><b>${g}</b>${items.map(([k, t]) => `<label class="ck"><input type="checkbox" data-ck="${k}" ${p.checks[k] ? 'checked' : ''}><span>${esc(t)}</span></label>`).join('')}</div>`).join('')}</div>
+        <button class="btn sm" data-edit="${p.id}">수정</button><span data-n>${chip(p)}</span></summary>
+      <div class="ckl">${SIDES.map(([side, label]) => `<div class="dk"><b>${label}</b>${itemsOf(side).map(i => `<label class="ck"><input type="checkbox" data-ck="${i.id}" ${p.checks[i.id] ? 'checked' : ''}><span>${esc(i.title)}</span></label>`).join('') || '<span class="sub">항목 없음</span>'}</div>`).join('')}</div>
     </details>`;
 }
 function render(){
-  const list = sorted();
-  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩', newLabel: '사람 추가' }) + `<main class="wrap" style="max-width:900px">
-    <div class="actions"><b style="font-size:16px">신규 입사자 체크리스트</b><span class="sub">누르는 즉시 저장됩니다</span></div>
-    ${!DATA.onboarding ? `<div class="empty">온보딩 저장 표가 아직 없습니다.${isAdmin() ? ' sql-onboarding.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` :
-      list.length ? list.map(card).join('') : '<div class="empty">아직 챙길 사람이 없습니다.<br>오른쪽 위 <b>+ 사람 추가</b>를 눌러 이름을 넣으면 체크리스트가 생깁니다.</div>'}
-    <div class="hint" style="margin-top:6px">다 챙긴 사람은 접혀서 아래로 내려갑니다. 더 볼 필요가 없는 사람은 [수정]에서 삭제합니다.</div>
+  const ed = canEdit(), list = ed ? sorted() : [];
+  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩' }) + `<main class="wrap" style="max-width:1200px">
+    ${!DATA.onboarding_items ? `<div class="empty">온보딩 저장 표가 아직 없습니다.${isAdmin() ? ' sql-onboarding.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
+      <div class="sub" style="margin-bottom:10px">새로 온 분은 <b>입사자 준비</b>를, 맞이하는 쪽은 <b>회사 준비</b>를 보면 됩니다. 오른쪽 칸은 하는 방법 설명입니다.${ed ? ' 항목은 [수정]으로 고치고 ↑↓로 순서를 바꿉니다.' : ''}</div>
+      ${SIDES.map(section).join('')}
+      ${ed ? `<div class="ph"><b style="font-size:16px">사람별 체크</b><span class="sub">누르는 즉시 저장됩니다 · 운영진과 관리자에게만 보입니다</span><span class="sp"></span><button class="btn primary" id="addP">+ 사람 추가</button></div>
+        ${list.length ? list.map(card).join('') : '<div class="empty" style="padding:20px 0">아직 챙길 사람이 없습니다. <b>+ 사람 추가</b>로 이름을 넣으면 위 항목대로 체크리스트가 생깁니다.</div>'}
+        <div class="hint" style="margin-top:6px">다 챙긴 사람은 접혀서 아래로 내려갑니다. 더 볼 필요가 없는 사람은 [수정]에서 삭제합니다.</div>` : ''}`}
   </main>`;
-  bindHeader(() => {}, () => openEdit());
+  bindHeader(() => {});
+  document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => openItem(null, b.dataset.add));
+  document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => openItem(b.dataset.item));
+  document.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => moveItem(b.dataset.mv, +b.dataset.d));
+  const ap = $('#addP'); if (ap) ap.onclick = () => openEdit();
   document.querySelectorAll('.pc').forEach(box => {
     const id = box.dataset.pid;
     box.ontoggle = () => { openState[id] = box.open; };
     box.querySelector('[data-edit]').onclick = e => { e.preventDefault(); openEdit(id); };
     box.querySelectorAll('[data-ck]').forEach(cb => cb.onchange = () => {
       const p = P().find(x => x.id === id); if (!p) return;
-      p.checks = Object.fromEntries([...box.querySelectorAll('[data-ck]')].filter(b => b.checked).map(b => [b.dataset.ck, true]));
-      box.querySelector('[data-n]').innerHTML = chip(checkDone(p));
+      const now = Object.fromEntries([...box.querySelectorAll('[data-ck]')].map(b => [b.dataset.ck, b.checked]));
+      p.checks = Object.fromEntries(Object.entries({ ...p.checks, ...now }).filter(([, v]) => v));   // 화면에 있는 항목만 바꾸고 나머지 기록은 그대로 둠
+      box.querySelector('[data-n]').innerHTML = chip(p);
       push(id);
     });
   });
@@ -109,8 +141,52 @@ async function push(id){
   s.busy = false;
 }
 
+/* 항목 순서 바꾸기: 같은 묶음 안에서 위아래 자리를 맞바꿈 */
+async function moveItem(id, d){
+  const it = I().find(x => x.id === id); if (!it) return;
+  const list = itemsOf(it.side), k = list.findIndex(x => x.id === id), j = k + d;
+  if (j < 0 || j >= list.length) return;
+  [list[k], list[j]] = [list[j], list[k]];
+  for (const [n, x] of list.entries()) if (x.sort_order !== n) await saveRow('onboarding_items', { ...x, sort_order: n, updated_by: me });
+}
+
+/* 항목 추가 · 수정 창 */
+function openItem(id, side){
+  if (!canEdit()) return;
+  const it = id ? I().find(x => x.id === id) : null;
+  const d = it || { side: side || '입사자', title: '', value: '', note: '' };
+  openModal(`${modalHead(it ? '항목 수정' : '항목 추가')}
+    <div class="mb">
+      <div class="f2">
+        <div class="f"><label>구분</label><select id="iSide">${SIDES.map(([s, l]) => `<option value="${s}" ${d.side === s ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="f"><label>항목 *</label><input id="iTitle" value="${esc(d.title)}" maxlength="60" placeholder="예: 나스 연결"></div>
+      </div>
+      <div class="f"><label>내용</label><textarea id="iValue" rows="2" placeholder="예: 매월 5일">${esc(d.value || '')}</textarea></div>
+      <div class="f"><label>설명 <span class="hint">(오른쪽 칸에 보임 — 하는 방법, 어디서 받는지 등)</span></label><textarea id="iNote" rows="6" placeholder="예: 파인더 → 이동 → 서버에 연결 → …">${esc(d.note || '')}</textarea></div>
+    </div>
+    <div class="mf">
+      ${it ? '<button class="btn danger left" id="iDel">삭제</button>' : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="iSave">${it ? '저장' : '추가'}</button>
+    </div>`, { wide: true });
+  $('#iTitle').focus();
+  const save = async () => {
+    const title = $('#iTitle').value.trim(); if (!title) { $('#iTitle').focus(); toast('항목 이름을 입력하세요', true); return; }
+    const s = $('#iSide').value;
+    const row = { ...(it || { id: uid(), created_by: me, created_at: nowIso() }), side: s, title, value: $('#iValue').value.trim() || null, note: $('#iNote').value.trim() || null,
+      sort_order: it && it.side === s ? it.sort_order : itemsOf(s).reduce((m, x) => Math.max(m, x.sort_order || 0), -1) + 1, updated_by: me };
+    closeModal();
+    await saveRow('onboarding_items', row);
+    toast(it ? '저장했습니다' : '추가했습니다');
+  };
+  $('#iSave').onclick = save;
+  $('#iTitle').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) save(); };
+  if (it) $('#iDel').onclick = async () => { if (!confirm(`"${it.title}" 항목을 삭제할까요? 사람별 체크에서도 이 항목이 빠집니다.`)) return; closeModal(); await removeRow('onboarding_items', it.id); toast('삭제했습니다'); };
+}
+
 /* 사람 추가 · 수정 창 */
 function openEdit(id){
+  if (!canEdit()) return;
   const p = id ? P().find(x => x.id === id) : null;
   const d = p || { name: '', company: '', start_date: '' };
   openModal(`${modalHead(p ? '사람 수정' : '사람 추가')}
@@ -139,7 +215,7 @@ function openEdit(id){
   if (p) $('#oDel').onclick = async () => { if (!confirm(`"${p.name}" 님의 체크리스트를 삭제할까요? 체크한 내용도 함께 지워집니다.`)) return; closeModal(); await removeRow('onboarding', p.id); toast('삭제했습니다'); };
 }
 
-boot({ icon: '🧭', title: '온보딩', tables: ['onboarding'], render, normalize });
+boot({ icon: '🧭', title: '온보딩', tables: ['onboarding_items', 'onboarding'], render, normalize });
 </script>
 </body>
 </html>
