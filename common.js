@@ -107,7 +107,7 @@ const SupabaseStore = {
    표를 더 잠그려면: sql-lock-tables-1.sql 의 lk_ok 목록과 -2.sql 의 목록에 표 이름을 넣고, 아래 LK_TABLES 에 추가.
    주의: 잠긴 표는 실시간 알림이 오지 않아, 남이 고친 내용은 새로고침하거나 10분마다 다시 읽을 때 보임 */
 const LK = { list: 'lk_list', save: 'lk_save', del: 'lk_delete', generic: true };
-const LK_TABLES = ['payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads'];   // samples · partner_leads 는 2026-11-26 추가(바깥 사람의 주소 · 연락처)
+const LK_TABLES = ['payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads', 'onboarding'];   // samples · partner_leads 는 2026-11-26 추가(바깥 사람의 주소 · 연락처), onboarding 은 2026-11-28 추가(신규 입사자 이름)
 const LOCKED = { accounts: { list: 'acc_list', save: 'acc_save', del: 'acc_delete' }, ...Object.fromEntries(LK_TABLES.map(t => [t, LK])) };
 const lkArg = table => LOCKED[table].generic ? { p_table: table } : {};
 const LOCK_ERR = { denied: '관리자만 할 수 있습니다', id: '잘못된 항목입니다', service: '서비스 이름을 입력하세요', table: '잠긴 표 목록에 없는 표입니다' };

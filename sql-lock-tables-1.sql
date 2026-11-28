@@ -3,6 +3,7 @@
 --
 --  대상: 결제(payments) · 외주(contractors · contractor_pays) · 구독(subscriptions) · 견적(quotes) · 파트너스(partners)
 --        + 비매출 샘플 발송(samples) · 파트너스 접촉 목록(partner_leads) — 바깥 사람의 이름 · 주소 · 연락처라 2026-11-26 추가
+--        + 온보딩(onboarding) — 신규 입사자 이름 · 입사일이라 2026-11-28 추가
 --  기준(사장님 결정): "로그인한 직원은 예전처럼 보고 쓰고, 밖에서 공개키만으로는 못 하게".
 --  표는 2/2 에서 잠그고, 로그인 출입증(think_login 이 준 token)을 확인하는 아래 함수로만 읽고 씁니다.
 --    · lk_list(출입증, 표)        : 목록. 🔒 관리자만 보기(admin_only) 칸이 있는 표는 그 줄을 관리자에게만 돌려줌
@@ -16,7 +17,7 @@
 
 -- 이 함수들로 다룰 수 있는 표(여기 없는 이름은 전부 거절)
 create or replace function lk_ok(p_table text) returns boolean language sql immutable as $$
-  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads')
+  select p_table in ('payments', 'contractors', 'contractor_pays', 'subscriptions', 'quotes', 'partners', 'job_descs', 'samples', 'partner_leads', 'onboarding')
 $$;
 
 create or replace function lk_list(p_token text, p_table text) returns jsonb

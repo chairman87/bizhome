@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko" spellcheck="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>온보딩</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="common.css?v=202611282200">
+<script src="common.js?v=202611282200"></script>
+<style>
+  .actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .actions .sp{flex:1}
+  .sub{font-size:12px;color:var(--fg3)}
+  .chip2{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px;background:#f1f5f9;color:#64748b;white-space:nowrap}
+  .chip2.ok{background:#dcfce7;color:#15803d}
+  .pc{border:1px solid var(--line);border-radius:12px;background:var(--bg);margin-bottom:12px}
+  .pc > summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;cursor:pointer;list-style:none}
+  .pc > summary::-webkit-details-marker{display:none}
+  .pc > summary b{font-size:15px}
+  .pc > summary .sp{flex:1}
+  .pc .ckl{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;align-items:start;padding:0 14px 14px}
+  .dk{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:7px}
+  .dk > b{font-size:13px}
+  .ck{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer;line-height:1.45}
+  .ck input{width:auto;margin:3px 0 0;flex:none}
+  .ck input:checked + span{color:var(--fg3);text-decoration:line-through}
+  @media (max-width:640px){.pc .ckl{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   온보딩 — 신규 입사자가 오면 챙길 것을 사람마다 체크 (2026-11-28, 인사 전용 화면의 "신규 체크리스트"를 옮겨 옴)
+   한 줄 = 사람 하나 { name, company, start_date, checks: {키: true} }. 체크는 누르는 즉시 저장.
+   표: onboarding (sql-onboarding.sql) — 잠긴 표(공용 함수 lk_*, common.js 의 LK_TABLES).
+   인사 전용 화면(연봉이 든 창고)과는 연결하지 않음. 여기에는 이름 · 회사 · 입사일 · 체크만 둠
+   항목 글은 고쳐도 되지만 키(a1 …)는 바꾸지 않음 — 바꾸면 이미 체크한 것이 풀림
+================================================================ */
+const CHECKS = [
+  ['채용 전 서류', [['a1', '전 직장 원천징수영수증'], ['a2', '주민등록등본'], ['a3', '졸업증명서']]],
+  ['채용 확정 후', [['b1', '신분증 · 통장사본 · 거주지 주소 받기'], ['b2', '근로계약서 · 비밀유지서약서 체결 및 교부'], ['b3', '인트라넷 아이디 · 이메일 주소 세팅'],
+    ['b4', '컴퓨터 지급 · 나스 세팅 · 기본 프로그램 설치'], ['b5', '4대보험 취득 신고 — 세무사 사무실에 근로계약서 · 신분증 전달'], ['b6', '출입카드 · 비밀번호'],
+    ['b7', '근무조건 안내 — 점심 식사 · 야근 · 연차 쓰는 법 · 급여일 등']]],
+];
+const CHECK_KEYS = CHECKS.flatMap(g => g[1].map(i => i[0]));
+const COMPANIES = ['식이해법연구소', '피에이치뷰티'];
+const checkDone = p => CHECK_KEYS.filter(k => p && p.checks && p.checks[k]).length;
+const isDone = p => checkDone(p) === CHECK_KEYS.length;
+const P = () => DATA.onboarding || [];
+const chip = n => `<span class="chip2 ${n === CHECK_KEYS.length ? 'ok' : ''}">${n === CHECK_KEYS.length ? '완료' : `${n}/${CHECK_KEYS.length}`}</span>`;
+const openState = {};   // 사람이 직접 펴거나 접은 카드(id → true/false). 없으면 다 챙긴 사람만 접음
+let order = null;       // 화면에 그린 순서(id 목록). 체크하는 도중에 카드가 자리를 옮기지 않게, 새로 들어오거나 사람이 바뀔 때만 다시 정렬
+
+function normalize(table, p){ return { ...p, checks: p.checks && typeof p.checks === 'object' ? p.checks : {} }; }
+
+function sorted(){
+  const ids = P().map(p => p.id);
+  if (!order || order.length !== ids.length || ids.some(id => !order.includes(id)))
+    order = P().slice().sort((x, y) => isDone(x) - isDone(y) || String(y.created_at || '').localeCompare(String(x.created_at || ''))).map(p => p.id);
+  return order.map(id => P().find(p => p.id === id)).filter(Boolean);
+}
+function card(p){
+  const n = checkDone(p), open = p.id in openState ? openState[p.id] : !isDone(p);
+  return `<details class="pc" data-pid="${p.id}" ${open ? 'open' : ''}>
+      <summary><b>${esc(p.name)}</b><span class="sub">${esc([p.company, p.start_date ? '입사 ' + fmtDate(p.start_date) : ''].filter(Boolean).join(' · '))}</span><span class="sp"></span>
+        <button class="btn sm" data-edit="${p.id}">수정</button><span data-n>${chip(n)}</span></summary>
+      <div class="ckl">${CHECKS.map(([g, items]) => `<div class="dk"><b>${g}</b>${items.map(([k, t]) => `<label class="ck"><input type="checkbox" data-ck="${k}" ${p.checks[k] ? 'checked' : ''}><span>${esc(t)}</span></label>`).join('')}</div>`).join('')}</div>
+    </details>`;
+}
+function render(){
+  const list = sorted();
+  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩', newLabel: '사람 추가' }) + `<main class="wrap" style="max-width:900px">
+    <div class="actions"><b style="font-size:16px">신규 입사자 체크리스트</b><span class="sub">누르는 즉시 저장됩니다</span></div>
+    ${!DATA.onboarding ? `<div class="empty">온보딩 저장 표가 아직 없습니다.${isAdmin() ? ' sql-onboarding.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` :
+      list.length ? list.map(card).join('') : '<div class="empty">아직 챙길 사람이 없습니다.<br>오른쪽 위 <b>+ 사람 추가</b>를 눌러 이름을 넣으면 체크리스트가 생깁니다.</div>'}
+    <div class="hint" style="margin-top:6px">다 챙긴 사람은 접혀서 아래로 내려갑니다. 더 볼 필요가 없는 사람은 [수정]에서 삭제합니다.</div>
+  </main>`;
+  bindHeader(() => {}, () => openEdit());
+  document.querySelectorAll('.pc').forEach(box => {
+    const id = box.dataset.pid;
+    box.ontoggle = () => { openState[id] = box.open; };
+    box.querySelector('[data-edit]').onclick = e => { e.preventDefault(); openEdit(id); };
+    box.querySelectorAll('[data-ck]').forEach(cb => cb.onchange = () => {
+      const p = P().find(x => x.id === id); if (!p) return;
+      p.checks = Object.fromEntries([...box.querySelectorAll('[data-ck]')].filter(b => b.checked).map(b => [b.dataset.ck, true]));
+      box.querySelector('[data-n]').innerHTML = chip(checkDone(p));
+      push(id);
+    });
+  });
+}
+
+/* 체크 저장: 한 사람당 한 번에 하나씩만 보냄. 빠르게 여러 개를 누르면 보내는 동안 바뀐 것은 끝난 뒤 한 번 더 보냄
+   (동시에 여러 번 보내면 늦게 도착한 옛 상태가 덮어써서 체크 하나가 빠짐 — 2026-11-27 인사 화면 시험에서 확인) */
+const sending = {};
+async function push(id){
+  const s = sending[id] || (sending[id] = { busy: false, again: false });
+  if (s.busy) { s.again = true; return; }
+  s.busy = true;
+  try {
+    do { s.again = false;
+      const p = P().find(x => x.id === id); if (!p) break;
+      await store.upsert('onboarding', { ...p, checks: { ...p.checks }, updated_by: me, updated_at: nowIso() });
+    } while (s.again);
+  } catch (e) { s.again = false; toast('저장 실패: ' + (e.message || e), true); reload(['onboarding']); }
+  s.busy = false;
+}
+
+/* 사람 추가 · 수정 창 */
+function openEdit(id){
+  const p = id ? P().find(x => x.id === id) : null;
+  const d = p || { name: '', company: '', start_date: '' };
+  openModal(`${modalHead(p ? '사람 수정' : '사람 추가')}
+    <div class="mb">
+      <div class="f"><label>이름 *</label><input id="oName" value="${esc(d.name)}" maxlength="30" placeholder="새로 온 사람 이름"></div>
+      <div class="f2">
+        <div class="f"><label>회사</label><select id="oCo"><option value="">선택 안 함</option>${COMPANIES.map(c => `<option ${d.company === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="f"><label>입사일</label><input type="date" id="oStart" value="${esc(d.start_date || '')}"></div>
+      </div>
+    </div>
+    <div class="mf">
+      ${p ? '<button class="btn danger left" id="oDel">삭제</button>' : ''}
+      <button class="btn" data-close>취소</button>
+      <button class="btn primary" id="oSave">${p ? '저장' : '추가'}</button>
+    </div>`);
+  $('#oName').focus();
+  const save = async () => {
+    const name = $('#oName').value.trim(); if (!name) { $('#oName').focus(); toast('이름을 입력하세요', true); return; }
+    const row = { ...(p || { id: uid(), checks: {}, created_by: me, created_at: nowIso() }), name, company: $('#oCo').value || null, start_date: $('#oStart').value || null, updated_by: me };
+    closeModal();
+    await saveRow('onboarding', row);
+    toast(p ? '저장했습니다' : '추가했습니다');
+  };
+  $('#oSave').onclick = save;
+  $('#oName').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) save(); };
+  if (p) $('#oDel').onclick = async () => { if (!confirm(`"${p.name}" 님의 체크리스트를 삭제할까요? 체크한 내용도 함께 지워집니다.`)) return; closeModal(); await removeRow('onboarding', p.id); toast('삭제했습니다'); };
+}
+
+boot({ icon: '🧭', title: '온보딩', tables: ['onboarding'], render, normalize });
+</script>
+</body>
+</html>
