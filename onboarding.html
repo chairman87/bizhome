@@ -14,7 +14,7 @@
   .sec > h3 .sp{flex:1}
   .sec.s-new > h3{background:#eff6ff;color:#1d4ed8}
   .sec.s-co > h3{background:#f0fdf4;color:#15803d}
-  .it{display:grid;grid-template-columns:190px 1fr 1.3fr auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
+  .it{display:grid;grid-template-columns:170px minmax(0,1fr) minmax(0,1.25fr) auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
   .it:last-child{border-bottom:0}
   .it .t{font-weight:700}
   .it .v{white-space:pre-wrap;word-break:break-word}
@@ -57,7 +57,7 @@ function section([side, label, cls, icon]){
 }
 function render(){
   const ed = canEdit();
-  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩' }) + `<main class="wrap" style="max-width:1200px">
+  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩' }) + `<main class="wrap" style="max-width:920px">
     ${!DATA.onboarding_items ? `<div class="empty">온보딩 저장 표가 아직 없습니다.${isAdmin() ? ' sql-onboarding.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
       <div class="sub" style="margin-bottom:10px">새로 온 분은 <b>입사자 준비</b>를, 맞이하는 쪽은 <b>회사 준비</b>를 보면 됩니다. 오른쪽 칸은 하는 방법 설명입니다.${ed ? ' 항목은 [수정]으로 고치고 ↑↓로 순서를 바꿉니다.' : ''}</div>
       ${SIDES.map(section).join('')}`}
