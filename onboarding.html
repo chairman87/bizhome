@@ -14,18 +14,17 @@
   .sec > h3 .sp{flex:1}
   .sec.s-new > h3{background:#eff6ff;color:#1d4ed8}
   .sec.s-co > h3{background:#f0fdf4;color:#15803d}
-  .it{display:grid;grid-template-columns:170px minmax(0,1fr) minmax(0,1.25fr) auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
+  .it{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.55}
   .it:last-child{border-bottom:0}
   .it .t{font-weight:700}
   .it .v{white-space:pre-wrap;word-break:break-word}
-  .it .n{white-space:pre-wrap;word-break:break-word;color:var(--fg2);font-size:13px;border-left:3px solid var(--line);padding-left:10px;min-height:1.55em}
-  .it .n:empty{border-left-color:transparent}
+  .it .v a{color:var(--blue);word-break:break-all}
   .it .ed{display:flex;gap:3px;white-space:nowrap}
   .it .ed button{padding:2px 6px}
   .none{padding:16px 14px;color:var(--fg3);font-size:13px}
   @media (max-width:760px){
     .it{grid-template-columns:1fr auto}
-    .it .t{grid-column:1} .it .ed{grid-column:2;grid-row:1} .it .v,.it .n{grid-column:1 / -1}
+    .it .t{grid-column:1} .it .ed{grid-column:2;grid-row:1} .it .v{grid-column:1 / -1}
   }
 </style>
 </head>
@@ -38,7 +37,7 @@
 /* ================================================================
    온보딩 — 신규 입사자가 사람 설명 없이 혼자 보고 따라 하는 안내 화면 (2026-11-28)
    "입사자가 준비할 것"과 "회사가 준비할 것"을 한 화면에 나눠 보여 줌
-   · 안내 항목(onboarding_items): 한 줄 = { side(입사자/회사), title 항목, value 내용, note 설명, sort_order }
+   · 안내 항목(onboarding_items): 한 줄 = { side(입사자/회사), title 항목, value 내용, sort_order }. 설명 칸(note)은 2026-11-28 화면에서 뺌(표에는 남아 있음)
      출입 · 와이파이 비밀번호 같은 내용이 들어가므로 코드(공개 저장소)에 적지 않고 잠긴 표에 둠. 운영진 · 관리자가 화면에서 고침
    · 사람별 체크는 2026-11-28 사장님 지시로 화면에서 뺌(표 onboarding 은 남아 있지만 쓰지 않음)
    잠긴 표(공용 함수 lk_*, common.js 의 LK_TABLES). 표 만들기: sql-onboarding.sql
@@ -46,20 +45,22 @@
 const SIDES = [['입사자', '입사자 준비', 's-new', '🙋'], ['회사', '회사 준비', 's-co', '🏢']];
 const I = () => (DATA.onboarding_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
 const itemsOf = side => I().filter(i => i.side === side);
+/* 내용 안의 인터넷 주소는 누르면 새 탭으로 열리게 함 */
+const linkify = s => esc(s || '').replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 const canEdit = () => isAdmin() || isOps();
 function section([side, label, cls, icon]){
   const list = itemsOf(side), ed = canEdit();
   return `<section class="sec ${cls}"><h3>${icon} ${label}<span class="sub" style="font-weight:400">${list.length}가지</span><span class="sp"></span>${ed ? `<button class="btn sm" data-add="${side}">+ 항목 추가</button>` : ''}</h3>
-    ${list.length ? list.map((i, k) => `<div class="it" data-id="${i.id}"><div class="t">${esc(i.title)}</div><div class="v">${esc(i.value || '')}</div><div class="n">${esc(i.note || '')}</div>
+    ${list.length ? list.map((i, k) => `<div class="it" data-id="${i.id}"><div class="t">${esc(i.title)}</div><div class="v">${linkify(i.value)}</div>
       ${ed ? `<div class="ed"><button class="btn sm" data-mv="${i.id}" data-d="-1" title="위로" ${k === 0 ? 'disabled' : ''}>↑</button><button class="btn sm" data-mv="${i.id}" data-d="1" title="아래로" ${k === list.length - 1 ? 'disabled' : ''}>↓</button><button class="btn sm" data-item="${i.id}">수정</button></div>` : '<div></div>'}</div>`).join('')
       : `<div class="none">아직 항목이 없습니다.${ed ? ' <b>+ 항목 추가</b>를 눌러 적어 주세요.' : ''}</div>`}
   </section>`;
 }
 function render(){
   const ed = canEdit();
-  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩' }) + `<main class="wrap" style="max-width:920px">
+  $('#app').innerHTML = headerHtml({ icon: '🧭', title: '온보딩' }) + `<main class="wrap" style="max-width:1040px">
     ${!DATA.onboarding_items ? `<div class="empty">온보딩 저장 표가 아직 없습니다.${isAdmin() ? ' sql-onboarding.sql 을 Supabase SQL Editor 에서 실행하세요.' : ''}</div>` : `
-      <div class="sub" style="margin-bottom:10px">새로 온 분은 <b>입사자 준비</b>를, 맞이하는 쪽은 <b>회사 준비</b>를 보면 됩니다. 오른쪽 칸은 하는 방법 설명입니다.${ed ? ' 항목은 [수정]으로 고치고 ↑↓로 순서를 바꿉니다.' : ''}</div>
+      <div class="sub" style="margin-bottom:10px">새로 온 분은 <b>입사자 준비</b>를, 맞이하는 쪽은 <b>회사 준비</b>를 보면 됩니다.${ed ? ' 항목은 [수정]으로 고치고 ↑↓로 순서를 바꿉니다.' : ''}</div>
       ${SIDES.map(section).join('')}`}
   </main>`;
   bindHeader(() => {});
@@ -81,15 +82,14 @@ async function moveItem(id, d){
 function openItem(id, side){
   if (!canEdit()) return;
   const it = id ? I().find(x => x.id === id) : null;
-  const d = it || { side: side || '입사자', title: '', value: '', note: '' };
+  const d = it || { side: side || '입사자', title: '', value: '' };
   openModal(`${modalHead(it ? '항목 수정' : '항목 추가')}
     <div class="mb">
       <div class="f2">
         <div class="f"><label>구분</label><select id="iSide">${SIDES.map(([s, l]) => `<option value="${s}" ${d.side === s ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="f"><label>항목 *</label><input id="iTitle" value="${esc(d.title)}" maxlength="60" placeholder="예: 나스 연결"></div>
       </div>
-      <div class="f"><label>내용</label><textarea id="iValue" rows="2" placeholder="예: 매월 5일">${esc(d.value || '')}</textarea></div>
-      <div class="f"><label>설명 <span class="hint">(오른쪽 칸에 보임 — 하는 방법, 어디서 받는지 등)</span></label><textarea id="iNote" rows="6" placeholder="예: 파인더 → 이동 → 서버에 연결 → …">${esc(d.note || '')}</textarea></div>
+      <div class="f"><label>내용 <span class="hint">(여러 줄로 적어도 됩니다. 인터넷 주소는 누르면 열립니다)</span></label><textarea id="iValue" rows="7" placeholder="예: 매월 5일">${esc(d.value || '')}</textarea></div>
     </div>
     <div class="mf">
       ${it ? '<button class="btn danger left" id="iDel">삭제</button>' : ''}
@@ -100,7 +100,7 @@ function openItem(id, side){
   const save = async () => {
     const title = $('#iTitle').value.trim(); if (!title) { $('#iTitle').focus(); toast('항목 이름을 입력하세요', true); return; }
     const s = $('#iSide').value;
-    const row = { ...(it || { id: uid(), created_by: me, created_at: nowIso() }), side: s, title, value: $('#iValue').value.trim() || null, note: $('#iNote').value.trim() || null,
+    const row = { ...(it || { id: uid(), created_by: me, created_at: nowIso() }), side: s, title, value: $('#iValue').value.trim() || null,
       sort_order: it && it.side === s ? it.sort_order : itemsOf(s).reduce((m, x) => Math.max(m, x.sort_order || 0), -1) + 1, updated_by: me };
     closeModal();
     await saveRow('onboarding_items', row);
